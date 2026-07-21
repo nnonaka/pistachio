@@ -77,7 +77,7 @@ extern word_t KIP_MEMDESCS_RAW[];
   
 kernel_interface_page_t KIP UNIT(KIP_SECTION) =
 {
-    {{string:{'L','4',230,'K'}}}, // Magic word
+    {{string:{'L','4','\346','K'}}}, // Magic word ("L4\xe6K")
     KIP_API_VERSION,
     KIP_API_FLAGS,		// API flags
     KIP_DESCRIPTION_PTR,	// kernel description pointer
@@ -145,8 +145,8 @@ extern const kernel_descriptor_t kdesc UNIT(KIP_SECTION ".kdesc") =
  */
 __asm__(".section .data." KIP_SECTION ".versionparts,\"aw\",%progbits	\n"
 	"kernel_version_string:						\n"
-	".string \"L4Ka::Pistachio - built on "__DATE__" "__TIME__
-	" by "__USER__" using gcc version "__VERSION__"\" 		\n"
+	".string \"L4Ka::Pistachio - built on " __DATE__ " " __TIME__
+	" by " __USER__ " using gcc version " __VERSION__ "\" 		\n"
 	".previous							\n");
 
 /*

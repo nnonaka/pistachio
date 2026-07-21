@@ -52,7 +52,7 @@ extern char mod_root_end[];
 L4_KernelConfigurationPage_t *kip = 0;
 
 /* sjw (09/09/2002): This should be in a header file! */
-static char kip_magic[] = {'L','4',230,'K'};
+static char kip_magic[] = {'L','4','\346','K'};
 
 /* Note that this is only valid _after_ the kernel is loaded! */
 static int validate_kip(L4_Word_t kip_addr)

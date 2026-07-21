@@ -35,7 +35,7 @@
 
 
 /* L4µK */
-static char kip_magic[] = {'L', '4', 230, 'K'};
+static char kip_magic[] = {'L', '4', '\346', 'K'};
 
 
 /* Kernel Fn */

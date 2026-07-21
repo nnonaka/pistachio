@@ -74,7 +74,7 @@ INLINE void spinlock_t::lock()
 	"jnz	2f				\n\t"
         ".subsection 2          		\n\t"
 	"2:					\n\t"
-	"mov $"MKSTR(SYNC_THRESHOLD)", %2	\n\t" 
+	"mov $" MKSTR(SYNC_THRESHOLD) ", %2	\n\t"
 	"3:					\n\t"
 	"rep; nop				\n\t"
 	"dec	%2				\n\t"

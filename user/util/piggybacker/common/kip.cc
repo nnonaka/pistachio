@@ -42,7 +42,7 @@ typedef union {
     L4_Word32_t raw;
 } magic_t;
 
-magic_t l4_magic = {string: {'L', '4', 230, 'K'}};
+magic_t l4_magic = {string: {'L', '4', '\346', 'K'}};
 magic_t kip_magic = {string: {'.', 'k', 'i', 'p'}};
 
 bool kip_manager_t::virt_to_phys( L4_Word_t virt, L4_Word_t elf_start, L4_Word_t *phys )

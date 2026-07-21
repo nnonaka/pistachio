@@ -54,7 +54,7 @@ DECLARE_TRACEPOINT(SYSCALL_THREAD_CONTROL);
 DECLARE_KMEM_GROUP(kmem_tcb);
 
 whole_tcb_t __whole_dummy_tcb  __attribute__((aligned(sizeof(whole_tcb_t))));
-const tcb_t *__dummy_tcb = (const tcb_t *) &__whole_dummy_tcb;	    
+tcb_t *__dummy_tcb = (tcb_t *) &__whole_dummy_tcb;
 
 #if defined(CONFIG_STATIC_TCBS)
 tcb_t *tcb_t::tcb_array[TOTAL_KTCBS];
@@ -108,7 +108,6 @@ bool tcb_t::is_interrupt_thread ()
 static void thread_startup()
 {
     tcb_t * current = get_current_tcb();
-    msg_tag_t tag = current->get_tag();
 
     // Poke received IP/SP into exception frame (or whatever is used
     // by the architecture).  No need to check for valid IP/SP.
@@ -168,7 +167,6 @@ void thread_return()
 
 void tcb_t::init(threadid_t dest, sktcb_type_e type)
 {
-    ASSERT(this);
     
     /* clear utcb and space */
     utcb = NULL;
@@ -228,7 +226,6 @@ void tcb_t::create_inactive(threadid_t dest, threadid_t scheduler, sktcb_type_e 
 
 bool tcb_t::activate(void (*startup_func)(), threadid_t pager)
 {
-    ASSERT(this);
     ASSERT(this->space);
     ASSERT(!this->is_activated());
 
@@ -858,7 +855,7 @@ static void xcpu_put_thread(tcb_t * tcb, word_t processor)
 		    tcb, tcb->get_cpu(), processor, tcb->get_state().string());
 
     // dequeue all threads from requeue list and continue holding lock
-    get_current_scheduler()->move_tcb(tcb, processor);
+    get_current_scheduler()->move_tcb(tcb, (cpuid_t) processor);
     
 }
 
@@ -873,12 +870,11 @@ static void do_xcpu_set_thread(cpu_mb_entry_t * entry)
 	return;
     }
 
-    entry->tcb->migrate_to_processor(entry->param[0]);
+    entry->tcb->migrate_to_processor((cpuid_t) entry->param[0]);
 }
 
 bool tcb_t::migrate_to_processor(cpuid_t processor)
 {
-    ASSERT(this);
     // check if the thread is already on that processor
     if (processor == this->get_cpu())
 	return true;

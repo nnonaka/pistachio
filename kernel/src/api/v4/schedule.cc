@@ -46,7 +46,7 @@
 /* global idle thread, we allocate a utcb to make accessing MRs etc easier */
 whole_tcb_t __whole_idle_tcb UNIT("cpulocal") __attribute__((aligned(sizeof(whole_tcb_t))));
 utcb_t	    __idle_utcb UNIT("cpulocal") __attribute__((aligned(sizeof(utcb_t))));
-const tcb_t *__idle_tcb = (const tcb_t *) &__whole_idle_tcb;	    
+tcb_t *__idle_tcb = (tcb_t *) &__whole_idle_tcb;
 
 /* global scheduler object */
 scheduler_t scheduler UNIT("cpulocal");
