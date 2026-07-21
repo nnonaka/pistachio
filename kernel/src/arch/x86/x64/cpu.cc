@@ -58,12 +58,12 @@ x86_x64_cpu_features_t::x86_x64_cpu_features_t(){
 	
 	stepping = eax & 0xF;
 
-	model =  (((eax > 4) & 0xF) == 0xF) ? (((eax > 12) & 0xF0) + 0xF) : ((eax > 4) & 0xF);
-	family = (((eax > 8) & 0xF) == 0xF) ? (((eax > 20) & 0xFF) + 0xF) : ((eax > 8) & 0xF);
+	model =  (((eax >> 4) & 0xF) == 0xF) ? (((eax >> 12) & 0xF0) + 0xF) : ((eax >> 4) & 0xF);
+	family = (((eax >> 8) & 0xF) == 0xF) ? (((eax >> 20) & 0xFF) + 0xF) : ((eax >> 8) & 0xF);
 	
 	brand_id = (ebx & 0xFF); 
 	cflush_size = ((ebx >> 8) & 0xFF);
-	apic_id = ((ebx >> 24) & 0xFF);
+	apic_id = (u8_t) ((ebx >> 24) & 0xFF);
 	
 	std_features = edx;
     }

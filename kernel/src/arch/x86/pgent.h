@@ -320,11 +320,11 @@ public:
 
     void update_rights (space_t * s, pgsize_e pgsize, word_t rwx)
 	{ 
-	    if (rwx & 2) raw |= X86_PAGE_WRITABLE; sync(s, pgsize); 
+	    if (rwx & 2) raw |= X86_PAGE_WRITABLE;
 #if defined(CONFIG_X86_NX)
-	    if (rwx & 1) raw &= ~X86_PAGE_NX; 
+	    if (rwx & 1) raw &= ~X86_PAGE_NX;
 #endif
-	
+	    sync(s, pgsize);
 	}
     
     void set_rights (space_t * s, pgsize_e pgsize, word_t rwx)

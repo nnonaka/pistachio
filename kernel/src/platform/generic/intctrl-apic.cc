@@ -99,20 +99,22 @@ INLINE hwirqfunc_t get_interrupt_entry(word_t irq)
 u8_t intctrl_t::setup_idt_entry(word_t irq, u8_t prio)
 {
     idt_lock.lock();
-    u8_t vector = IDT_IOAPIC_BASE + irq;
+    /* Compute in full width: truncating to u8_t before the range check below
+       would let a large irq wrap around into the accepted range. */
+    word_t vector = IDT_IOAPIC_BASE + irq;
     if (vector < IDT_IOAPIC_MAX) {
-	//TRACEF("IRQ %d, vector=%d, prio=%d, entry=%p\n", 
+	//TRACEF("IRQ %d, vector=%d, prio=%d, entry=%p\n",
 	//     irq, vector, prio, get_interrupt_entry(irq));
-	idt.add_gate(vector, idt_t::interrupt, get_interrupt_entry(irq));
+	idt.add_gate((u8_t) vector, idt_t::interrupt, get_interrupt_entry(irq));
     } else
     {
-	TRACEF("IRQ %d, vector=%d, prio=%d, entry=%p\n", 
+	TRACEF("IRQ %d, vector=%d, prio=%d, entry=%p\n",
 	       irq, vector, prio, get_interrupt_entry(irq));
 	UNIMPLEMENTED();
 	vector = 0;
     }
     idt_lock.unlock();
-    return vector;
+    return (u8_t) vector;
 }
 
 INLINE void intctrl_t::free_idt_entry(word_t irq, u8_t vector)
@@ -230,7 +232,7 @@ void intctrl_t::init_arch()
     TRACE_INIT("  Mapping local APICs at %p to %p\n",
 	       _madt->local_apic_addr, APIC_MAPPINGS_START);
     get_kernel_space()->add_mapping(addr_t(APIC_MAPPINGS_START),
-				    addr_t(_madt->local_apic_addr),
+				    addr_t((word_t) _madt->local_apic_addr),
 				    APIC_PGENTSZ, true, true, true, false);
 
     // reserve in KIP
@@ -244,7 +246,7 @@ void intctrl_t::init_arch()
     {
 	word_t total_cpus = 0;
 	acpi_madt_lapic_t* p;
-	for (word_t i = 0; ((p = _madt->lapic(i)) != NULL); i++)
+	for (int i = 0; ((p = _madt->lapic(i)) != NULL); i++)
 	{
 	    TRACE_INIT("\tlocal APIC: apic_id=%d use=%s proc_id=%d\n",
 		       p->id, p->flags.enabled ? "ok" : "disabled",
@@ -272,7 +274,7 @@ void intctrl_t::init_arch()
     {
 	acpi_madt_ioapic_t* p;
 
-	for (word_t i = 0; ((p = _madt->ioapic(i)) != NULL); i++)
+	for (int i = 0; ((p = _madt->ioapic(i)) != NULL); i++)
 	{
 	    TRACE_INIT("\tIOAPIC: id=%d irq_base=%d addr=%p\n",
 		       p->id, p->irq_base, p->address);
@@ -291,7 +293,7 @@ void intctrl_t::init_arch()
     /* IRQ source overrides */
     {
 	acpi_madt_irq_t* p;
-	for (word_t i = 0; ((p = _madt->irq(i)) != NULL); i++)
+	for (int i = 0; ((p = _madt->irq(i)) != NULL); i++)
 	{
 	    TRACE_INIT("  IRQ source override: "
 		       "srcbus=%d, srcirq=%d, dest=%d, "
@@ -325,7 +327,7 @@ void intctrl_t::init_arch()
     {
 	acpi_madt_hdr_t* p;
 	for (u8_t t = 3; t <= 8; t++)
-	    for (word_t i = 0; ((p = _madt->find(t, i)) != NULL); i++)
+	    for (int i = 0; ((p = _madt->find(t, i)) != NULL); i++)
 		TRACE_INIT("MADT: found unknown type=%d, len=%d\n", p->type, p->len);
     }
     
@@ -389,13 +391,13 @@ bool intctrl_t::init_io_apic(word_t idx, word_t id, word_t irq_base, addr_t padd
 
 	/* ISA IRQs are mapped 1:1 --> 0 to 15 */
 	if (irq_base + i < 16)
-	    entry->set_fixed_hwirq(IDT_IOAPIC_BASE + irq_base + i,
+	    entry->set_fixed_hwirq((u32_t) (IDT_IOAPIC_BASE + irq_base + i),
 				   false,	// high active
 				   false,	// edge triggered
 				   true,	// masked
 				   0);		// apic 0
 	else
-	    entry->set_fixed_hwirq(IDT_IOAPIC_BASE + irq_base + i,
+	    entry->set_fixed_hwirq((u32_t) (IDT_IOAPIC_BASE + irq_base + i),
 				   true,	// low active
 				   true,	// level triggered
 				   true,	// masked
@@ -512,7 +514,7 @@ void intctrl_t::enable(word_t irq)
 	return;
     /* IRQ is unassigned? */
     if (redir[irq].entry.x.vector == IDT_IOAPIC_SPURIOUS) {
-	word_t vector = setup_idt_entry(irq, 0);
+	u8_t vector = setup_idt_entry(irq, 0);
 	if (!vector) {
 	    printf("IRQ %d: association failed, no free vector\n", irq);
 	    return;
@@ -534,7 +536,7 @@ void intctrl_t::disable(word_t irq)
     redir[irq].pending = false;
     redir[irq].entry.mask_irq();
     sync_redir_entry(&redir[irq], sync_low);
-    free_idt_entry(irq, vector);
+    free_idt_entry(irq, (u8_t) vector);
 }
 
 bool intctrl_t::is_enabled(word_t irq)
@@ -552,9 +554,9 @@ void intctrl_t::set_cpu(word_t irq, word_t cpu)
     if (irq >= get_number_irqs())
 	return;
 
-    if (redir[irq].entry.get_phys_dest() != cpu_t::get(cpu)->get_id())
+    if (redir[irq].entry.get_phys_dest() != cpu_t::get((cpuid_t) cpu)->get_id())
     {
-	redir[irq].entry.set_phys_dest(cpu_t::get(cpu)->get_id());
+	redir[irq].entry.set_phys_dest((u32_t) cpu_t::get((cpuid_t) cpu)->get_id());
 	/* JS: for edge triggered IRQs, sw and hw redir entry may
 	 * not be in sync. If we sync here, we may destroy the logic. 
 	 * We therefore only sync the upper half */

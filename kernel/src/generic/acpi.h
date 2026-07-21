@@ -205,7 +205,7 @@ public:
 
     trigger_mode_t get_trigger_mode (void)
 	{ return (trigger_mode_t) x.trigger_mode; }
-};
+} __attribute__((packed));
 
 
 class acpi_madt_t {
@@ -269,7 +269,7 @@ public:
     void list(addr_t myself_phys) {
 	for (word_t i = 0; i < ((header.len-sizeof(header))/sizeof(ptrs[0])); i++)
 	{
-	    UNUSED acpi_thead_t* t= (acpi_thead_t*)(acpi_remap((addr_t)ptrs[i]));
+	    UNUSED acpi_thead_t* t= (acpi_thead_t*)(acpi_remap((addr_t)(word_t)ptrs[i]));
 	    TRACE_INIT("\t%c%c%c%c is at %p\n",
 		       t->sig[0], t->sig[1], t->sig[2], t->sig[3], ptrs[i]);
 	    acpi_remap(myself_phys);
@@ -302,7 +302,7 @@ public:
 	/* verify checksum */
 	u8_t csum = 0;
 	for (int i = 0; i < 20; i++)
-	    csum += ((char*)this)[i];
+	    csum = (u8_t) (csum + ((char*)this)[i]);
 	if (csum != 0)
 	    return NULL;
 	return (acpi_rsdt_t*) (word_t)rsdt_ptr;
@@ -315,7 +315,7 @@ public:
 	   hopefully it's wrong if there's no xsdt pointer*/
 	u8_t csum = 0;
 	for (int i = 0; i < 36; i++)
-	    csum += ((char*)this)[i];
+	    csum = (u8_t) (csum + ((char*)this)[i]);
 	if (csum != 0)
 	    return NULL;
 	return (acpi_xsdt_t*) (word_t)xsdt_ptr;

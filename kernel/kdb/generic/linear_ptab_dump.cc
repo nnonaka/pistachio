@@ -129,8 +129,8 @@ CMD(cmd_dump_ptab, cg)
 		// Print valid mapping
 		word_t pgsz = page_size (size);
 		word_t rwx = pg->reference_bits (space, size, vaddr);
-                word_t pgentsz = sizeof(pg->raw);
-                
+
+
 		printf ("%p [%p]:%s phys=%p map=%p %s%3d%cB %c%c%c "
 			"(%c%c%c) %s",
 			vaddr, pg->raw, spcptr, pg->address (space, size),

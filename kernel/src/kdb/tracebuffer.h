@@ -98,9 +98,11 @@ public:
     void store_record(const traceconfig_t config, word_t type, word_t id)
         {
             /* Store type, cpu, id, thread, counters */
-            ktype = type;
+            ktype = type & 0xffff;
             utype = 0;
-            id = id;
+            /* "id = id" only assigned the parameter to itself, leaving the
+               record's id field unset -- the parameter shadows it. */
+            this->id = id & 0xffff;
             cpu = get_current_cpu();
             thread = (word_t) __builtin_frame_address(0);
             store_arch(config);
@@ -139,10 +141,8 @@ public:
     bool is_valid (void) { return magic == TRACEBUFFER_MAGIC; }
 
     bool next_record(word_t type, word_t id)
-        {   
-            if (!this) return false;
-            
-            /* Check wheter to filter the event */                  
+        {
+            /* Check wheter to filter the event */
             if ((mask & ((type & 0xffff) << 16)) == 0)         
                 return false;                                             
             
@@ -158,7 +158,6 @@ public:
     
     void  increase_counter(word_t ctr)
         {
-            if (!this) return;
             counters[ctr & 0x7]++;
         }
     
@@ -201,8 +200,11 @@ INLINE void __tbuf_record_event(word_t type, word_t tpid, const char *str, ...)
     va_list args;
     word_t arg;
     
+    /* The buffer is only allocated once setup_tracebuffer() has run.  This
+       used to be checked as "!this" inside next_record(), which is undefined
+       behaviour -- the compiler is free to assume "this" is never null. */
     tracebuffer_t *tbuf = get_tracebuffer();
-    if(!tbuf->next_record(type, tpid))
+    if(!tbuf || !tbuf->next_record(type, tpid))
         return;
                    
     tbuf->store_string(str);

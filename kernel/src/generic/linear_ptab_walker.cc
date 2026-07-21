@@ -953,6 +953,7 @@ fpage_t space_t::mapctrl (fpage_t fpage, mdb_t::ctrl_t ctrl,
 	    size++;
 
 	    fpage_t fp;
+	    fp.raw = 0;
 	    fp.set ((word_t) vaddr, page_size (size), false, false, false);
 
 	    if (ctrl.mapctrl_self && ctrl.unmap	&&

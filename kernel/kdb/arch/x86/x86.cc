@@ -146,7 +146,8 @@ CMD(cmd_ports, cg)
 {
     char dir  = get_choice ("Access mode", "In/Out", 'i');
     char width = get_choice ("Access width", "Byte/Word/Dword", 'b');
-    u16_t port = get_hex ("Port", 0x80, NULL);
+    // x86 I/O port numbers are 16 bit, so truncating the input is correct
+    u16_t port = (u16_t) get_hex ("Port", 0x80, NULL);
 
     u32_t val = 0;
 
@@ -160,10 +161,12 @@ CMD(cmd_ports, cg)
 	printf("Value = %x\n", val);
 	break;
     case 'o':
-	val = get_hex ("Value", 0, NULL);
+	// A dword is the widest possible port access; the byte and word
+	// accesses below deliberately use only the low bits of the value
+	val = (u32_t) get_hex ("Value", 0, NULL);
 	switch (width) {
-	case 'b': out_u8(port, val); break;
-	case 'w': out_u16(port, val); break;
+	case 'b': out_u8(port, (u8_t) val); break;
+	case 'w': out_u16(port, (u16_t) val); break;
 	case 'd': out_u32(port, val); break;
 	}; break;
     };
@@ -201,12 +204,18 @@ DECLARE_CMD (cmd_send_nmi, arch, 'N', "send_nmi", "send NMI to CPU");
 CMD(cmd_send_nmi, cg)
 {
     word_t cpuid = get_dec("CPU id", 0, NULL);
-    cpu_t* cpu = cpu_t::get(cpuid);
+    // cpu_t::get() is an unchecked index into cpu_t::descriptors[], so the
+    // user supplied id has to be validated first -- same guard as
+    // cmd_switch_cpus below.
+    if (cpuid >= CONFIG_SMP_MAX_CPUS ||
+	!cpu_t::get((cpuid_t) cpuid)->is_valid())
+	return CMD_NOQUIT;
+    cpu_t* cpu = cpu_t::get((cpuid_t) cpuid);
     local_apic_t<APIC_MAPPINGS_START> local_apic;
     // don't nmi ourselfs
     if (cpu->get_id() == local_apic.id())
 	return CMD_NOQUIT;
-    local_apic.send_nmi(cpu->get_id());
+    local_apic.send_nmi((u8_t) cpu->get_id());
     return CMD_NOQUIT;
 }
 
@@ -221,12 +230,12 @@ CMD(cmd_switch_cpus, cg)
     word_t dst_cpu = get_dec("CPU id", 0, NULL);
     if (dst_cpu >= CONFIG_SMP_MAX_CPUS ||
 	dst_cpu == cpu || 
-	!cpu_t::get(dst_cpu)->is_valid())
+	!cpu_t::get((cpuid_t) dst_cpu)->is_valid())
 	return CMD_NOQUIT;
 
     kdb_current_cpu = dst_cpu;
     local_apic_t<APIC_MAPPINGS_START> local_apic;
-    local_apic.send_nmi(dst_cpu);
+    local_apic.send_nmi((u8_t) dst_cpu);
     
     /* Execute a dummy iret to receive NMIs again, then sleep */
     x86_iret_self();

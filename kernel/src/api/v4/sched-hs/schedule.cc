@@ -75,7 +75,12 @@ prio_queue_t * prio_queue_t::add_prio_domain(schedule_ctrl_t prio_control)
 	    // Set stride and priority of the domain.
 	    if( prio_control.stride )
 		domain_tcb->sched_state.set_stride(prio_control.stride);
-	    domain_tcb->sched_state.set_priority(prio_control.prio);
+	    // prio is a signed 9 bit field filled from the schedule syscall's
+	    // message registers.  Without this check a negative value narrows
+	    // to prio_t and lands on ROOT_PRIORITY.  Same guard as the other
+	    // set_priority() call site in schedule_functions.h.
+	    if ((word_t) prio_control.prio <= MAX_PRIORITY)
+		domain_tcb->sched_state.set_priority((prio_t) prio_control.prio);
 #if defined(CONFIG_X_EVT_LOGGING)
             if ((word_t) prio_control.logid > 0 &&
                 (word_t) prio_control.logid < MAX_LOGIDS)
@@ -167,7 +172,7 @@ tcb_t * scheduler_t::find_next_thread(prio_queue_t * prio_queue)
     {
 	// Proportional share stride scheduling search.
 	tcb_t *search_tcb = NULL;
-	tcb_t *tcb = prio_queue->get(prio);
+	tcb_t *tcb = prio_queue->get((prio_t) prio);
 	tcb_t *return_tcb = NULL;
 	
 	while( tcb && !search_tcb )
@@ -187,7 +192,7 @@ tcb_t * scheduler_t::find_next_thread(prio_queue_t * prio_queue)
 
 		    tcb = tcb->sched_state.ready_list.next;
                     
-		    if( tcb == prio_queue->get(prio) )
+		    if( tcb == prio_queue->get((prio_t) prio) )
 			tcb = NULL; // We wrapped around the list.
 		}
 		else 
@@ -216,7 +221,7 @@ tcb_t * scheduler_t::find_next_thread(prio_queue_t * prio_queue)
 
 		    // Prepare to restart the search at the current prio.
 		    search_tcb = NULL;
-		    tcb = prio_queue->get(prio);
+		    tcb = prio_queue->get((prio_t) prio);
 		}
 		else
 		    return_tcb = domain_tcb;
@@ -228,7 +233,7 @@ tcb_t * scheduler_t::find_next_thread(prio_queue_t * prio_queue)
 	    // We found a thread!  Account for the thread, whether it
 	    // is a real thread or a subdomain.
             prio_queue->set_global_pass(search_tcb->sched_state.get_pass());
-            prio_queue->set(prio, search_tcb);
+            prio_queue->set((prio_t) prio, search_tcb);
     	    prio_queue->max_prio = prio;
 	    // Now give the scheduler the newly scheduled thread's timeslice.
 	    current_timeslice = return_tcb->sched_state.get_timeslice();
@@ -274,7 +279,7 @@ void hs_scheduler_t::policy_scheduler_init()
     root_prio_queue.init(get_on_cpu(cpu, get_idle_tcb()));
 #if defined(CONFIG_SMP)
     root_prio_queue.cpu_head = get_on_cpu(0, get_current_scheduler())->get_prio_queue();
-    root_prio_queue.cpu_link = get_on_cpu((cpu+1) % cpu_t::count, get_current_scheduler())->get_prio_queue();
+    root_prio_queue.cpu_link = get_on_cpu((cpuid_t) ((cpu+1) % cpu_t::count), get_current_scheduler())->get_prio_queue();
 #endif
     
 }

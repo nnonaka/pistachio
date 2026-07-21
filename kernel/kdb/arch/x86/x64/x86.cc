@@ -89,12 +89,13 @@ CMD(cmd_gdt, cg)
             continue;
         }
 	
-	printf(" <%16x,%16x> ",
-	       ent->x.d.base_low + (ent->x.d.base_high << 24),
-	       ent->x.d.base_low + (ent->x.d.base_high << 24) +
-	       (ent->x.d.g ? 0xfff |
-		(ent->x.d.limit_low + (ent->x.d.limit_high << 16)) << 12 :
-		(ent->x.d.limit_low + (ent->x.d.limit_high << 16))));
+	// The bit-fields promote to (unsigned) int, so widen before shifting.
+	u64_t base = ent->x.d.base_low + ((u64_t) ent->x.d.base_high << 24);
+	u64_t limit = ent->x.d.limit_low + ((u64_t) ent->x.d.limit_high << 16);
+	if (ent->x.d.g)
+	    limit = (limit << 12) | 0xfff;
+
+	printf(" <%16x,%16x> ", base, base + limit);
 	
 	printf("dpl=%d %d-bit ", ent->x.d.dpl, ent->x.d.l ? 64 : (ent->x.d.d ? 32 : 16));
 	    
@@ -115,13 +116,17 @@ CMD(cmd_gdt, cg)
 
     x86_tssdesc_t *tss = (x86_tssdesc_t *) (addr_t) &gdt[GDT_SIZE - 2];
     
+    // base_high is a 32 bit wide bit-field, which promotes to unsigned int --
+    // shifting it by 32 is undefined.  Widen all the parts before shifting.
+    u64_t tss_base = tss->x.d.base_low
+	+ ((u64_t) tss->x.d.base_med << 24)
+	+ ((u64_t) tss->x.d.base_high << 32);
+    u64_t tss_limit = tss->x.d.limit_low + ((u64_t) tss->x.d.limit_high << 16);
+    if (tss->x.d.g)
+	tss_limit = (tss_limit << 12) | 0xfff;
+
     printf("GDT[%d] = %16x", GDT_SIZE-2, tss->x.raw);
-    printf(" <%16x,%16x> ",
-	   tss->x.d.base_low + (tss->x.d.base_med << 24) + (tss->x.d.base_high << 32),
-	   tss->x.d.base_low + (tss->x.d.base_med << 24) + (tss->x.d.base_high << 32) + 
-	   (tss->x.d.g ? 0xfff |
-	    (tss->x.d.limit_low + (tss->x.d.limit_high << 16)) << 12 :
-	    (tss->x.d.limit_low + (tss->x.d.limit_high << 16))));
+    printf(" <%16x,%16x> ", tss_base, tss_base + tss_limit);
 
     printf("dpl=%d 64-bit ", tss->x.d.dpl);
     printf("tss\n");

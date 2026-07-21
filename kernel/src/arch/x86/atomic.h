@@ -24,13 +24,15 @@ class atomic_t {
 public:
     word_t operator ++ (int) 
 	{
-	    __asm__ __volatile__(X86_LOCK "add $1, %0" : "=m"(val));
+	    // %z0 emits the operand size suffix -- without it the assembler
+	    // defaults to "addl", which only updates half of a 64 bit word_t.
+	    __asm__ __volatile__(X86_LOCK "add%z0 $1, %0" : "+m"(val));
 	    return val;
 	}
 
     word_t operator-- (int) 
 	{
-	    __asm__ __volatile__(X86_LOCK "sub $1, %0" : "=m"(val));
+	    __asm__ __volatile__(X86_LOCK "sub%z0 $1, %0" : "+m"(val));
 	    return val;
 	}
     

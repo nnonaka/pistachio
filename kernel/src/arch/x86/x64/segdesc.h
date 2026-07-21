@@ -77,9 +77,9 @@ public:
     
 	    x.d.g = 1;	
     
-	    x.d.type = type;
-	    x.d.l    = mode;
-	    x.d.dpl  = dpl;
+	    x.d.type = type & 0xF;
+	    x.d.l    = mode & 0x1;
+	    x.d.dpl  = dpl & 0x3;
     
 	    if (mode == m_long && type == code)
 		x.d.d = 0;	/* code with L=1, D=0 => long mode */
@@ -96,11 +96,11 @@ public:
     void set_seg(u32_t base, segtype_e type, int dpl, mode_e mode=m_long)
 	{
 	    x.d.base_low   = base & 0xFFFFFF;
-	    x.d.base_high  = (base >> 24) & 0xFF;
+	    x.d.base_high  = (u8_t) ((base >> 24) & 0xFF);
     
-	    x.d.type = type;
-	    x.d.l    = mode;
-	    x.d.dpl = dpl;
+	    x.d.type = type & 0xF;
+	    x.d.l    = mode & 0x1;
+	    x.d.dpl = dpl & 0x3;
 	    x.d.g = 1;	
     
 	    if (mode == m_long)
@@ -185,18 +185,20 @@ INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
 {
     x.d.base_low  = base & 0xFFFFFF;
     x.d.base_med  = (base >> 24) & 0xFF;
-    x.d.base_high = (base >> 32) & 0xFFFFFFFF;
+    x.d.base_high = (u32_t) ((base >> 32) & 0xFFFFFFFF);
     
-    if (limit > (1 << 20))
+    /* A byte-granular limit only has 20 bits, so 1<<20 itself already
+       needs 4K granularity. */
+    if (limit >= (1 << 20))
     {
 	x.d.limit_low  = (limit >> 12) & 0xFFFF;
-	x.d.limit_high = (limit >> 28) & 0xF;
+	x.d.limit_high = (u8_t) (limit >> 28) & 0xF;
 	x.d.g = 1;      /* 4K granularity       */
     }
     else
     {
 	x.d.limit_low  =  limit        & 0xFFFF;
-	x.d.limit_high = (limit >> 16) & 0xFF;
+	x.d.limit_high = (limit >> 16) & 0xF;
 	x.d.g = 0;      /* 1B granularity       */
     }
     
@@ -227,12 +229,15 @@ public:
 
     void set(u16_t selector, void (*address)(), segtype_e type, int dpl, int ist=0)
 	{
+	    /* offset_high holds bits 16..63 of address, i.e. exactly 48 bits */
+	    u64_t offset_high = (u64_t) address >> 16;
+
 	    x.d.offset_low = ( (u64_t) address & 0xFFFF );
-	    x.d.offset_high = ( (u64_t) address >> 16);
+	    x.d.offset_high = offset_high & 0xFFFFFFFFFFFF;
 	    x.d.selector   = selector;
-	    x.d.ist = ist;
-	    x.d.type = type;
-	    x.d.dpl = dpl;
+	    x.d.ist = ist & 0x7;
+	    x.d.type = type & 0xF;
+	    x.d.dpl = dpl & 0x3;
     
 	    x.d.p = 1;		/* present */
 	    x.d.s = 0;		/* system segment */

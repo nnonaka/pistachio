@@ -61,8 +61,11 @@ public:
 	    union {
 		struct {
 		    word_t			: 24;
-		    word_t physical_dest	:  4;
-		    word_t			:  4;
+		    /* Destination is bits 63:56, the same field the logical
+		       variant below uses.  This was declared as 4 bits, which
+		       silently dropped the high nibble of any xAPIC id > 15
+		       and routed the IRQ to the wrong CPU. */
+		    word_t physical_dest	:  8;
 		} __attribute__((packed)) physical;
 	    
 		struct {
@@ -78,16 +81,16 @@ public:
 			 bool level_triggered, bool masked, 
 			 u32_t apicid)
     {
-	this->x.vector = vector;
+	this->x.vector = (u8_t) vector;
 	this->x.delivery_mode = 0;	// fixed
 	this->x.dest_mode = 0;		// physical mode
 	this->x.polarity = low_active ? 1 : 0;
 	this->x.trigger_mode = level_triggered ? 1 : 0;
 	this->x.mask = masked ? 1 : 0;
-	this->x.dest.physical.physical_dest = apicid;
+	this->x.dest.physical.physical_dest = apicid & 0xff;
     }
     void set_phys_dest(u32_t apicid)
-    { this->x.dest.physical.physical_dest = apicid; }
+    { this->x.dest.physical.physical_dest = apicid & 0xff; }
     u32_t get_phys_dest() 
     { return this->x.dest.physical.physical_dest; }
 
@@ -129,7 +132,7 @@ private:
 	}
 
 public:
-    u8_t id() { return get(IOAPIC_ID) >> 24; };
+    u8_t id() { return (u8_t) (get(IOAPIC_ID) >> 24); };
     
     ioapic_version_t version() {
 	return (ioapic_version_t) { raw : get(IOAPIC_VER) };
@@ -147,30 +150,30 @@ public:
     void set_redir_entry(word_t idx, ioapic_redir_t redir)
 	{
 	    ASSERT(idx < num_irqs());
-	    set(0x11 + (idx * 2), redir.raw[1]);
-	    set(0x10 + (idx * 2), redir.raw[0]);
+	    set((u32_t) (0x11 + (idx * 2)), redir.raw[1]);
+	    set((u32_t) (0x10 + (idx * 2)), redir.raw[0]);
 	    if (redir.x.mask) reread();
 	    
 	}
     void set_redir_entry_low(word_t idx, ioapic_redir_t redir)
 	{
 	    ASSERT(idx < num_irqs());
-	    set(0x10 + (idx * 2), redir.raw[0]);
+	    set((u32_t) (0x10 + (idx * 2)), redir.raw[0]);
 	    if (redir.x.mask) reread();
 	}
     
     void set_redir_entry_high(word_t idx, ioapic_redir_t redir)
 	{
 	    ASSERT(idx < num_irqs());
-	    set(0x11 + (idx * 2), redir.raw[1]);
+	    set((u32_t) (0x11 + (idx * 2)), redir.raw[1]);
 	}
 
     ioapic_redir_t get_redir_entry(word_t idx)
 	{
 	    ASSERT(idx < num_irqs());
 	    ioapic_redir_t redir;
-	    redir.raw[1] = get(0x11 + (idx * 2));
-	    redir.raw[0] = get(0x10 + (idx * 2));
+	    redir.raw[1] = get((u32_t) (0x11 + (idx * 2)));
+	    redir.raw[0] = get((u32_t) (0x10 + (idx * 2)));
 	    return redir;
 	}
 };

@@ -167,7 +167,7 @@ INLINE bool x86_mmu_t::has_long_mode()
  */
 INLINE void x86_mmu_t::enable_long_mode()
 {
-    word_t efer = x86_rdmsr(X86_MSR_EFER);
+    u64_t efer = x86_rdmsr(X86_MSR_EFER);
     efer |= X86_MSR_EFER_LME;
     x86_wrmsr(X86_MSR_EFER, efer);
 }
@@ -179,7 +179,7 @@ INLINE void x86_mmu_t::enable_long_mode()
  */
 INLINE bool x86_mmu_t::long_mode_active()
 {
-    word_t efer = x86_rdmsr(X86_MSR_EFER);
+    u64_t efer = x86_rdmsr(X86_MSR_EFER);
     return (efer & X86_MSR_EFER_LMA);
 }
 #endif /* defined(CONFIG_IS_64BIT) */
@@ -239,7 +239,7 @@ INLINE void x86_mmu_t::set_active_pagetable(word_t root)
  */
 INLINE word_t x86_mmu_t::get_pagefault_address(void)
 {
-    register word_t tmp;
+    word_t tmp;
 
     __asm__ ("mov   %%cr2, %0   \n"
             :"=r" (tmp));

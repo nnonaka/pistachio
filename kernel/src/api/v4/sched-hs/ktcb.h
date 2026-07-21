@@ -56,11 +56,11 @@ public:
     void set_total_quantum(u64_t quantum)
 	{ total_quantum = quantum; }
 
-    u64_t account_quantum(u32_t t)
-	{ 
-	    total_quantum -= t; 
+    u64_t account_quantum(u64_t t)
+	{
+	    total_quantum -= t;
 	    return total_quantum;
-	} 
+	}
     
     void init_total_quantum(time_t quantum)
 	{
@@ -78,8 +78,10 @@ public:
     
     s64_t get_timeslice()
 	{ return current_timeslice; } 
-    void set_timeslice(u32_t t)
-	{ current_timeslice = t; } 
+    /* current_timeslice is a signed 64 bit value and is deliberately driven
+       negative by the preemption logic, so this must not narrow to u32_t. */
+    void set_timeslice(s64_t t)
+	{ current_timeslice = t; }
     
     u64_t get_timeslice_length()
 	{ return timeslice_length; } 
@@ -87,7 +89,6 @@ public:
     void init_timeslice(time_t timeslice)
 	{
 	    ASSERT(timeslice.is_period()); 
-	    ASSERT(this);
 	    current_timeslice = timeslice_length = timeslice.get_microseconds();
 	}
 
