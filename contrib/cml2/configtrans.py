@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 configtrans.py -- translate between CML1 and CML2 config formats.
 
@@ -89,19 +89,19 @@ if __name__ == '__main__':
     include = defconfig = translate = None
     (options, arguments) = getopt.getopt(sys.argv[1:], "h:s:t")
     for (switch, val) in options:
-	if switch == '-h':
-	    includefile = val
+        if switch == '-h':
+            includefile = val
             try:
                 os.rename(val, val + ".old")
             except OSError:
                 pass
-	elif switch == '-s':
-	    defconfig = val
+        elif switch == '-s':
+            defconfig = val
             try:
                 os.rename(val, val + ".old")
             except OSError:
                 pass
-	elif switch == '-t':
+        elif switch == '-t':
             translate = 1
     if len(arguments) > 0:
         try:
@@ -109,14 +109,14 @@ if __name__ == '__main__':
                 linetrans(write_include, arguments[0], includefile, "#define AUTOCONF_INCLUDED\n")
             if defconfig:
                 linetrans(write_defconfig, arguments[0], defconfig)
-        except IOError, args:
+        except IOError as args:
             sys.stderr.write("configtrans: " + args[1] + "\n");
-            raise SystemExit, 1
+            raise SystemExit(1)
     elif translate:
         linetrans(revert, sys.stdin, sys.stdout)
     else:
-        print "usage: configtrans.py -t [-h includefile] [-s defconfig] file"
-        raise SystemExit, 1
+        print("usage: configtrans.py -t [-h includefile] [-s defconfig] file")
+        raise SystemExit(1)
 
 # That's all, folks!
 

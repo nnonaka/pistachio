@@ -12,6 +12,13 @@ configuration files.
 import os, sys, re
 import cml
 
+def cmp(a, b):
+    "Three-way comparison helper (Python 2 builtin removed in Python 3)."
+    return (a > b) - (a < b)
+
+class Unsatisfiable(Exception):
+    "Raised when the ruleset is found unsatisfiable while setting a symbol."
+
 _eng = {
     "ABOUT":"About to write %s=%s (type %s)",
     "BADEQUALS":"bad token `%s' while expecting '='.",
@@ -83,7 +90,7 @@ class CMLSystem(cml.CMLRulebase):
 
     def clear(self):
         "Clear the runtime value state."
-        for entry in self.dictionary.values():
+        for entry in list(self.dictionary.values()):
             entry.iced = 0		# True if it has been frozen
             if entry.type == "choices":
                 entry.menuvalue = entry.default
@@ -101,8 +108,8 @@ class CMLSystem(cml.CMLRulebase):
         "Make a configuration state object from a compiled rulebase."
         # Interpret a string as the name of a file containing pickled rules.
         if type(rules) == type(""):
-            import cPickle
-            rules = cPickle.load(open(rules, "rb"))
+            import pickle
+            rules = pickle.load(open(rules, "rb"))
 
         # Copy the symbol table.   Since a python object's members are all
         # stored in a single hash table, we can steal its contents and
@@ -181,7 +188,7 @@ class CMLSystem(cml.CMLRulebase):
 
         if rules.version != cml.version:
             sys.stderr.write(self.lang["BADVERSION"] % (rules.version, cml.version))
-            raise SystemExit, 1
+            raise SystemExit(1)
 
     def is_new(self, symbol):
         return self.inclusions and not symbol.included and symbol.is_symbol()
@@ -233,11 +240,11 @@ class CMLSystem(cml.CMLRulebase):
             menu = menu.menu
     def __bindsymbol(self, symbol, value, source=None, sort=0, suppress=0):
         "Bind symbol to a given value."
-        self.debug_emit(2, "    %sbindsymbol(%s, %s, %s, %s)" % (' '*self.cdepth,symbol.name, value, `source`, sort))
+        self.debug_emit(2, "    %sbindsymbol(%s, %s, %s, %s)" % (' '*self.cdepth,symbol.name, value, repr(source), sort))
         if not source:
             source = symbol
         # Avoid creating duplicate bindings.
-        if self.newbindings.has_key(source):
+        if source in self.newbindings:
             bindings = self.newbindings[source]
             while bindings:
                 if bindings.symbol == symbol and bindings.value == value:
@@ -250,7 +257,7 @@ class CMLSystem(cml.CMLRulebase):
             if source == None or source == symbol:
                 side = ""
             else:
-                side = self.lang["SIDEEFFECT"] % (`source`,)
+                side = self.lang["SIDEEFFECT"] % (repr(source),)
             side = self.lang["SETTING"] % (symbol.name, value) + side
             if source and source != symbol and not suppress:
                 self.side_effects.append(side)
@@ -297,7 +304,7 @@ class CMLSystem(cml.CMLRulebase):
         undo = []
         # When we undo side-effects from a choice symbol, all the side-effects
         # from setting its siblings have to be backed out too.
-        for primary in self.newbindings.keys():
+        for primary in list(self.newbindings.keys()):
             if primary.menu.type == "choices":
                 undo.extend(primary.menu.items)
             else:
@@ -334,10 +341,10 @@ class CMLSystem(cml.CMLRulebase):
         res = ""
         if context == None:
             context=self.oldbindings
-        for (primary, bindings) in context.items():
+        for (primary, bindings) in list(context.items()):
             res = res + "# %s(%s, touched=%d): " % (primary.name,("inactive","active")[bindings.visible], primary in self.touched)
             while bindings:
-                res = res + `bindings` + ", "
+                res = res + repr(bindings) + ", "
                 bindings = bindings.link
             res = res[:-2] + "\n"
         return res
@@ -413,7 +420,7 @@ class CMLSystem(cml.CMLRulebase):
             # Now parse ordinary symbol sets
             if len(self.prefix) and symname[0:len(self.prefix)] == self.prefix:
                 symname = symname[len(self.prefix):]
-            if self.dictionary.has_key(symname):
+            if symname in self.dictionary:
                 symbol = self.dictionary[symname]
             else:
                 symbol = None
@@ -520,9 +527,9 @@ class CMLSystem(cml.CMLRulebase):
             self.__save_recurse(self.start, outfp, baton, mode)
             # Write all derived symbols
             if mode != "list":
-                if filter(lambda x: x.is_derived(), self.dictionary.values()):
+                if [x for x in list(self.dictionary.values()) if x.is_derived()]:
                     outfp.write(self.lang["SHDERIVED"])
-                for entry in self.dictionary.values():
+                for entry in list(self.dictionary.values()):
                     if entry.is_derived():
                         if baton:
                             baton.twirl()
@@ -540,12 +547,12 @@ class CMLSystem(cml.CMLRulebase):
                     os.rename(shelltemp, outfile)
                 except OSError:
                     reason  = self.lang["RENAME"] % (shelltemp, outfile,)
-                    raise IOError, reason
+                    raise IOError(reason)
             self.commits = 0
             if baton:
                 baton.end()
             return None
-        except IOError, details:
+        except IOError as details:
             return details.args[0]
 
     def save_symbol(self, symbol, shellstream, label=""):
@@ -560,18 +567,18 @@ class CMLSystem(cml.CMLRulebase):
             elif symbol.type == "string":
                 shellstream.write("%s=\"%s\"" % (symname, value))
             elif symbol.type in ("bool", "trit"):
-                shellstream.write("%s=%s" % (symname, `value`))
+                shellstream.write("%s=%s" % (symname, repr(value)))
             elif value == None and symbol.is_logical():
                 shellstream.write("%s=n" % (symname,))
             else:
-                raise ValueError, self.lang["VALUNKNOWN"] % (symbol,symbol.type,value)
+                raise ValueError(self.lang["VALUNKNOWN"] % (symbol,symbol.type,value))
             if label:
                 shellstream.write("\t# " + label)
             shellstream.write("\n")
         except:
             (errtype, errval, errtrace) = sys.exc_info()
-            print "Internal error %s while writing %s." % (errtype, symbol)
-            raise SystemExit, 1
+            print("Internal error %s while writing %s." % (errtype, symbol))
+            raise SystemExit(1)
 
     def __save_recurse(self, node, shellstream, baton=None, mode="normal"):
         saveable = self.saveable(node, mode)
@@ -695,7 +702,7 @@ class CMLSystem(cml.CMLRulebase):
                 break
         else:
             return 1	# Tricky use of for-else
-        self.debug_emit(2, self.lang["EXCLUDED"] % (`symbol`, `cml.trit(value)`, `ancestor`))
+        self.debug_emit(2, self.lang["EXCLUDED"] % (repr(symbol), repr(cml.trit(value)), repr(ancestor)))
         return 0
 
     def __dep_visible(self, symbol):
@@ -713,7 +720,7 @@ class CMLSystem(cml.CMLRulebase):
 
     def __dep_force_ancestors(self, dependent, source, dependvalue, ancestor):
         "Force a symbol's ancestors up, based on the symbol's value."
-        self.debug_emit(2, "    dep_force_ancestors(%s, %s, %s, %s)" % (`dependent`, `source`, `dependvalue`, `ancestor`))
+        self.debug_emit(2, "    dep_force_ancestors(%s, %s, %s, %s)" % (repr(dependent), repr(source), repr(dependvalue), repr(ancestor)))
         if dependent.is_logical() and ancestor.is_logical():
             anctype = ancestor.type
             if dependvalue > cml.n:
@@ -738,7 +745,7 @@ class CMLSystem(cml.CMLRulebase):
 
     def __dep_force_dependents(self, guard, source, guardvalue, dependent):
         "Force a symbol's descendents down, based on the symbol's value."
-        self.debug_emit(2, "    dep_force_dependents(%s, %s, %s, %s)" % (`guard`, `source`, `guardvalue`, `dependent`))
+        self.debug_emit(2, "    dep_force_dependents(%s, %s, %s, %s)" % (repr(guard), repr(source), repr(guardvalue), repr(dependent)))
         if guard.is_logical() and dependent.is_logical():
             deptype = dependent.type
             depvalue = cml.evaluate(dependent)
@@ -767,9 +774,9 @@ class CMLSystem(cml.CMLRulebase):
     #
     def __rollback(self):
         "Roll back all new bindings."
-        self.debug_emit(1, self.lang["ROLLBACK"] + `self.touched`)
+        self.debug_emit(1, self.lang["ROLLBACK"] + repr(self.touched))
         self.touched = []
-        for symbol in self.newbindings.keys():
+        for symbol in list(self.newbindings.keys()):
             self.__unbindsymbol(symbol, self.newbindings)
         self.side_effects = []
 
@@ -781,7 +788,7 @@ class CMLSystem(cml.CMLRulebase):
             self.debug_emit(1, self.lang["COMMIT"])
             if self.trit_tie and self.trit_tie in self.touched:
                 self.trits_enabled = cml.evaluate(self.trit_tie)
-                self.debug_emit(1, self.lang["TRITFLAG"] % (`cml.trit(self.trits_enabled)`,))
+                self.debug_emit(1, self.lang["TRITFLAG"] % (repr(cml.trit(self.trits_enabled)),))
             if self.help_tie and self.help_tie in self.touched:
                 self.debug_emit(1, self.lang["HELPFLAG"] % self.help_tie.eval())
         for entry in self.touched:
@@ -843,7 +850,7 @@ class CMLSystem(cml.CMLRulebase):
 
     def __set_symbol_internal(self, symbol, value, source=None, sort=0):
         "Recursively bind a symbol, with side effects."
-        self.debug_emit(2, "    %sset_symbol_internal(%s, %s, %s, %s)" % (' ' * self.cdepth, symbol.name, value, `source`, sort))
+        self.debug_emit(2, "    %sset_symbol_internal(%s, %s, %s, %s)" % (' ' * self.cdepth, symbol.name, value, repr(source), sort))
         self.cdepth += 1
         if not source:
             source = symbol
@@ -877,9 +884,9 @@ class CMLSystem(cml.CMLRulebase):
         # but only if the attempt comes from a different source,
         # because ancestry forcing will often result in the same symbol
         # being changed multiple times in succession from the same source.
-        if self.chilled.has_key(symbol) and self.chilled[symbol] != source:
+        if symbol in self.chilled and self.chilled[symbol] != source:
             self.__bindsymbol(symbol, value, source)	# record for debugging
-            raise "UNSATISFIABLE"
+            raise Unsatisfiable
         # Membership in chilled means we should treat the binding as frozen for
         # simplification purposes.  It has to be turned off when the current
         # call to set_symbol is done; otherwise side effects from inclusion
@@ -905,7 +912,7 @@ class CMLSystem(cml.CMLRulebase):
                 self.__set_symbol_internal(sibling, cml.n, source)
         # Other side effects...
         if self.trit_tie and symbol == self.trit_tie and value == cml.n:
-            for entry in self.dictionary.values():
+            for entry in list(self.dictionary.values()):
                 if entry.type == "trit" and not entry.is_derived() and entry.eval() == cml.m:
                     self.__set_symbol_internal(entry, cml.y, source)
         # Now propagate the value change through ancestry chains.
@@ -952,15 +959,15 @@ class CMLSystem(cml.CMLRulebase):
         elif sym.type == "decimal":
             val = int(val)
         elif sym.type == "hexadecimal":
-            val = long(val, 16)
+            val = int(val, 16)
         return val
 
     def eval_frozen(self, wff):
         "Test whether a given expr is entirely constant, chilled or frozen."
-        if isinstance(wff,cml.trit) or type(wff) in (type(0),type(0L),type("")):
+        if isinstance(wff,cml.trit) or type(wff) in (type(0),type(0),type("")):
             return wff
         elif isinstance(wff, cml.ConfigSymbol):
-            if wff.frozen() or self.chilled.has_key(wff):
+            if wff.frozen() or wff in self.chilled:
                 return wff.eval()
             elif wff.is_derived():
                 return self.eval_frozen(wff.default)
@@ -1020,7 +1027,7 @@ class CMLSystem(cml.CMLRulebase):
 
     def __constrain(self, wff, source, fixedval=cml.y):
         "Set symbols based on asserted equalities or inequalities."
-        self.debug_emit(2, self.lang["BINDING"] % (self.cdepth*' ', cml.display_expression(wff), fixedval, `source`))
+        self.debug_emit(2, self.lang["BINDING"] % (self.cdepth*' ', cml.display_expression(wff), fixedval, repr(source)))
         self.cdepth += 1
         ret = self.__inner_constrain(wff, source, fixedval)
         self.cdepth -= 1
@@ -1061,7 +1068,7 @@ class CMLSystem(cml.CMLRulebase):
         elif fixedval == cml.n and op == 'or':
             return self.__constrain(left, source, fixedval) + \
                    self.__constrain(right, source, fixedval)
-        elif op in CMLSystem.relational_map.keys() \
+        elif op in list(CMLSystem.relational_map.keys()) \
              and (isinstance(left, cml.trit) or (isinstance(left, cml.ConfigSymbol) and left.is_logical())) \
              and (isinstance(right, cml.trit) or (isinstance(right, cml.ConfigSymbol) and right.is_logical())):
             if fixedval == cml.n:
@@ -1145,7 +1152,7 @@ class CMLSystem(cml.CMLRulebase):
             except IndexError:
                 # Kluge -- if we find no visible items, turn off suppressions
                 # and drop back to the original default.
-                self.debug_emit(1, self.lang["NOVISIBLE"] % (`entry`,))
+                self.debug_emit(1, self.lang["NOVISIBLE"] % (repr(entry),))
                 ind = base
                 self.suppressions = 0
             self.set_symbol(entry.items[ind], cml.y)
@@ -1189,7 +1196,7 @@ class CMLSystem(cml.CMLRulebase):
         "Return a menu composed of symbols matching a given regexp."
         regexp = re.compile(pattern)
         hits = cml.ConfigSymbol("search", "menu")
-        for entry in self.dictionary.values():
+        for entry in list(self.dictionary.values()):
             if entry.prompt and entry.type != "message":
                 text = hook(entry)
                 if text == None:
@@ -1205,7 +1212,7 @@ class CMLSystem(cml.CMLRulebase):
                 hits.menu = None
                 break
         # Sort the results for a nice look
-        hits.items.sort()
+        hits.items.sort(key=lambda s: s.name)
         hits.nosuppressions = 1
         return hits
 
@@ -1229,7 +1236,7 @@ class CMLSystem(cml.CMLRulebase):
                     return 1
         else:
             for span in symbol.range:
-                if type(span) in (type(0), type(0L)):
+                if type(span) in (type(0), type(0)):
                     if value == span:
                         return 1
                 elif value >= span[0] and value <= span[1]:

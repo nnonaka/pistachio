@@ -14,13 +14,13 @@ class trit:
         self.value = value
     def __repr__(self):
         return "nmy"[self.value]
-    def __nonzero__(self):
-        return self.value
+    def __bool__(self):
+        return self.value != 0
     def __hash__(self):
         return self.value	# This magic needed to make trits valid dictionary keys
     def __long__(self):
         return self.value != 0
-    def __cmp__(self, other):
+    def _cmp(self, other):
         if not isinstance(other, trit):
             if other is None:
                 return 1               # any trit > None
@@ -36,7 +36,19 @@ class trit:
             if diff == 0:
                 return 0
             else:
-                return diff / abs(diff)
+                return diff // abs(diff)
+    def __eq__(self, other):
+        return self._cmp(other) == 0
+    def __ne__(self, other):
+        return self._cmp(other) != 0
+    def __lt__(self, other):
+        return self._cmp(other) < 0
+    def __le__(self, other):
+        return self._cmp(other) <= 0
+    def __gt__(self, other):
+        return self._cmp(other) > 0
+    def __ge__(self, other):
+        return self._cmp(other) >= 0
     def __and__(self, other):
         return trit(min(self.value, other.value))
     def __or__(self, other):
@@ -100,12 +112,12 @@ class ConfigSymbol:
                     result = (result != n)
             if debug > 3:
                 sys.stderr.write("...eval(%s)->%s (through default %s)\n" % \
-                                 (`self`, result, self.default))
+                                 (repr(self), result, self.default))
             return result
         else:
             if debug > 2:
                 sys.stderr.write("...eval(%s)->None (default empty)\n" % \
-                                 (`self`))
+                                 (repr(self)))
             return None
 
     # Access to help.
@@ -156,13 +168,13 @@ class ConfigSymbol:
 
     # Property functions
     def hasprop(self, prop):
-        return self.properties.has_key(prop)
+        return prop in self.properties
     def setprop(self, prop, val=1):
         self.properties[prop] = val
     def delprop(self, prop):
         del self.properties[prop]
     def showprops(self,):
-        return ", ".join(self.properties.keys())
+        return ", ".join(list(self.properties.keys()))
 
     def __repr__(self):
         # So the right thing happens when we print symbols in expressions
@@ -188,7 +200,7 @@ class ConfigSymbol:
         if self.saveability is not None:
             res = res + " saveability %s," % (display_expression(self.saveability),)
         if self.default is not None:
-            res = res + " default %s," % (`self.default`,)
+            res = res + " default %s," % (repr(self.default),)
         if self.items:
             res = res + " items %s," % (self.items,)
         if self.properties:
@@ -242,16 +254,16 @@ class CMLRulebase:
         self.reduced = []
     def __repr__(self):
         res = "Start menu = %s\n" % (self.start,)
-        for k in self.dictionary.keys():
+        for k in list(self.dictionary.keys()):
             res = res + str(self.dictionary[k]) + "\n"
         if self.prefix:
-            res = res + "Prefix:" + `self.prefix`
+            res = res + "Prefix:" + repr(self.prefix)
         if self.banner:
-            res = res + "Banner:" + `self.banner`
+            res = res + "Banner:" + repr(self.banner)
         return res
     def optimize_constraint_access(self):
         "Assign constraints to their associated symbols."
-        for entry in self.dictionary.values():
+        for entry in list(self.dictionary.values()):
             entry.constraints = []
         for requirement in self.reduced:
             for symbol in flatten_expr(requirement):
@@ -268,7 +280,7 @@ def evaluate(exp, debug=0):
         else:
             return n
     if debug > 2:
-        sys.stderr.write("evaluate(%s) begins...\n" % (`exp`,))
+        sys.stderr.write("evaluate(%s) begins...\n" % (repr(exp),))
     if type(exp) is type(()):
         # Ternary operator
         if exp[0] == '?':
@@ -311,16 +323,16 @@ def evaluate(exp, debug=0):
             else:
                 return left
         elif exp[0] == '+':
-            return long(evaluate(exp[1],debug)) + long(evaluate(exp[2],debug))
+            return int(evaluate(exp[1],debug)) + int(evaluate(exp[2],debug))
         elif exp[0] == '-':
-            return long(evaluate(exp[1],debug)) - long(evaluate(exp[2],debug))
+            return int(evaluate(exp[1],debug)) - int(evaluate(exp[2],debug))
         elif exp[0] == '*':
-            return long(evaluate(exp[1],debug)) * long(evaluate(exp[2],debug))
+            return int(evaluate(exp[1],debug)) * int(evaluate(exp[2],debug))
         else:
-            raise SyntaxError, "Unknown operation %s in expression" % (exp[0],)
-    elif isinstance(exp, trit) or type(exp) in (type(""), type(0), type(0L)):
+            raise SyntaxError("Unknown operation %s in expression" % (exp[0],))
+    elif isinstance(exp, trit) or type(exp) in (type(""), type(0), type(0)):
         if debug > 2:
-            sys.stderr.write("...evaluate(%s) returns itself\n" % (`exp`,))
+            sys.stderr.write("...evaluate(%s) returns itself\n" % (repr(exp),))
         return exp
     elif isinstance(exp, ConfigSymbol):
         result = exp.eval(debug)
@@ -329,12 +341,12 @@ def evaluate(exp, debug=0):
         else:
             return n
     else:
-        raise ValueError,"unknown object %s %s in expression" % (exp,type(exp))
+        raise ValueError("unknown object %s %s in expression" % (exp,type(exp)))
 
 def flatten_expr(node):
     "Flatten an expression -- skips the operators"
     if type(node) is type(()) or type(node) is type([]):
-       sublists = map(flatten_expr, node)
+       sublists = list(map(flatten_expr, node))
        flattened = []
        for item in sublists:
            flattened = flattened + item
@@ -359,7 +371,7 @@ def display_expression(exp):
     elif isinstance(exp, ConfigSymbol):
         return exp.name
     else:
-        return `exp`
+        return repr(exp)
 
 class Baton:
     "Ship progress indication to stdout."
@@ -398,41 +410,33 @@ class Baton:
         return
 
 if __name__ == "__main__":
-    # Two classes without __cmp__
+    # A class without comparison methods, for testing trit's fallback
+    # against arbitrary (non-trit) objects.
     class A:
         pass
 
-    class B:
-        pass
-
     a = A()
-    b = B()
 
     t0 = trit(0)
     t1 = trit(1)
     t2 = trit(2)
 
     if not (t0 < t1 < t2 and t2 > t1 > t0) or t0 == t1 or t0 == t2 or t1 == t2:
-        print "trit compare failed"
+        print("trit compare failed")
 
     if t0 < None:
-        print "a trit is less than None?  Comparison failed"
+        print("a trit is less than None?  Comparison failed")
 
     if None > t0:
-        print "None is greater than a trit?  Comparison failed"
+        print("None is greater than a trit?  Comparison failed")
 
-    if id(a) > id(b):
-        if a < b > a:
-            print "a/b comparison failed"
-    elif b < a > b:
-        print "a/b comparison failed"
-
-
-    # Simulate standard no-cmp() behavior for non-trits
+    # A trit falls back to id-based ordering against non-trit objects
+    # (Python 3 no longer supports comparing two unrelated classes, but a
+    # trit still defines the comparison against an arbitrary object.)
     if id(a) > id(t0):
         if a < t0:
-            print "a/t0 comparison failed (id(a) greater)"
+            print("a/t0 comparison failed (id(a) greater)")
     elif t0 < a:
-        print "a/t0 comparison failed"
+        print("a/t0 comparison failed")
 
 # cml.py ends here.
