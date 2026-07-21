@@ -38,7 +38,10 @@
 #include INC_GLUE(map.h)
 
 #define CHECK_BR_IDX(idx) if (idx > IPC_NUM_BR) goto message_overflow
-#define CHECK_MR_IDX(idx, total) if (idx > total) goto message_overflow
+/* "total" is a count of message registers, so the highest index that may be
+   accessed is total - 1.  Every caller passes the index it is about to
+   dereference, hence >= rather than >. */
+#define CHECK_MR_IDX(idx, total) if (idx >= total) goto message_overflow
 
 
 DECLARE_TRACEPOINT_DETAIL(IPC_STRING_COPY);
