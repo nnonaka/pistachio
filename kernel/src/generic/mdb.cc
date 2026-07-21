@@ -147,7 +147,7 @@ void * mdb_table_t::operator new (size_t size, word_t radix_log2)
     mdb_table_t * t = (mdb_table_t *) mdb_alloc_buffer (sizeof (mdb_table_t));
 
     t->node = NULL;
-    t->radix = radix_log2;
+    t->radix = radix_log2 & MDB_BITMASK (6);
     t->count = 0;
     t->entries = (word_t) mdb_alloc_buffer (sizeof (mdb_tableent_t) * 
 					    (1UL << radix_log2));
@@ -658,7 +658,7 @@ word_t mdb_t::mapctrl (mdb_node_t * node, range_t range,
 	    do {
 		ASSERT (recurse_level < MAX_MDB_RECURSION);
 		r_table[recurse_level] = table;
-		r_values[recurse_level].idx = tableidx;
+		r_values[recurse_level].idx = tableidx & MDB_BITMASK (BITS_WORD - 1);
 		r_values[recurse_level++].mod = do_modify;
 		table = nexttab;
 
@@ -899,7 +899,8 @@ word_t mdb_t::mapctrl (mdb_node_t * node, range_t range,
 		    {
 			ASSERT (recurse_level < MAX_MDB_RECURSION);
 			r_table[recurse_level] = table;
-			r_values[recurse_level].idx = tableidx;
+			r_values[recurse_level].idx = tableidx &
+			    MDB_BITMASK (BITS_WORD - 1);
 			r_values[recurse_level++].mod = do_modify;
 			table = table->get_table (table->get_addr (tableidx));
 			tableidx = 0;

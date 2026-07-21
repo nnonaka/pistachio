@@ -86,9 +86,11 @@ public:
     void set(word_t typed, word_t untyped, word_t label)
 	{
 	    this->raw = 0;
-	    this->x.typed = typed;
-	    this->x.untyped = untyped;
-	    this->x.label = label;
+	    this->x.typed = typed & 0x3f;
+	    this->x.untyped = untyped & 0x3f;
+	    /* only the low BITS_WORD-16 bits of the label are part of the
+	     * tag -- the well-known labels are written as e.g. -2UL << 4 */
+	    this->x.label = label & (~0UL >> 16);
 	}
 	    
     bool is_error() { return x.error; }
@@ -255,7 +257,7 @@ public:
 	{ return x.rcv_window << 4; }
 
     inline void set_rcv_window(fpage_t fpage)
-	{ x.rcv_window = (fpage.raw >> 4); };
+	{ word_t window = fpage.raw >> 4; x.rcv_window = window & (~0UL >> 4); };
 
     fpage_t get_arch_specific_rcvwindow(tcb_t *dest);
     

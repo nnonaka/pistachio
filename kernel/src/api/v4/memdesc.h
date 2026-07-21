@@ -117,11 +117,13 @@ public:
      */
     void set (type_e type, word_t t, bool virt, addr_t low, addr_t high)
 	{
-	    _type = type;
-	    _t    = t;
+	    word_t l = ((word_t) low) >> 10;
+	    word_t h = ((word_t) high) >> 10;
+	    _type = type & 0xf;
+	    _t    = t & 0xf;
 	    _v    = virt;
-	    _low  = ((word_t) low) >> 10;
-	    _high = ((word_t) high) >> 10;
+	    _low  = l & (~0UL >> 10);
+	    _high = h & (~0UL >> 10);
 	}
 
     void set (memdesc_t & memdesc)

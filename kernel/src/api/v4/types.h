@@ -67,8 +67,8 @@ public:
     static time_t period(u16_t mantissa, u16_t exponent)
     {
 	time_t ret;
-	ret.time.mantissa = mantissa;
-	ret.time.exponent = exponent;
+	ret.time.mantissa = mantissa & 0x3ff;
+	ret.time.exponent = exponent & 0x1f;
 	ret.time.type = 0;
 	return ret;
     }
@@ -76,8 +76,8 @@ public:
     static time_t point(u16_t mantissa, u16_t exponent)
     {
 	time_t ret;
-	ret.time.mantissa = mantissa;
-	ret.time.exponent = exponent;
+	ret.time.mantissa = mantissa & 0x3ff;
+	ret.time.exponent = exponent & 0x1f;
 	ret.time.type = 1;
 	return ret;
     }

@@ -39,6 +39,18 @@ class mdb_table_t;
 
 
 /**
+ * MDB_BITMASK: mask covering the low @a bits bits of a word.
+ *
+ * The mapping database packs pointers, sizes and depths into narrow
+ * bitfields.  Masking a value with the width of its destination field
+ * makes the (intended) truncation explicit rather than implicit.
+ */
+#ifndef MDB_BITMASK
+#define MDB_BITMASK(bits)	(~(word_t) 0 >> (BITS_WORD - (bits)))
+#endif
+
+
+/**
  * The mdb_t specifies a particular mapping database, e.g., for page
  * frames, I/O ports, etc.  Certain operations on the mapping database
  * (e.g., map and mapctrl) are generic.  Other operations like
@@ -116,8 +128,8 @@ public:
 		else
 		{
 		    c = 0;
-		    idx = (word_t) b >> s;
-		    size = s;
+		    idx = ((word_t) b >> s) & MDB_BITMASK (BITS_WORD - 7);
+		    size = s & MDB_BITMASK (6);
 		}
 	    }
 
@@ -546,7 +558,10 @@ INLINE void mdb_node_t::set_next (mdb_node_t * n)
     if (next_is_table)
 	get_table ()->set_node (n);
     else
-	next = ((word_t) n) >> 1;
+    {
+	word_t p = ((word_t) n) >> 1;
+	next = p & MDB_BITMASK (BITS_WORD - 1);
+    }
 }
 
 /**
@@ -556,10 +571,11 @@ INLINE void mdb_node_t::set_next (mdb_node_t * n)
  */
 INLINE void mdb_node_t::set_table (mdb_table_t * t)
 {
+    word_t p = ((word_t) t) >> 1;
     t->set_node (get_next ());
     if (next_is_table)
 	get_table ()->set_node (NULL);
-    next = ((word_t) t) >> 1;
+    next = p & MDB_BITMASK (BITS_WORD - 1);
     next_is_table = 1;
 }
 
@@ -568,7 +584,8 @@ INLINE void mdb_node_t::set_table (mdb_table_t * t)
  */
 INLINE void mdb_node_t::remove_table (void)
 {
-    next = ((word_t) get_table ()->get_node ()) >> 1;
+    word_t p = ((word_t) get_table ()->get_node ()) >> 1;
+    next = p & MDB_BITMASK (BITS_WORD - 1);
     next_is_table = 0;
 }
 
@@ -578,7 +595,7 @@ INLINE void mdb_node_t::remove_table (void)
  */
 INLINE void mdb_node_t::set_depth (word_t d)
 {
-    depth = d;
+    depth = d & MDB_BITMASK (BITS_WORD - 14);
 }
 
 /**
@@ -596,7 +613,7 @@ INLINE void mdb_node_t::set_object (void * o)
  */
 INLINE void mdb_node_t::set_objsize (word_t s)
 {
-    obj_size = s;
+    obj_size = s & MDB_BITMASK (6);
 }
 
 /**
@@ -614,7 +631,7 @@ INLINE void mdb_node_t::set_misc (word_t m)
  */
 INLINE void mdb_node_t::set_inrights (word_t r)
 {
-    in_rights = r;
+    in_rights = r & MDB_BITMASK (4);
 }
 
 /**
@@ -623,7 +640,7 @@ INLINE void mdb_node_t::set_inrights (word_t r)
  */
 INLINE void mdb_node_t::set_outrights (word_t r)
 {
-    out_rights = r;
+    out_rights = r & MDB_BITMASK (4);
 }
 
 
@@ -686,10 +703,11 @@ INLINE mdb_node_t * mdb_tableent_t::get_node (void)
  */
 INLINE void mdb_tableent_t::set_table (mdb_table_t * t)
 {
+    word_t p = ((word_t) t) >> 1;
     t->set_node (get_node ());
     if (ptr_is_table)
 	get_table ()->set_node (NULL);
-    ptr = ((word_t) t) >> 1;
+    ptr = p & MDB_BITMASK (BITS_WORD - 1);
     ptr_is_table = 1;
 }
 
@@ -702,7 +720,10 @@ INLINE void mdb_tableent_t::set_node (mdb_node_t * n)
     if (ptr_is_table)
 	get_table ()->set_node (n);
     else
-	ptr = ((word_t) n) >> 1;
+    {
+	word_t p = ((word_t) n) >> 1;
+	ptr = p & MDB_BITMASK (BITS_WORD - 1);
+    }
 }
 
 /**
@@ -832,10 +853,11 @@ INLINE void mdb_table_t::remove_table (word_t addr)
 	return;
 
     mdb_node_t * n = e->get_node ();
+    word_t p = ((word_t) n) >> 1;
     if (n == NULL)
 	count--;
     e->ptr_is_table = 0;
-    e->ptr = ((word_t) n) >> 1;
+    e->ptr = p & MDB_BITMASK (BITS_WORD - 1);
 }
 
 /**
@@ -898,7 +920,7 @@ INLINE void mdb_table_t::set_prefix (word_t p)
  */
 INLINE void mdb_table_t::set_objsize (word_t s)
 {
-    objsize = s;
+    objsize = s & MDB_BITMASK (6);
 }
 
 

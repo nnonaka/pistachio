@@ -89,32 +89,32 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 	ktid.set_global_id (get_kip ()->thread_info.get_system_base (), 1);
 
 	if (tid == ktid)
-	    return print_string ("KRN_THRD", width, precision);
+	    return print_string ("KRN_THRD", (int) width, (int) precision);
 
 	if (tid == IDLETHREAD)
-	    return print_string ("IDLETHRD", width, precision);
+	    return print_string ("IDLETHRD", (int) width, (int) precision);
 
 	if (tid.is_nilthread ())
-	    return print_string ("NIL_THRD", width, precision);
+	    return print_string ("NIL_THRD", (int) width, (int) precision);
 
 	if (tid.is_anythread())
-	    return print_string ("ANY_THRD", width, precision);
+	    return print_string ("ANY_THRD", (int) width, (int) precision);
 
 	if (tid.is_interrupt ())
 	{
 	    print_string ("IRQ_");
-	    return 4 + print_dec (tid.get_irqno(), width - 4, '0');
+	    return 4 + print_dec (tid.get_irqno(), (int) (width - 4), '0');
 	}
 	word_t base_id = tid.get_threadno () -
 	    get_kip()->thread_info.get_user_base ();
 	if (base_id < 3)
 	{
 	    const char *names[3] = { "SIGMA0", "SIGMA1", "ROOTTASK" };
-	    return print_string (names[base_id], width, precision);
+	    return print_string (names[base_id], (int) width, (int) precision);
 	}
 
         if (tcb == get_kdebug_tcb())
-	    return print_string ("KDBTHRD", width, precision);
+	    return print_string ("KDBTHRD", (int) width, (int) precision);
 
     }
 
@@ -153,7 +153,7 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 	    else
 		// Print threadno without separator
 		n = print_hex (tid.get_threadno (),
-			       f_both || f_ver ? 0 : width,
+			       f_both || f_ver ? 0 : (int) width,
 			       0, adjleft);
 
 	    if (f_ver)
@@ -163,7 +163,7 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 //		print_dec (width); print_string (">");
 		width -= width > n ? n : 0;
 		n += print_hex (tid.get_version (),
-				f_both ? 0 : width, 0, true);
+				f_both ? 0 : (int) width, 0, true);
 	    }
 	}
     }
@@ -175,5 +175,5 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 	// Print plain TCB address
 	n += print_hex ((word_t) tcb, 0, sizeof (word_t) * 2);
 
-    return n;
+    return (int) n;
 }

@@ -537,10 +537,10 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 	    smp_boot_lock.lock(); // unlocked by AP
 	    TRACE_INIT("Sending startup IPI to CPU#%d APIC %d\n", 
 		       cpuid, cpu->get_id());
-	    local_apic.send_init_ipi(cpu->get_id(), true);
+	    local_apic.send_init_ipi((u8_t) cpu->get_id(), true);
             x86_wait_cycles(1000000);
-	    local_apic.send_init_ipi(cpu->get_id(), false);
-	    local_apic.send_startup_ipi(cpu->get_id(), (void(*)(void))SMP_STARTUP_ADDRESS);
+	    local_apic.send_init_ipi((u8_t) cpu->get_id(), false);
+	    local_apic.send_startup_ipi((u8_t) cpu->get_id(), (void(*)(void))SMP_STARTUP_ADDRESS);
 
 #warning VU: time out on AP call in
 	}

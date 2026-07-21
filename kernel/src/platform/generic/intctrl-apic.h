@@ -153,11 +153,13 @@ public:
     {
 	u32_t first, second;
  	
- 	first = second = in_u32(pmtimer_ioport) & pmtimer_mask;
+ 	/* the ACPI PM_TMR_BLK field is 32 bits wide, but it always holds
+ 	 * an x86 I/O port address, which is only 16 bits */
+ 	first = second = in_u32((u16_t) pmtimer_ioport) & pmtimer_mask;
  	
  	while (first == second)
  	{
- 	    second = in_u32(pmtimer_ioport) & pmtimer_mask;
+ 	    second = in_u32((u16_t) pmtimer_ioport) & pmtimer_mask;
  	    x86_pause();
  	}
  	return second; 

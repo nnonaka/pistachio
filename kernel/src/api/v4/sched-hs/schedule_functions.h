@@ -157,7 +157,6 @@ INLINE void sched_ktcb_t::set_scheduler(const threadid_t tid)
 
 INLINE void sched_ktcb_t::set_timeout(u64_t absolute_time, const bool enqueue)
 {
-    ASSERT(this);
     /* a thread should not be in the wakeup queue */
     absolute_timeout = absolute_time;
     
@@ -202,10 +201,10 @@ INLINE void sched_ktcb_t::sys_thread_switch()
                 TRACEF("sched-hs: large delay penalty\n");
             }
 
-            atcb->sched_state.delay_penalty += delta;
+            atcb->sched_state.delay_penalty += (u16_t) delta;
             if( atcb->sched_state.delay_penalty > get_timer_tick_length() )
             {
-                atcb->sched_state.delay_penalty -= get_timer_tick_length();
+                atcb->sched_state.delay_penalty -= (u16_t) get_timer_tick_length();
                 scheduler->current_timeslice = -get_timer_tick_length();
             }
 
@@ -290,7 +289,7 @@ INLINE void scheduler_t::set_accounted_tcb(tcb_t *tcb)
             delta = scheduled_tcb->sched_state.get_maximum_delay();
             TRACEF( "blocked thread long delay\n" );
         }
-        scheduled_tcb->sched_state.add_delay_penalty(delta);
+        scheduled_tcb->sched_state.add_delay_penalty((u16_t) delta);
     }
    
     scheduled_tcb = tcb;
@@ -427,7 +426,6 @@ INLINE bool scheduler_t::schedule(tcb_t *dest1, tcb_t *dest2, const sched_flags_
 
 INLINE bool scheduler_t::schedule_interrupt(tcb_t *irq, tcb_t *handler)
 {
-    threadid_t irq_tid = irq->get_global_id();
     irq->set_tag(msg_tag_t::irq_tag());
     irq->set_partner(handler->get_global_id());
     irq->set_state(thread_state_t::polling);
@@ -578,7 +576,7 @@ INLINE void scheduler_t::commit_schedule_parameters(schedule_req_t &req)
 	
 	if ((word_t) req.prio_control.prio <= MAX_PRIORITY &&
             (word_t) req.prio_control.prio != req.tcb->sched_state.get_priority())
-            req.tcb->sched_state.set_priority(req.prio_control.prio);	
+            req.tcb->sched_state.set_priority((prio_t) req.prio_control.prio);	
 #if defined(CONFIG_X_EVT_LOGGING)
 	if ((word_t) req.prio_control.logid > 0 &&
             (word_t) req.prio_control.logid < MAX_LOGIDS)

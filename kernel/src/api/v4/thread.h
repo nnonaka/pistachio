@@ -55,8 +55,8 @@ public:
     static threadid_t anylocalthread()
     {
 	threadid_t tid;
-	tid.local.zero = tid.local.id = 0;
-	tid.local.id -= 1;
+	tid.local.zero = 0;
+	tid.local.id = ~0UL >> (BITS_WORD - TID_LOCAL_ID_BITS);
 	return tid;
     }
     
@@ -71,7 +71,7 @@ public:
     {
 	threadid_t tid;
 	tid.global.version = 1;
-	tid.global.threadno = irq;
+	tid.global.threadno = irq & (~0UL >> (BITS_WORD - TID_GLOBAL_THREADNO_BITS));
 	return tid;
     }
 
@@ -85,8 +85,8 @@ public:
     static threadid_t threadid(word_t threadno, word_t version)
     {
 	threadid_t tid;
-	tid.global.version = version;
-	tid.global.threadno = threadno;
+	tid.global.version = version & (~0UL >> (BITS_WORD - TID_GLOBAL_VERSION_BITS));
+	tid.global.threadno = threadno & (~0UL >> (BITS_WORD - TID_GLOBAL_THREADNO_BITS));
 	return tid;
     }
 
@@ -141,8 +141,8 @@ private:
 
 INLINE void threadid_t::set_global_id(word_t threadno, word_t version)
 {
-    global.threadno = threadno;
-    global.version = version;
+    global.threadno = threadno & (~0UL >> (BITS_WORD - TID_GLOBAL_THREADNO_BITS));
+    global.version = version & (~0UL >> (BITS_WORD - TID_GLOBAL_VERSION_BITS));
 }
 
 INLINE threadid_t threadid(word_t rawid)

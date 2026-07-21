@@ -101,7 +101,6 @@ public:
     void init_timeslice(time_t timeslice)
 	{
 	    ASSERT(timeslice.is_period()); 
-	    ASSERT(this);
 	    current_timeslice = timeslice_length = timeslice.get_microseconds();
 	}
 

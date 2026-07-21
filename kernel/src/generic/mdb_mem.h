@@ -84,9 +84,10 @@ public:
 INLINE word_t mdb_mem_misc (space_t * spc, word_t pgsz, word_t stat = 0)
 {
     mdb_mem_misc_t misc (0);
-    misc.pgsize = pgsz;
-    misc.purged_status = stat;
-    misc.space = ((word_t) spc) >> 8;
+    word_t sp = ((word_t) spc) >> 8;
+    misc.pgsize = pgsz & MDB_BITMASK (5);
+    misc.purged_status = stat & MDB_BITMASK (3);
+    misc.space = sp & MDB_BITMASK (BITS_WORD - 8);
     return misc.raw;
 }
 

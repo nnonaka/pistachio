@@ -73,7 +73,6 @@ INLINE void sched_ktcb_t::set_scheduler(const threadid_t tid)
 
 INLINE void sched_ktcb_t::set_timeout(u64_t absolute_time, const bool enqueue)
 {
-    ASSERT(this);
     /* a thread should not be in the wakeup queue */
     absolute_timeout = absolute_time;
     

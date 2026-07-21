@@ -104,7 +104,7 @@ static inline char lowercase (char c)
 
 static inline int thread_match (const char * str)
 {
-    for (word_t i = 0; thread_names[i] != 0; i++)
+    for (int i = 0; thread_names[i] != 0; i++)
     {
 	for (word_t j = 0; thread_names[i][j] == str[j]; j++)
 	    if (str[j] == 0)

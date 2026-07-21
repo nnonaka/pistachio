@@ -192,14 +192,15 @@ private:
 	{
 	    prio_reg_t preg;
 	    preg.raw = read_reg(reg);
-	    preg.x.prio = prio;
-	    preg.x.subprio = subprio;
+	    /* prio and subprio are 4-bit fields in the APIC priority regs */
+	    preg.x.prio = prio & 0xF;
+	    preg.x.subprio = subprio & 0xF;
 	    write_reg(reg, preg.raw);
 	}
 
 public:
 
-    u8_t id() { return (read_reg(APIC_ID) >> 24); }
+    u8_t id() { return (u8_t) (read_reg(APIC_ID) >> 24); }
     void set_id(u8_t id) {
 	write_reg(APIC_ID, (read_reg(APIC_ID) & 0x00ffffff) | (u32_t)id << 24);
     }

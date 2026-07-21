@@ -63,7 +63,7 @@ static void do_xcpu_interrupt(cpu_mb_entry_t * entry)
 static void irq_thread()
 {
     tcb_t * current = get_current_tcb();
-    int irq = current->get_global_id().get_irqno();
+    word_t irq = current->get_global_id().get_irqno();
     scheduler_t *scheduler = get_current_scheduler();
     
     while(1)

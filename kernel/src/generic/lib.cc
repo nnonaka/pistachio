@@ -51,8 +51,9 @@ extern "C" WEAK void * memset (void * dst, unsigned int c, unsigned int len)
 {
     u8_t *s = (u8_t *) dst;
 
+    /* As per memset(3), the fill value is converted to unsigned char. */
     while (len-- > 0)
-	*s++ = c;
+	*s++ = (u8_t) c;
 
     return dst;
 }

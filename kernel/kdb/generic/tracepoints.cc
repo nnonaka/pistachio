@@ -265,8 +265,9 @@ CMD(cmd_tp_irq_mask, cg)
     u32_t lo = (u32_t) tp_irq_mask;
     u32_t hi = (u32_t) (tp_irq_mask >> 32);
     
-    lo = get_hex("IRQ mask low ", lo, "all");
-    hi = get_hex("IRQ mask high", hi, "all");
+    // the 64 bit mask is entered as two 32 bit halves
+    lo = (u32_t) get_hex("IRQ mask low ", lo, "all");
+    hi = (u32_t) get_hex("IRQ mask high", hi, "all");
     
     tp_irq_mask = ((u64_t) hi << 32) | (u64_t) lo;
 

@@ -67,7 +67,7 @@ X86_EXCNO_ERRORCODE(smp_trigger_ipi, 0)
 void smp_xcpu_trigger(cpuid_t cpu)
 {
     TRACEPOINT(X86_APIC_IPI, "send IPI to CPU %d\n", cpu);
-    apic.send_ipi(cpu_t::get(cpu)->get_id(), IDT_LAPIC_XCPU_IPI);
+    apic.send_ipi((u8_t) cpu_t::get(cpu)->get_id(), IDT_LAPIC_XCPU_IPI);
 }
 
 void init_xcpu_handling ()

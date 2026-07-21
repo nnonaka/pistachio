@@ -155,7 +155,7 @@ static void putc_screen (char c)
 	    {
 		// Clear screen
 		for (int i = 0; i < 80*NUM_LINES; i++)
-		    ((u16_t *) DISPLAY)[i] = (color << 8) + ' ';
+		    ((u16_t *) DISPLAY)[i] = (u16_t) ((color << 8) + ' ');
 		cursor = 0;
 		esc = 0;
 		return;
@@ -219,7 +219,7 @@ static void putc_screen (char c)
 	break;
     default:
 	DISPLAY[cursor++] = c;
-	DISPLAY[cursor++] = color;
+	DISPLAY[cursor++] = (char) color;
     }
 
     esc = 0;

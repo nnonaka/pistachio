@@ -101,7 +101,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 {
     msg_item_t src_item;
     acceptor_t acceptor;
-    int br_idx = 1;
+    word_t br_idx = 1;
     word_t total_mrs = msgtag.get_untyped() + msgtag.get_typed() + 1;
     word_t total_len = 0;
 #if defined(CONFIG_X_CTRLXFER_MSG)
@@ -187,8 +187,8 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 	    if (EXPECT_FALSE( rcv_fpage.is_nil_fpage() ))
 		goto message_overflow;
 
-	    copy_mr(dst, src, src_idx++);
-	    copy_mr(dst, src, src_idx++);
+	    copy_mr(dst, src, (int) src_idx++);
+	    copy_mr(dst, src, (int) src_idx++);
 
 	    if (snd_fpage.is_mempage ())
 	    {
@@ -229,7 +229,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 	     * Copy the MR at the very beginning to make sure the
 	     * receiver can deal with cut message situations.
 	     */
-	    copy_mr (dst, src, src_idx);
+	    copy_mr (dst, src, (int) src_idx);
 	
 	    if (! accept_strings)
 		goto message_overflow;
@@ -286,7 +286,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 			    src_addr, src_len, src_ptridx,
 			    dst_addr, dst_len, dst_ptridx);
 
-		copy_mr (dst, src, src_idx + src_ptridx);
+		copy_mr (dst, src, (int) (src_idx + src_ptridx));
 
 		word_t copy_length = dst_len < src_len ? dst_len : src_len;
 		word_t cpy_len = ipc_copy (src, (addr_t) src_addr,

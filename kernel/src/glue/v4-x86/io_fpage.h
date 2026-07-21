@@ -78,8 +78,10 @@ public:
 	{
 	    x.raw = 0;
 	    x.io.two = 2;
-	    x.io.base = (base & (~0UL << log2size));
-	    x.io.size = log2size;
+	    /* I/O ports are 16 bit wide, so cutting the base down to the
+	       16 bit base field is the intended encoding */
+	    x.io.base = (u16_t) (base & (~0UL << log2size));
+	    x.io.size = log2size & 0x3f;
 	}
 
     /**
@@ -104,8 +106,8 @@ public:
      * @return base address of the fpage
      * get_base does not size-align the address
      */
-    addr_t get_base() 
-	{ return (addr_t) (x.io.base); }
+    addr_t get_base()
+	{ return (addr_t) (word_t) (x.io.base); }
 
     /**
      * @return size aligned address of the fpage

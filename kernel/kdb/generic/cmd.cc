@@ -89,7 +89,7 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 		int nummatch = 0;
 		reset ();
 		while ((cmd = next ()) != NULL)
-		    if (strncmp ((char *) cmd->command, cmdstr, cmdlen) == 0)
+		    if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0)
 			match = cmd, nummatch++;
 	    
 		if (nummatch == 1)
@@ -107,7 +107,7 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 		    putc ('\n');
 		    reset ();
 		    while ((cmd = next ()) != NULL)
-			if (strncmp ((char *) cmd->command, cmdstr, cmdlen) == 0)
+			if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0)
 			    printf ("%s\n", cmd->command);
 		    cmdstr[cmdlen] = 0;
 		    printf (TXT_BRIGHT);
@@ -139,7 +139,7 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 	reset ();
 	while ((cmd = next ()) != NULL)
 	{
-	    if (strncmp ((char *) cmd->command, cmdstr, cmdlen) == 0 &&
+	    if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0 &&
 		cmd->command[cmdlen] == 0)
 		return cmd;
 	}

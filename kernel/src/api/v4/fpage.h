@@ -77,9 +77,10 @@ public:
 	{
 	    if (EXPECT_FALSE(arch.is_valid_page() == false))
 	    {
+		word_t abase = (base & (~0UL << size)) >> 10;
 		raw = 0;
-		mem.x.base = (base & (~0UL << size)) >> 10;
-		mem.x.size = size;
+		mem.x.base = abase & (~0UL >> (BITS_WORD - L4_FPAGE_BASE_BITS));
+		mem.x.size = size & 0x3f;
 		mem.x.read = read;
 		mem.x.write = write;
 		mem.x.execute = exec;

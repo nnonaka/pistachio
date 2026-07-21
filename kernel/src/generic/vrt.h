@@ -270,7 +270,7 @@ INLINE void vrt_node_t::set_object (vrt_t * vrt, word_t this_size,
  */
 INLINE void vrt_node_t::set_object (word_t objvalue)
 {
-    value = objvalue;
+    value = objvalue & MDB_BITMASK (BITS_WORD - 1);
     is_table_ptr = 0;
 }
 
@@ -280,7 +280,8 @@ INLINE void vrt_node_t::set_object (word_t objvalue)
  */
 INLINE void vrt_node_t::set_table (vrt_table_t * t)
 {
-    value = (word_t) t >> 1;
+    word_t p = (word_t) t >> 1;
+    value = p & MDB_BITMASK (BITS_WORD - 1);
     is_table_ptr = 1;
 }
 
@@ -462,7 +463,7 @@ INLINE void vrt_table_t::set_prefix (word_t p)
  */
 INLINE void vrt_table_t::set_objsize (word_t s)
 {
-    objsize = s;
+    objsize = s & MDB_BITMASK (6);
 }
 
 

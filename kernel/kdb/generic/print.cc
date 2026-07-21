@@ -221,7 +221,7 @@ int SECTION(SEC_KDEBUG) print_dec(const word_t val,
 
     /* print digits */
     do {
-	putc(((val/divisor) % 10) + '0');
+	putc((char) (((val/divisor) % 10) + '0'));
     } while (divisor /= 10);
 
     /* report number of digits printed */
@@ -245,7 +245,7 @@ int SECTION(SEC_KDEBUG) print_dec64(const u64_t val,
 
     /* print digits */
     do {
-	putc(((val/divisor) % 10) + '0');
+	putc((char) (((val/divisor) % 10) + '0'));
     } while (divisor /= 10);
 
     /* report number of digits printed */
@@ -324,7 +324,7 @@ int SECTION(SEC_KDEBUG) do_printf(const char* format_p, va_list args)
 		goto reentry;
 		break;
 	    case 'c':
-		putc(arg(int));
+		putc((char) arg(int));
 		n++;
 		break;
 	    case 'C':

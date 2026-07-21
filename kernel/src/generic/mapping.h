@@ -42,6 +42,18 @@ class rootnode_t;
 
 
 /**
+ * MDB_BITMASK: mask covering the low @a bits bits of a word.
+ *
+ * The mapping database packs pointers, sizes and depths into narrow
+ * bitfields.  Masking a value with the width of its destination field
+ * makes the (intended) truncation explicit rather than implicit.
+ */
+#ifndef MDB_BITMASK
+#define MDB_BITMASK(bits)	(~(word_t) 0 >> (BITS_WORD - (bits)))
+#endif
+
+
+/**
  * mdb_pgshifts: page sizes supported by the mapping database
  *
  * The mdb_pgshifts[] is an architecture specific arrray defining the
@@ -153,13 +165,15 @@ public:
 
     void set_backlink (mapnode_t * prev, pgent_t * pg)
 	{
-	    x.prev_ptr = ((word_t) prev ^ (word_t) pg) >> 1;
+	    word_t p = ((word_t) prev ^ (word_t) pg) >> 1;
+	    x.prev_ptr = p & MDB_BITMASK (BITS_WORD - 1);
 	    x.is_prev_root = 0;
 	}
 
     void set_backlink (rootnode_t * prev, pgent_t * pg)
 	{
-	    x.prev_ptr = ((word_t) prev ^ (word_t) pg) >> 1;
+	    word_t p = ((word_t) prev ^ (word_t) pg) >> 1;
+	    x.prev_ptr = p & MDB_BITMASK (BITS_WORD - 1);
 	    x.is_prev_root = 1;
 	}
 
@@ -201,21 +215,24 @@ public:
 
     void set_next (mapnode_t * map)
 	{
-	    x.next_ptr = ((word_t) map) >> 2;
+	    word_t p = ((word_t) map) >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 0;
 	    x.is_next_map = 1;
 	}
 
     void set_next (rootnode_t *root)
 	{
-	    x.next_ptr = ((word_t) root) >> 2;
+	    word_t p = ((word_t) root) >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 1;
 	    x.is_next_map = 0;
 	}
 
     void set_next (dualnode_t * dual)
 	{
-	    x.next_ptr = ((word_t) dual) >> 2;
+	    word_t p = ((word_t) dual) >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 1;
 	    x.is_next_map = 1;
 	}
@@ -244,7 +261,8 @@ public:
 
     void set_space (space_t * space)
 	{
-	    x.space = ((word_t) space) >> (BITS_WORD - MDB_SPACE_BITS);
+	    word_t s = ((word_t) space) >> (BITS_WORD - MDB_SPACE_BITS);
+	    x.space = s & MDB_BITMASK (MDB_SPACE_BITS);
 	}
 
     // Referenced bits
@@ -256,12 +274,12 @@ public:
 
     void set_rwx (word_t rwx)
 	{
-	    x.rwx = rwx;
+	    x.rwx = rwx & MDB_BITMASK (3);
 	}
 
     void update_rwx (word_t rwx)
 	{
-	    x.rwx |= rwx;
+	    x.rwx |= rwx & MDB_BITMASK (3);
 	}
 
     // Tree depth
@@ -273,7 +291,7 @@ public:
 
     void set_depth (word_t depth)
 	{
-	    x.tree_depth = depth;
+	    x.tree_depth = depth & MDB_BITMASK (BITS_WORD - MDB_SPACE_BITS - 3);
 	}
 
 } __attribute__ ((packed));
@@ -325,21 +343,24 @@ public:
 
     void set_ptr (mapnode_t * map)
 	{
-	    x.next_ptr = (word_t) map >> 2;
+	    word_t p = (word_t) map >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 0;
 	    x.is_next_map = 1;
 	}
 
     void set_ptr (rootnode_t * root)
 	{
-	    x.next_ptr = (word_t) root >> 2;
+	    word_t p = (word_t) root >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 1;
 	    x.is_next_map = 0;
 	}
 
     void set_ptr (dualnode_t * dual)
 	{
-	    x.next_ptr = (word_t) dual >> 2;
+	    word_t p = (word_t) dual >> 2;
+	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
 	    x.is_next_root = 1;
 	    x.is_next_map = 1;
 	}

@@ -210,7 +210,7 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
 
     for (word_t i = 0; i < get_msgtag(tcb).get_typed();)
     {
-	int offset = get_msgtag(tcb).get_untyped() + 1;
+	word_t offset = get_msgtag(tcb).get_untyped() + 1;
 	msg_item_t item;
 
 	item = tcb->get_mr(offset + i);

@@ -470,7 +470,7 @@ addr_t space_t::install_io_bitmap(bool create)
     {
 	ASSERT(cpu != data.reference_ptab);
 	/* Get bitmap from reference page table */
-	new_bitmap = get_io_bitmap(data.reference_ptab);
+	new_bitmap = get_io_bitmap((cpuid_t) data.reference_ptab);
     }
     ASSERT(new_bitmap);
 
@@ -536,7 +536,7 @@ addr_t space_t::install_io_bitmap(bool create)
 		 addr_offset(io_bitmap_mapping, X86_PAGE_SIZE), 
 		 page_shift (pgent_t::size_4k));
 
-    ASSERT(get_io_bitmap(data.reference_ptab) == new_bitmap);
+    ASSERT(get_io_bitmap((cpuid_t) data.reference_ptab) == new_bitmap);
 
     return new_bitmap;
 }
@@ -619,11 +619,11 @@ bool space_t::sync_io_bitmap()
     if (get_current_cpu() == data.reference_ptab)
 	return false;
     
-    if (get_io_bitmap() != get_io_bitmap(data.reference_ptab))
+    if (get_io_bitmap() != get_io_bitmap((cpuid_t) data.reference_ptab))
     {
 	//TRACEF("Sync IO bitmap entry from cpu %d\n", data.reference_ptab);
 	install_io_bitmap(false);
-	ASSERT(get_io_bitmap() == get_io_bitmap(data.reference_ptab));
+	ASSERT(get_io_bitmap() == get_io_bitmap((cpuid_t) data.reference_ptab));
 	return true;
     }
 #endif

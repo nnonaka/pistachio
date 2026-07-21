@@ -112,7 +112,7 @@ public:
 		    word_t len, bool writable, bool kernel, bool global);
     bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg, pgent_t::pgsize_e *r_size, cpuid_t cpu);
     bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg, pgent_t::pgsize_e *r_size)
-	{ return lookup_mapping(vaddr, r_pg, r_size, data.reference_ptab); }
+	{ return lookup_mapping(vaddr, r_pg, r_size, (cpuid_t) data.reference_ptab); }
     void release_kernel_mapping (addr_t vaddr, addr_t paddr, word_t log2size);
     
     void flush_tlb (space_t * curspace);

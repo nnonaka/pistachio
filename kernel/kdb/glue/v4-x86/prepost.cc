@@ -285,7 +285,8 @@ bool kdb_t::pre()
 		    /* movq addr32, %rax */
 		    s32_t suser_addr = 0;
 		    mapped = readmem (space, addr_offset(addr, 5), (s32_t *) &suser_addr);
-		    user_addr = (addr_t) suser_addr;
+		    // sign-extend the 32-bit displacement to a full address
+		    user_addr = (addr_t) (word_t) suser_addr;
 		}
 		
 	    }
@@ -335,7 +336,8 @@ bool kdb_t::pre()
 		//
 		// KDB_PrintChar()
 		//
-		putc(f->regs[x86_exceptionframe_t::areg]);
+		// the character to print is passed in the low byte of the register
+		putc((char) f->regs[x86_exceptionframe_t::areg]);
 		break;
 
 	    case 0x1:

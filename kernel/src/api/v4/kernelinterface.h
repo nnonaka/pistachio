@@ -170,8 +170,8 @@ public:
     word_t get_user_base (void)			{ return user_base;	}
     word_t get_system_base (void)		{ return system_base;	}
     word_t get_significant_threadbits (void)	{ return t;		}
-    void set_user_base(word_t base)		{ user_base = base;	}
-    void set_system_base(word_t base)		{ system_base = base;	}
+    void set_user_base(word_t base)		{ user_base = base & 0xfff;	}
+    void set_system_base(word_t base)		{ system_base = base & 0xfff;	}
 };
 
 /**
@@ -244,7 +244,7 @@ public:
 };
 
 /**
- * The KIP magic - the "L4µK" byte string
+ * The KIP magic - the "L4ï¿½K" byte string
  */
 class magic_word_t
 {

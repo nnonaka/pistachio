@@ -75,7 +75,7 @@ bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)
     }
     else
     {
-	tag.x.untyped += NUM_EXC_REGS - 3;
+	tag.x.untyped = (tag.x.untyped + NUM_EXC_REGS - 3) & 0x3f;
 	
 	for (int i = 0; i < NUM_EXC_REGS-IPC_NUM_SAVED_MRS; i++)
 	    saved_mr[i] = current->get_mr(i+IPC_NUM_SAVED_MRS);
@@ -274,7 +274,8 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0x30:
     	    /* wrmsr */
 	    if ( is_privileged_space(space) ) {
-		x86_wrmsr (frame->regs[x86_exceptionframe_t::creg], 
+		/* the MSR index is taken from ECX only, so truncating is correct */
+		x86_wrmsr ((u32_t) frame->regs[x86_exceptionframe_t::creg],
 			   ((u64_t)(frame->regs[x86_exceptionframe_t::areg])) | 
 			   ((u64_t)(frame->regs[x86_exceptionframe_t::dreg])) << 32);
 		frame->regs[x86_exceptionframe_t::ipreg] += 2;
@@ -284,7 +285,8 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0x32:
 	    /* rdmsr */
 	    if ( is_privileged_space(space) ) {
-		u64_t val = x86_rdmsr (frame->regs[x86_exceptionframe_t::creg]);
+		/* the MSR index is taken from ECX only, so truncating is correct */
+		u64_t val = x86_rdmsr ((u32_t) frame->regs[x86_exceptionframe_t::creg]);
 		frame->regs[x86_exceptionframe_t::areg] = (u32_t) val;
 		frame->regs[x86_exceptionframe_t::dreg] = (u32_t)(val >> 32);
 		frame->regs[x86_exceptionframe_t::ipreg] += 2;

@@ -64,7 +64,7 @@ void * vrt_table_t::operator new (size_t size, word_t radix_log2)
 {
     vrt_table_t * t = (vrt_table_t *) mdb_alloc_buffer (size);
 
-    t->radix = radix_log2;
+    t->radix = radix_log2 & MDB_BITMASK (6);
     t->entries = (word_t)
 	mdb_alloc_buffer ((sizeof (vrt_node_t) + sizeof (mdb_node_t *)) *
 			  (1UL << radix_log2));

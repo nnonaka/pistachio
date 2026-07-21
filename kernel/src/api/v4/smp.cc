@@ -73,7 +73,7 @@ void sync_entry_t::handle_sync_requests()
 {
     while (this->pending_mask)
     {
-	for (int cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; cpu++)
+	for (cpuid_t cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; cpu++)
 	    if (this->pending_mask & (1 << cpu))
 	    {
 		sync_xcpu_entry[cpu].handler(&sync_xcpu_entry[cpu]);

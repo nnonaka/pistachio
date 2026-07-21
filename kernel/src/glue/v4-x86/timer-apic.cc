@@ -135,6 +135,6 @@ void timer_t::init_cpu(cpuid_t cpu)
 
     /* now set timer IRQ to periodic timer */
     local_apic.timer_setup(IDT_LAPIC_TIMER, true);
-    local_apic.timer_set( bus_cycles / (1000 * delay / TIMER_TICK_LENGTH) );
+    local_apic.timer_set( (u32_t) (bus_cycles / (1000 * delay / TIMER_TICK_LENGTH)) );
 
 }

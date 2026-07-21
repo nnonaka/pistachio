@@ -77,7 +77,7 @@ template<typename T> static void pmc_print(T pmc)
     while (num < width)
     {
 	ASSERT(divisor);
-	char d = (pmc/divisor) % 10;
+	char d = (char) ((pmc/divisor) % 10);
 	putc(d + '0');
 	
 	divisor /= 10;
@@ -87,7 +87,7 @@ template<typename T> static void pmc_print(T pmc)
     if (digits > width)
     {
         putc('e');
-	putc(digits-width + '0');
+	putc((char) (digits-width + '0'));
     }
     else
     {
