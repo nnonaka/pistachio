@@ -110,7 +110,9 @@ INLINE void thread_resources_t::enable_copy_area (tcb_t * tcb,
 #endif
 
     word_t n = last_copy_area;
-    ASSERT (n <= COPY_AREA_COUNT);
+    /* n indexes pdir_idx[COPY_AREA_COUNT][], so COPY_AREA_COUNT itself is
+       already out of range. */
+    ASSERT (n < COPY_AREA_COUNT);
     last_copy_area++;
     if (last_copy_area >= COPY_AREA_COUNT)
 	last_copy_area = 0;
