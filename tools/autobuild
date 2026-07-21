@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Usage: tools/autobuild <configuration>
 # must be run from top level pistachio directory.
@@ -149,7 +149,7 @@ fi
 # We build all specified configurations
 for i in `(cd $TOPDIR/contrib/configs/; ls ${CONFIGS}.kernel.tar | cut -d. -f1)`; do
     TMPFILE=/tmp/abd-log.${USER}.${HOSTNAME}.${PPID}.$i
-    if do_configuration $i 2>&1 > $TMPFILE; then
+    if do_configuration $i > $TMPFILE 2>&1; then
 	rm $TMPFILE
     else
         cat $TMPFILE
