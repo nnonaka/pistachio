@@ -131,8 +131,11 @@ void thread_resources_t::init(tcb_t * tcb)
     fpu_state = NULL;
 
     last_copy_area = 0;
-    for (word_t i = 0; i < COPY_AREA_PDIRS; i++)
-	for (word_t j = 0;  j < COPY_AREA_COUNT; j++)
+    /* pdir_idx is [COPY_AREA_COUNT][COPY_AREA_PDIRS] -- the loop bounds used
+       to be the other way round, which on x64 (1x2) wrote one row past the
+       array and left pdir_idx[0][1] uninitialised. */
+    for (word_t i = 0; i < COPY_AREA_COUNT; i++)
+	for (word_t j = 0;  j < COPY_AREA_PDIRS; j++)
 	    pdir_idx[i][j] = ~0UL;
 }
 
