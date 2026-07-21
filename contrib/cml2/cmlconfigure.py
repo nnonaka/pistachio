@@ -1178,7 +1178,7 @@ class curses_style_menu:
                     ch = int(m.group(1))
                     break
         if configuration.debug:
-            configuration.debug_emit(1, ">>> '%s' (%d)"% (curses.keyname(ch), ch))
+            configuration.debug_emit(1, ">>> '%s' (%d)"% (curses.keyname(ch).decode(), ch))
         return ch
 
     def ungetch(self, c):
@@ -1316,7 +1316,7 @@ class curses_style_menu:
         if self.banner and self.in_menu():
             title = self.msgbuf + (" " * (self.columns - len(self.msgbuf) - len(self.banner) -1)) + self.banner
         else:
-            title = (" " * ((self.columns-len(self.msgbuf)) / 2)) + self.msgbuf
+            title = (" " * ((self.columns-len(self.msgbuf)) // 2)) + self.msgbuf
         self.menus.viewport_height = self.lines-2 + (not configuration.expert_tie or cml.evaluate(configuration.expert_tie) != cml.n)
         self.window.move(0, 0)
         self.window.clrtoeol()
@@ -1415,7 +1415,7 @@ class curses_style_menu:
             self.window.move(self.lines-1, 0)
             self.window.clrtoeol()
             helpbanner = lang["HELPBANNER"]
-            title = " " * ((self.columns - len(helpbanner))/2) + helpbanner
+            title = " " * ((self.columns - len(helpbanner))//2) + helpbanner
             self.window.addstr(title, curses.A_BOLD)
 
         if type(self.menus.selected()) is not type(""):
@@ -1546,7 +1546,7 @@ class curses_style_menu:
                 self.help_popup("PRESSANY", [failure])
         else:
             self.help_popup("PRESSANY",
-                            (lang["UNKNOWN"]%(curses.keyname(cmd)),))
+                            (lang["UNKNOWN"]%(curses.keyname(cmd).decode(),),))
         return recompute
 
     def seek_mutable(self, direction, movefirst=0):
@@ -3289,10 +3289,11 @@ if __name__ == '__main__':
         else:
             import traceback
             try:
-                import curses, curses.textpad, curses.wrapper
+                # curses.wrapper was a submodule under Python 2, but is a
+                # plain function of the curses package under Python 3.
+                import curses, curses.textpad, curses.ascii
                 force_curses = 1
-            except:
-                ImportError
+            except ImportError:
                 print(lang["NOCURSES"])
                 force_tty = 1
 
