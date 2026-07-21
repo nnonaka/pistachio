@@ -172,11 +172,12 @@ CCFLAGS += -fno-rtti -fno-builtin  -fomit-frame-pointer -fno-exceptions \
 	  -Wall -Wno-non-virtual-dtor -Wno-format   \
 	  $(CFLAGS_$(ARCH)) $(CFLAGS_$(CPU)) $(CFLAGS_$(PLATFORM)) 
 
+# There is no __stack_chk_fail in the kernel, and distribution gccs tend to
+# enable the stack protector by default.
+CCFLAGS += -fno-stack-protector
+
 ifeq ("$(CC_VERSION)", "4")
 CCFLAGS += -Wno-conversion
-ifneq ("$(CC_SUBVERSION)", "0")
-CCFLAGS += -fno-stack-protector
-endif
 else
 CCFLAGS += -Wconversion
 endif
