@@ -49,7 +49,10 @@ LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE)
 CFLAGS_powerpc+=	-fno-builtin -msoft-float
 CXXFLAGS_powerpc+=	-fno-rtti
 
-CCFLAGS_pingpong-amd64-32 = $(subst -m64,-m32,$(CCFLAGS)) -m32 -fno-exceptions
+# CCFLAGS is not a variable this build system defines, so the substitution
+# used to expand to nothing and this object was built without the project
+# flags -- notably -fno-stack-protector.
+CCFLAGS_pingpong-amd64-32 = $(subst -m64,-m32,$(CXXFLAGS)) -m32 -fno-exceptions
 
 pingpong-amd64-32.o: pingpong-amd64-32.cc
 	$(CC) $(CPPFLAGS) $(CCFLAGS_$*) -x c++ -c $< -o $(notdir $@)

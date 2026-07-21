@@ -255,14 +255,16 @@ case $LDFLAGS in
 	;;
 esac
 LDFLAGS="-N -L\$(top_builddir)/lib -L$LIBGCCDIR $LDFLAGS"
-CFLAGS="-nostdinc $CFLAGS"
+dnl -fno-builtin: these programs link -nostdlib, so gcc must not rewrite
+dnl hand-written copy/length loops into calls to memcpy/memmove/strlen.
+CFLAGS="-nostdinc -fno-builtin $CFLAGS"
 CXXFLAGS="-fno-exceptions $CXXFLAGS"
 
 CC_VERSION=`echo __GNUC__ | $CC -E  - | grep -v "\#"`
 CC_SUBVERSION=`echo __GNUC_MINOR__ | $CC -E  - | grep -v "\#"`
-if test "$CC_VERSION" = "4" -a "$CC_SUBVERSION" -ge "1"; then
+dnl These programs link -nostdlib, so there is no __stack_chk_fail to call.
+dnl Distribution compilers enable the stack protector by default.
 CFLAGS="-fno-stack-protector $CFLAGS"
-fi
 
 
 dnl Architecture dependent settings.
