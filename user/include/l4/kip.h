@@ -566,8 +566,7 @@ L4_INLINE L4_Bool_t L4_HasFeature (const char *feature_name)
 	while (*n == *fn++)
             if (*n++ == 0)
                 return true;
-	if (*(L4_Word8_t *)n - *(L4_Word8_t *)--fn)
-            return true;
+	/* Names differ -- carry on with the next feature. */
     }
     return false;
 }
