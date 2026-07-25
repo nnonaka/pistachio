@@ -180,47 +180,74 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
 	init32_spin(1);
 
 
+    /*
+     * Access the preliminary page tables through laundered base pointers.
+     *
+     * init32 is compiled -m32 and then converted to elf64-x86-64 with
+     * "objcopy -O elf64-x86-64" (see arch/x86/x64/Makeconf).  Current binutils
+     * drops the field addends of the object's absolute (REL) relocations during
+     * that REL->RELA conversion, so any statically-indexed array store -- e.g.
+     * the high dword of init_pml4[0] (offset +4) or the init_pml4[511] entry --
+     * loses its offset and collapses onto the array base, zeroing the entry.
+     * (The pdir loop below is unaffected because it uses register-scaled
+     * addressing.)  Passing the bases through an asm launders them into
+     * runtime register values, so all offsets become instruction displacements
+     * rather than relocation addends.
+     */
+    volatile u64_t *pml4 = init_pml4;
+    volatile u64_t *pdp  = init_pdp;
+    volatile u64_t *pdir = init_pdir;
+    __asm__ ("" : "+r"(pml4), "+r"(pdp), "+r"(pdir));
+
     for (int i=0; i<512; i++){
-	init_pml4[i] = init_pdp[i] = init_pdir[i] = 0;
+	pml4[i] = 0;
+	pdp[i]  = 0;
+	pdir[i] = 0;
     }
 
-    
+
     /* Create a pagetable hierarchy */
-    
+
     /* ugly...
      * otherwise we override our own pdir entries or we make entries
      * outside the pdir
      */
-    
-    if  (X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED) != 0 && 
+
+    if  (X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED) != 0 &&
 	 (X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED) < INIT32_PDIR_ENTRIES ||
 	  X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED) + INIT32_PDIR_ENTRIES > 512ULL))
 	init32_spin(2);
-    
+
     for (int i=0; i< INIT32_PDIR_ENTRIES; i++){
     	/* the pdir (used twice!) maps 1 GByte */
-	init_pdir[i] = init_pdir[i + X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED)] =
-	    ((i << X86_SUPERPAGE_BITS) | (INIT32_PDIR_ATTRIBS & X86_SUPERPAGE_FLAGS_MASK));
+	u64_t v = ((i << X86_SUPERPAGE_BITS) | (INIT32_PDIR_ATTRIBS & X86_SUPERPAGE_FLAGS_MASK));
+	pdir[i] = v;
+	pdir[i + X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED)] = v;
     }
 
-    /* 
+    /*
      * the pdp maps 512 GByte
-     * we use it twice for high and and low mapping, since it's only a 
+     * we use it twice for high and and low mapping, since it's only a
      * preliminary pagetable hierarchy
      */
-   
-    
-    init_pdp[0] = init_pdp[X86_X64_PDP_IDX(KERNEL_OFFSET_TYPED) ] =\
-	(u64_t) ( ( (u32_t) (init_pdir)) | INIT32_PTAB_ATTRIBS);
 
-    
-    /* 
-     * the pml4 needs 2 entries: 
+    {
+	u64_t v = (u64_t) ( ( (u32_t) (pdir)) | INIT32_PTAB_ATTRIBS);
+	pdp[0] = v;
+	pdp[X86_X64_PDP_IDX(KERNEL_OFFSET_TYPED)] = v;
+    }
+
+
+    /*
+     * the pml4 needs 2 entries:
      * one for the first 512 GByte, one for the last 512 GByte
      */
-   
-    init_pml4[0] = init_pml4[X86_X64_PML4_IDX(KERNEL_OFFSET_TYPED) ] =\
-	(u64_t) ( ( (u32_t) (init_pdp)) | INIT32_PTAB_ATTRIBS);
+
+    {
+	u64_t v = (u64_t) ( ( (u32_t) (pdp)) | INIT32_PTAB_ATTRIBS);
+	pml4[0] = v;
+	pml4[X86_X64_PML4_IDX(KERNEL_OFFSET_TYPED)] = v;
+    }
 
 
     /* Disable Paging (Vol. 2, 14.6.1) */
@@ -233,7 +260,7 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
     x86_mmu_t::enable_long_mode();
 	 
     /* Set pagemap base pointer (CR3) */
-    x86_mmu_t::set_active_pagetable((u64_t) ((u32_t)init_pml4));
+    x86_mmu_t::set_active_pagetable((u64_t) ((u32_t)pml4));
 	 
     /* Enable paged mode */
     x86_mmu_t::enable_paging();
@@ -242,12 +269,18 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
     if (!(x86_mmu_t::long_mode_active()))
 	init32_spin(3);
 	 
-    /* Set up temporary GDT (true long mode needs 64bit Code Segment) */
-    init32_gdt[0].set_seg((u32_t)0, x86_segdesc_t::inv, 0, x86_segdesc_t::m_comp);
-    init32_gdt[1].set_seg((u32_t)0, x86_segdesc_t::code, 0, x86_segdesc_t::m_long);
-	 
+    /* Set up temporary GDT (true long mode needs 64bit Code Segment).
+     * Launder the base (see the page-table comment above): init32_gdt[1] is
+     * at a static offset whose relocation addend is dropped by objcopy, so
+     * without this the second descriptor would be written onto the first and
+     * selector 0x08 would be invalid. */
+    x86_segdesc_t *gdt = init32_gdt;
+    __asm__ ("" : "+r"(gdt));
+    gdt[0].set_seg((u32_t)0, x86_segdesc_t::inv, 0, x86_segdesc_t::m_comp);
+    gdt[1].set_seg((u32_t)0, x86_segdesc_t::code, 0, x86_segdesc_t::m_long);
+
     /* Install temporary GDT */
-    x86_descreg_t gdtr((word_t) init32_gdt, sizeof(init32_gdt));
+    x86_descreg_t gdtr((word_t) gdt, sizeof(init32_gdt));
     gdtr.setdescreg(x86_descreg_t::gdtr);
 	 
     /*
