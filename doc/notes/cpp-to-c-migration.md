@@ -791,3 +791,17 @@ Running pattern catalogue (for the core-object layer ahead):
 - template fn -> __typeof__ macro (hwspace virt/phys)
 - enum-typed member -> word-wide backing type (thread_state_t)
 - constructor -> free `*_init(self)` + forwarding ctor; SEC_INIT moves to the free fn (cpu.cc)
+
+
+## 26. generic-archfpage.h → struct (2026-07-25, commit ba40f47)
+
+`arch_fpage_t` (generic stub flexpage: `word_t raw` + stub accessors) -> struct, byte-identical
+(362280), boots.  fpage_t/tcb_t forward decls made dual (class in C++, struct in C).
+
+Frontier: clearing this sub-header exposed its **parent** `api/v4/fpage.h` (`fpage_t`, ~34
+methods / 2 classes) as the new top gate at **15** files; `arch/x86/pgent.h` (8) still the
+other wall.  Pattern seen repeatedly now: peeling an included sub-header just surfaces the
+including header (generic-archfpage.h -> fpage.h, like queuestate->threadstate->archfpage).
+Two medium/large headers -- `fpage.h` (15) and `pgent.h` (8) -- now stand between here and the
+first big wave of mapping/space/api flips.  `fpage.h` is the next step; both were the classes
+guarded-off in the mapping.h work (§16), now coming due.
