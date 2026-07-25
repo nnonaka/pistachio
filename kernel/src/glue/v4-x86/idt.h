@@ -36,8 +36,9 @@
 #include INC_ARCH(segdesc.h)
 #include INC_GLUE(config.h)
 
-class idt_t
+struct idt_t
 {
+#if defined(__cplusplus)
 public:
     enum type_e 
     {
@@ -53,14 +54,18 @@ public:
 
 private:
     void init_gate(word_t index, type_e type, void (*address)());
+#endif /* __cplusplus */
     x86_idtdesc_t descriptors[IDT_SIZE];
 };
+typedef struct idt_t idt_t;
 
+#if defined(__cplusplus)
 INLINE x86_idtdesc_t idt_t::get_descriptor(word_t index)
 {
     ASSERT(index < IDT_SIZE);
     return descriptors[index];
 }
+#endif /* __cplusplus */
 
 extern idt_t idt;
 
