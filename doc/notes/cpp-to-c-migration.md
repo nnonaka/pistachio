@@ -290,7 +290,28 @@ address; the call from low-physical code triple-faulted. Fixed with `always_inli
 non-inlined later, they need the same treatment.) Commit "Force-inline the long-mode
 detection helpers used by init_paging".
 
-**Kernel fault #2 — CR3 points at an empty top-level page table (ROOT-CAUSED, NOT fixed).**
+**Kernel fault #2 — trampoline page tables/GDT clobbered by dropped relocation
+addends (FIXED, committed).** Root cause: init32 is compiled `-m32` then converted
+with `objcopy -O elf64-x86-64` (`arch/x86/x64/Makeconf`); current binutils drops the
+field addends of the object's absolute REL relocations during the REL→RELA conversion,
+so every *statically-indexed* store into `init_pml4`/`init_pdp`/`init32_gdt` lost its
+offset and collapsed onto the array base — `init_pml4[0]`'s high dword (+4) zeroed the
+entry (→ CR3 walks a null table → triple fault the instant paging is enabled), and
+`init32_gdt[1]` (+8) landed on `init32_gdt[0]` (→ selector 0x08 invalid → #GP on the
+`%ds` load). Found with a live gdb hardware watchpoint on physical `0xd1d000` (low dword
+written, then immediately overwritten by the high dword at the *same* address). Fixed by
+laundering the base pointers through an empty `asm` so element offsets become instruction
+displacements, not relocation addends (the pdir loop was already immune — register-scaled
+addressing). Commit "Fix init_paging page tables/GDT clobbered by dropped relocation
+addends". With this the trampoline completes and **the kernel reaches 64-bit mode and
+prints its banner.**
+
+**Kernel fault #3 — tcb_t::init faults in the KTCB area (open).** Now that boot gets
+this far, `tcb_t::init` (`0xffffffffc060c926`) faults writing to the KTCB area
+(`0xfffffffe8...`, `#PF` write/not-present). This is 64-bit kernel code (not affected by
+the objcopy bug) — a genuine early-init sequencing/mapping issue to chase next.
+
+*(historical, superseded)* Fault #2 first looked like: CR3 points at an empty top-level page table.
 Once #1 is fixed, boot reaches `enable_paging()` and the very next instruction fetch
 `#PF`-not-present → `#DF` → triple fault. Traced with raw serial markers (COM1 is live from
 kickstart) + QEMU `-d int` + reading physical memory and CR3 from the trampoline:
