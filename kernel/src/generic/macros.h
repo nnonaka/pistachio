@@ -62,6 +62,20 @@
 #define INC_GLUE_API_CPU(x)     <glue/__API__-__ARCH__/__CPU__/x>
 #define INC_GLUE_API_PLAT(x)    <glue/__API__-__PLATFORM__/x>
 
+/*
+ * C linkage guards.  These let a single header be shared between C and C++
+ * translation units during (and after) the C++ -> C conversion: in a C++ TU
+ * the enclosed declarations get C linkage (no name mangling, so they match
+ * the symbols a C TU emits); in a C TU they expand to nothing.
+ */
+#if defined(__cplusplus)
+#define BEGIN_DECLS	extern "C" {
+#define END_DECLS	}
+#else
+#define BEGIN_DECLS
+#define END_DECLS
+#endif
+
 /* use this to place code/data in a certain section */
 #define SECTION(x) __attribute__((section(x)))
 #define UNIT(x) __attribute__((section(".data." x)))
@@ -97,7 +111,16 @@
  * They are inlined only. Carefull: if the maximum inlining 
  * limit is reached gcc 3.x does not inline even if explicitly 
  * specified. Use -finline-limit=<large number> here. */
+#if defined(__cplusplus)
 #define INLINE extern inline
+#else
+/*
+ * In C, "extern inline" has C99/gnu11 semantics (it emits an external
+ * definition), which would clash across translation units.  "static inline"
+ * preserves the "inline-only, no standalone symbol" intent for C TUs.
+ */
+#define INLINE static inline
+#endif
 
 /* Functions for critical path optimizations */
 #if (__GNUC__ >= 3)

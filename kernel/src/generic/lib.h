@@ -32,7 +32,9 @@
 #ifndef __GENERIC__LIB_H__
 #define __GENERIC__LIB_H__
 
-extern "C" void * memcpy (void * dst, const void * src, unsigned int len);
-extern "C" void * memset (void * dst, unsigned int c, unsigned int len);
+BEGIN_DECLS
+void * memcpy (void * dst, const void * src, unsigned int len);
+void * memset (void * dst, unsigned int c, unsigned int len);
+END_DECLS
 
 #endif /* !__GENERIC__LIB_H__ */

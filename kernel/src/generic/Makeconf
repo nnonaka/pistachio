@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES+=	src/generic/lib.cc \
+SOURCES+=	src/generic/lib.c \
 		src/generic/kmemory.cc
 
 ifeq ("$(CONFIG_ACPI)","y")

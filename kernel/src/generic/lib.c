@@ -29,14 +29,14 @@
  * $Id: lib.cc,v 1.6 2003/09/24 19:05:32 skoglund Exp $
  *                
  ********************************************************************/
-#include <debug.h>
+#include <generic/lib.h>
 
 /*
  * Declare as weak to allow overloading by optimized processor
  * specific versions.
  */
 
-extern "C" WEAK void * memcpy (void * dst, const void * src, unsigned int len)
+WEAK void * memcpy (void * dst, const void * src, unsigned int len)
 {
     u8_t *d = (u8_t *) dst;
     u8_t *s = (u8_t *) src;
@@ -47,7 +47,7 @@ extern "C" WEAK void * memcpy (void * dst, const void * src, unsigned int len)
     return dst;
 }
 
-extern "C" WEAK void * memset (void * dst, unsigned int c, unsigned int len)
+WEAK void * memset (void * dst, unsigned int c, unsigned int len)
 {
     u8_t *s = (u8_t *) dst;
 
