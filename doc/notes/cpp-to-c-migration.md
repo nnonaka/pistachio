@@ -943,3 +943,22 @@ Milestone: 16 header conversions + 2 .cc flips this campaign; every value/KIP/sp
 C-includable.  The remaining walls (bitmask, linear_ptab) are templates -- mechanically
 different but small (3 instantiations / 1 walker), and they're the last thing between here and
 the first mapping/space/api .cc flips.
+
+
+## 33. bitmask.h (template -> concrete structs) — DONE (2026-07-25, commit 86d3d26)
+
+First template conversion (plan §4).  `template<typename T> class bitmask_t` guarded wholesale;
+concrete aliases bitmask_word_t / bitmask_u32_t / bitmask_u16_t added -- in C++ a
+`typedef bitmask_t<T>` (byte-identical, full operators), in C a plain `struct { T maskvalue; }`.
+Two in-scope members bridged `bitmask_t<word_t>` -> `bitmask_word_t` (tcb_t::flags,
+resources_t::resource_bits).  Byte-identical (362272), boots.
+
+**Pattern -- class template used as a member:** guard the template; for each instantiation that
+appears as a struct member, emit a concrete alias (typedef-to-template in C++, backing struct in
+C) and switch the member declaration to the alias.  Cheap when instantiations are few (here 3,
+one in-scope).
+
+Frontier: bitmask.h done; 14 files now at `api/v4/resources.h` (resources_t), plus
+`generic/linear_ptab.h` (7, the linear-ptab walker template) and the minor gates (segdesc 4,
+syscalls 3, user 2, acpi 1).  Two template walls left in the core path: resources.h is a plain
+class; linear_ptab.h is the second template.
