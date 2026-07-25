@@ -629,3 +629,38 @@ Pattern crystallised (value type, two stages): §17 land the struct dual-represe
 (byte-identical, call sites untouched); later, once the type's own dependencies are C-visible,
 §19 move the bodies into free functions + forward (byte-identical again) and value-test the C
 side.  Free functions still never land before their dependencies are C-ready.
+
+
+## 20. Flip-candidate hunt + `ctors.cc` → C (2026-07-25, commit 7d28cb1)
+
+Ran a systematic sweep to find `.cc` files whose include closure is *already* C-clean (so the
+only remaining work is the body).  Method: for each of the 33 compiled `src/*.cc`, extract its
+`#include` lines into a stub `.c` and `gcc -fsyntax-only` it as C with the real kernel flags.
+A stub that compiles ⇒ that file's whole header closure is C-includable.  (Script lives in the
+scratchpad; rerun after each header conversion to re-scan.)
+
+**Result: exactly one fully-clean leaf — `glue/v4-x86/ctors.cc` — now flipped.**  It includes
+only `debug.h` and is already plain C (func_ptr typedef, three extern ctor tables, three loops).
+`ctors.h` prototypes moved under `BEGIN_DECLS`; C linkage now matches the C++ callers.
+
+### The real payoff: a ranked blocker map (what to convert next)
+
+Every other file is gated on a *small* set of header closures.  First-blocker tally (a file
+may hit more than one; converting the top blocker reveals the next), with the header's size:
+
+| Blocker header | # files gated (first) | size | shape |
+|---|---|---|---|
+| `glue/v4-x86/hwspace.h` | 9 | 45 ln | **0 classes** — some non-class C++ syntax at line 35 (ref/inline/operator?); cheap once identified |
+| `api/v4/cpu.h` | 9 | 76 ln | 1 class — straight dual-representation |
+| `api/v4/types.h` | 5 | 147 ln | 2 classes, foundational (widely included) |
+| `arch/x86/x64/cpu.h` | 5 | 272 ln | 1 class (+ `arch/x86/cpu.h` likely in the family) |
+| `api/v4/user.h` | 2 | — | gates kernelinterface.cc, x64/user.cc |
+| `arch/x86/x64/syscalls.h` | 1 | — | gates exregs.cc |
+| `api/v4/threadstate.h` | 1 | — | gates asmsyms.cc |
+
+Highest leverage next: **`hwspace.h`** (9 files, tiny) and **`api/v4/cpu.h`** (9 files, one
+class).  Converting the `cpu.h` family (`api/v4/cpu.h` + `arch/x86/x64/cpu.h` + `arch/x86/cpu.h`)
+together would clear the largest CPU-gated cluster.  `api/v4/types.h` is the foundational one —
+converting it early pays off transitively.  Note these tallies are *first*-blocker only; the
+true unblock of a file needs its whole closure done, so expect to convert a small connected
+group before the next `.cc` actually flips.
