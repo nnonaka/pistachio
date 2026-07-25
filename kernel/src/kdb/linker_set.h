@@ -32,41 +32,45 @@
 #ifndef __KDB__LINKER_SET_H__
 #define __KDB__LINKER_SET_H__
 
-class linker_set_entry_t;
+struct linker_set_entry_t;
 
 /**
  * linker_set_t: A linker set contains a number of set entries defined
  * at link time.  These entries can be iterated over using the reset()
  * and next() methods.
  */
-class linker_set_t
+struct linker_set_t
 {
-public:
-    linker_set_entry_t	*list;
+    struct linker_set_entry_t	*list;
     word_t		entries;
     word_t		curidx;
 
+#if defined(__cplusplus)
     void print (void);
     void reset (void);
     addr_t next (void);
     word_t size (void);
     addr_t get (word_t n);
+#endif
 };
+typedef struct linker_set_t linker_set_t;
 
 
 /**
  * linker_set_entry_t: Linker set entry types are opaque.  The entries
  * themselves are retrieved using the get_entry() method.
  */
-class linker_set_entry_t
+struct linker_set_entry_t
 {
-public:
-    linker_set_t	*set;
+    struct linker_set_t	*set;
     addr_t		entry;
 
+#if defined(__cplusplus)
     inline linker_set_t * get_set (void) { return set; }
     inline addr_t get_entry (void) { return entry; }
+#endif
 };
+typedef struct linker_set_entry_t linker_set_entry_t;
 
 
 

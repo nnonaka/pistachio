@@ -30,7 +30,7 @@
 ##                
 ######################################################################
 SOURCES+=	src/generic/lib.c \
-		src/generic/kmemory.cc
+		src/generic/kmemory.c
 
 ifeq ("$(CONFIG_ACPI)","y")
 SOURCES+=	src/generic/acpi.cc

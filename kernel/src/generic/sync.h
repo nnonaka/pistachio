@@ -44,13 +44,15 @@ INLINE void memory_barrier()
 #define DEFINE_SPINLOCK(name) spinlock_t name
 #define DECLARE_SPINLOCK(name) extern spinlock_t name
 
-class spinlock_t {
-public:
+struct spinlock_t {
+#if defined(__cplusplus)
     void lock() {}
     void unlock() {}
     void init() {}
     bool is_locked() { return false; }
+#endif
 };
+typedef struct spinlock_t spinlock_t;
 
 
 #else /* CONFIG_SMP */
@@ -63,8 +65,7 @@ public:
 #include INC_ARCH(sync.h)
 
 
-class lockstate_t {
-public:
+struct lockstate_t {
     union {
 	word_t raw;
 	struct {
@@ -76,8 +77,8 @@ public:
     } flags;
     word_t rcu_epoch;
 
-public:
-    void init(bool enabled) 
+#if defined(__cplusplus)
+    void init(bool enabled)
 	{
 	    flags.raw = 0;
 	    flags.X.enabled = enabled;
@@ -92,7 +93,9 @@ public:
 	//return true;
 	return flags.raw;
     }
+#endif
 };
+typedef struct lockstate_t lockstate_t;
 
 
 #endif

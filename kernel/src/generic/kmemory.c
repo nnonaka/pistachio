@@ -35,6 +35,10 @@
 #include <kdb/tracepoints.h>
 #include <sync.h>
 
+/* max() is a C++ template in types.h and unavailable in C; both operands
+   here are side-effect free (a variable and a constant), so a macro is safe. */
+#define KMEM_MAX(a, b)  ((a) > (b) ? (a) : (b))
+
 #undef DEBUG_KMEM
 
 #ifdef DEBUG_KMEM
@@ -115,11 +119,11 @@ void kmem_do_free(kmem_t *self, void * address, word_t size)
 		size >= GB (1) ? 'G' : size >= MB (1) ? 'M' : 'K',
 		__builtin_return_address (0));
 
-    self->spinlock.lock();
+    spinlock_lock (&self->spinlock);
 
     KMEM_CHECK;
 
-    size = max(size, KMEM_CHUNKSIZE);
+    size = KMEM_MAX (size, KMEM_CHUNKSIZE);
     ASSERT((size % KMEM_CHUNKSIZE) == 0);
 
     for (p = (word_t*)address;
@@ -129,7 +133,7 @@ void kmem_do_free(kmem_t *self, void * address, word_t size)
     
     /* find the place to insert */
     for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
-	 curr && (address > curr);
+	 curr && ((word_t *) address > curr);
 	 prev = curr, curr = (word_t*) *curr);
     /* and insert there */
     FREE_TRACE("prev %p/%p, curr %p, p: %p, \n", prev, *prev, curr, p); 
@@ -140,7 +144,7 @@ void kmem_do_free(kmem_t *self, void * address, word_t size)
     FREE_TRACE("kmem: free chunks=%x\n", self->free_chunks);
     KMEM_CHECK;
 
-    self->spinlock.unlock();
+    spinlock_unlock (&self->spinlock);
 }
 
 
@@ -152,7 +156,7 @@ void * kmem_do_alloc(kmem_t *self, word_t size)
     word_t*	tmp;
     word_t	i;
 
-    self->spinlock.lock();
+    spinlock_lock (&self->spinlock);
     
     ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, self->kmem_free_list);
     TRACEPOINT (KMEM_ALLOC, "kmem_alloc (%d [%d%c]), ip: %p\n",
@@ -162,7 +166,7 @@ void * kmem_do_alloc(kmem_t *self, word_t size)
 		__builtin_return_address (0));
     KMEM_CHECK;
     
-    size = max(size, KMEM_CHUNKSIZE);
+    size = KMEM_MAX (size, KMEM_CHUNKSIZE);
     ASSERT((size % KMEM_CHUNKSIZE) == 0);
 
     for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
@@ -222,7 +226,7 @@ void * kmem_do_alloc(kmem_t *self, word_t size)
 
 #endif
 
-		self->spinlock.unlock();
+		spinlock_unlock (&self->spinlock);
 
 		return curr;
 	    }
@@ -237,7 +241,7 @@ void * kmem_do_alloc(kmem_t *self, word_t size)
 #endif
     enter_kdebug("kmem_alloc: out of kernel memory");
 
-    self->spinlock.unlock();
+    spinlock_unlock (&self->spinlock);
     return NULL;
 }
 
@@ -253,13 +257,13 @@ void * kmem_do_alloc_aligned(kmem_t *self, word_t size, word_t alignment, word_t
 
     word_t	align = ALIGN(alignment);
 
-    self->spinlock.lock();
+    spinlock_lock (&self->spinlock);
     
     ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, self->kmem_free_list);
     TRACEPOINT (KMEM_ALLOC, "kmem_alloc (%d), ip: %p\n", size, __builtin_return_address (0));
     KMEM_CHECK;
     
-    size = max(size, KMEM_CHUNKSIZE);
+    size = KMEM_MAX (size, KMEM_CHUNKSIZE);
     ASSERT((size % KMEM_CHUNKSIZE) == 0);
 
     for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
@@ -311,7 +315,7 @@ void * kmem_do_alloc_aligned(kmem_t *self, word_t size, word_t alignment, word_t
 					    curr));
 #endif
 
-		self->spinlock.unlock();
+		spinlock_unlock (&self->spinlock);
 		return curr;
 	    }
 	}
@@ -325,6 +329,6 @@ void * kmem_do_alloc_aligned(kmem_t *self, word_t size, word_t alignment, word_t
 #endif
     enter_kdebug("kmem_alloc: out of kernel memory");
 
-    self->spinlock.unlock();
+    spinlock_unlock (&self->spinlock);
     return NULL;
 }

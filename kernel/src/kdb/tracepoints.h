@@ -63,9 +63,8 @@ extern u16_t dbg_get_current_cpu();
 extern word_t dbg_get_current_tcb();
 #define TP_TCB dbg_get_current_tcb()
 
-class tracepoint_t
+struct tracepoint_t
 {
-public:
     const char	*name;
     word_t	id;
     word_t	type;
@@ -73,10 +72,12 @@ public:
     word_t	enter_kdb;
     word_t	counter[CONFIG_SMP_MAX_CPUS];
 
+#if defined(__cplusplus)
     void reset_counter ()
 	{ for (int cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; counter[cpu++] = 0); }
-    
+#endif
 };
+typedef struct tracepoint_t tracepoint_t;
 
 #define EXTERN_TRACEPOINT(tp)				\
     extern tracepoint_t __tracepoint_##tp
@@ -87,6 +88,7 @@ extern void init_tracepoints();
  * Wrapper class for accessing tracepoint set.
  */
 
+#if defined(__cplusplus)
 class tracepoint_list_t
 {
 public:
@@ -106,6 +108,7 @@ public:
 };
 
 extern tracepoint_list_t tp_list;
+#endif
 
 #if defined(CONFIG_TRACEPOINTS)
 

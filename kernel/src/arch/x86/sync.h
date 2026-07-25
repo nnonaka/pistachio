@@ -37,20 +37,17 @@
 #endif
 
 
-class spinlock_t
+struct spinlock_t
 {
-public:
-    void init(word_t val = 0)
-        { this->_lock = val; }
-    void lock();
-    void unlock()
-	    { this->_lock = 0; }
-    bool is_locked()
-        { return this->_lock; }
-
-public: // to allow initializers
     volatile word_t _lock;
+#if defined(__cplusplus)
+    void init(word_t val = 0);
+    void lock();
+    void unlock();
+    bool is_locked();
+#endif
 };
+typedef struct spinlock_t spinlock_t;
 
 #define DECLARE_SPINLOCK(name) extern spinlock_t name;
 #define DEFINE_SPINLOCK(name) spinlock_t name = {_lock: 0}
@@ -60,9 +57,15 @@ public: // to allow initializers
 #endif
 #define SYNC_THRESHOLD	0x8000000
 
-extern "C" void sync_debug (word_t lock);
+BEGIN_DECLS
+void sync_debug (word_t lock);
+END_DECLS
 
-INLINE void spinlock_t::lock()
+INLINE void spinlock_init (spinlock_t *self, word_t val)  { self->_lock = val; }
+INLINE void spinlock_unlock (spinlock_t *self)            { self->_lock = 0; }
+INLINE bool spinlock_is_locked (spinlock_t *self)         { return self->_lock; }
+
+INLINE void spinlock_lock (spinlock_t *self)
 {
     word_t dummy;
 #if defined(DEBUG_LOCK)
@@ -89,7 +92,7 @@ INLINE void spinlock_t::lock()
         "jmp    1b              		\n\t"
         ".previous              		\n\t"
         : "=D" (dummy)
-        : "m"(this->_lock), 
+        : "m"(self->_lock), 
  	  "0"  ((word_t) 1)
 	);
 #else
@@ -106,13 +109,20 @@ INLINE void spinlock_t::lock()
         "jmp    1b              		\n\t"
         ".previous               		\n\t"
         : "=D" (dummy)
-        : "m"(this->_lock), 
+        : "m"(self->_lock), 
  	  "0"  ((word_t) 1)
 	);
 #endif
 
 }
 
+
+#if defined(__cplusplus)
+INLINE void spinlock_t::init (word_t val) { spinlock_init (this, val); }
+INLINE void spinlock_t::unlock ()         { spinlock_unlock (this); }
+INLINE bool spinlock_t::is_locked ()      { return spinlock_is_locked (this); }
+INLINE void spinlock_t::lock ()           { spinlock_lock (this); }
+#endif
 
 
 #endif /* !__ARCH__X86__SYNC_H__ */
