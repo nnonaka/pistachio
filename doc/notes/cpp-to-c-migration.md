@@ -769,3 +769,25 @@ establishes the reusable mechanic for the core-object layer (scheduler/space/tcb
 
 Not byte-identical (362352 → 362280) — expected for a .cc→.c flip.  6 C files now: lib,
 kmemory, mapping_alloc, ctors, hwspace(hdr), cpu.
+
+
+## 25. threadstate.h → struct (2026-07-25, commit 32ce00f)
+
+`thread_state_t` -> struct, byte-identical (362280), boots.  New sub-pattern worth naming:
+**an enum-typed member whose enum must stay C++-only is stored as the enum's word-wide backing
+type.**  Here `thread_state_e state` -> `word_t state` — and because `waiting_forever =
+BLOCKED_STATE(~0UL)` forces the enum to 64 bits, the swap is byte-identical.  Enum + 3
+implicit-conversion ctors + methods + `==`/`!=`/`word_t` operators guarded.
+
+Frontier: no new CLEAN .cc.  Top gates now `api/v4/generic-archfpage.h` (**15**, the generic
+flexpage header — jumped to #1) and `arch/x86/pgent.h` (8).  `generic-archfpage.h` is the
+cheaper next step; `pgent.h` remains the 86-method wall.
+
+Running pattern catalogue (for the core-object layer ahead):
+- plain POD class -> struct + guard methods (KIP, most info types)
+- static-only "namespace" class -> guard wholesale, no C struct (x86_mmu_t)
+- value type -> struct dual-rep, then free-fn API + forwarders when deps are C-ready
+  (spinlock_t, threadid_t)
+- template fn -> __typeof__ macro (hwspace virt/phys)
+- enum-typed member -> word-wide backing type (thread_state_t)
+- constructor -> free `*_init(self)` + forwarding ctor; SEC_INIT moves to the free fn (cpu.cc)
