@@ -266,13 +266,16 @@ bool kip_manager_t::is_mem_region_free (L4_Word_t start, L4_Word_t size)
 	L4_Word64_t low = (mdesc.x.low << 10);
 	L4_Word64_t high = (mdesc.x.high << 10) | 0x3ff;
 
-	// Look for the unfriendly "shared" memory descriptor that covers
-	// the entire address space.
-	if ((mdesc.x.type == L4_SharedMemoryType) &&
-	    (low == 0) && (L4_Word32_t (high) == L4_Word32_t (-1)))
-	{
+	// Skip any "unfriendly" background descriptor that covers the
+	// entire address space.  Besides the whole-space "shared" region
+	// installed by default, QEMU's multiboot memory map yields a
+	// whole-space architecture-specific descriptor.  Neither is a real
+	// reservation, so they must not block the free-memory search.  The
+	// comparison is done in 32-bit terms (as is_intersection() operates
+	// on L4_Word_t) so descriptors whose 64-bit base has stray high bits
+	// but cover the whole 32-bit space are still recognised.
+	if ((L4_Word32_t (low) == 0) && (L4_Word32_t (high) == L4_Word32_t (-1)))
 	    continue;
-	}
 
 	if (is_intersection (start, end, low, high))
 	    return false;
