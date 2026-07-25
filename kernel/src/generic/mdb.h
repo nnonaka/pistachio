@@ -33,9 +33,11 @@
 #ifndef __MDB_H__
 #define __MDB_H__
 
+#if defined(__cplusplus)
 class mdb_node_t;
 class mdb_tableent_t;
 class mdb_table_t;
+#endif
 
 
 /**
@@ -50,6 +52,102 @@ class mdb_table_t;
 #endif
 
 
+/*
+ * mdb_ctrl_t / mdb_range_t were the nested value types mdb_t::ctrl_t and
+ * mdb_t::range_t.  They are hoisted to top-level structs so they are usable
+ * from C (the whole virtual mdb_t is C++-only), and typedef'd back inside
+ * mdb_t below so mdb_t::ctrl_t / mdb_t::range_t keep working in C++.
+ */
+struct mdb_ctrl_t {
+    union {
+	struct {
+	    word_t __pad1		: 6;
+	    word_t mapctrl_self	: 1;
+	    word_t unmap		: 1;
+	    word_t set_rights	: 1;
+	    word_t reset_status	: 1;
+	    word_t deliver_status	: 1;
+	    word_t set_attribute	: 1;
+	    word_t __pad2		: BITS_WORD - 12;
+	};
+	word_t raw;
+    };
+#if defined(__cplusplus)
+    mdb_ctrl_t (void) {}
+    mdb_ctrl_t (word_t num) { raw = num; }
+
+    static mdb_ctrl_t flush (void)
+	{
+	    mdb_ctrl_t ctrl (0);
+	    ctrl.mapctrl_self = ctrl.unmap = ctrl.deliver_status = true;
+	    return ctrl;
+	}
+
+    char *string()
+	{
+	    char *s = (char *) "~~~~~~";
+
+	    s[0] = (set_attribute ? 'm' : '~');
+	    s[1] = (deliver_status ? 'd' : '~');
+	    s[2] = (reset_status ? 'r' : '~');
+	    s[3] = (set_rights ? 'p' : '~');
+	    s[4] = (unmap ? 'u' : '~');
+	    s[5] = (mapctrl_self ? 'c' : '~');
+
+	    return s;
+	}
+#endif /* __cplusplus */
+};
+typedef struct mdb_ctrl_t mdb_ctrl_t;
+
+struct mdb_range_t {
+    union {
+	struct {
+	    word_t size		: 6;
+	    word_t idx		: BITS_WORD - 7;
+	    word_t c		: 1;
+	};
+	word_t raw;
+    };
+#if defined(__cplusplus)
+    mdb_range_t (word_t n) { raw = n; }
+
+    mdb_range_t (addr_t b, word_t s)
+	{
+	    if (s >= 64)
+		raw = ~0UL;
+	    else
+	    {
+		c = 0;
+		idx = ((word_t) b >> s) & MDB_BITMASK (BITS_WORD - 7);
+		size = s & MDB_BITMASK (6);
+	    }
+	}
+
+    static mdb_range_t full (void)
+	{
+	    mdb_range_t range (~0UL);
+	    return range;
+	}
+
+    bool in_range (word_t addr)
+	{
+	    return raw == ~0UL || (addr >> size) == idx;
+	}
+
+    word_t get_size (void)
+	{ return size; }
+
+    word_t get_low (void)
+	{ return raw == ~0UL ? 0 : idx << size; }
+
+    word_t get_high (void)
+	{ return raw == ~0UL ? ~0UL : ((idx + 1) << size) - 1; }
+#endif /* __cplusplus */
+};
+typedef struct mdb_range_t mdb_range_t;
+
+
 /**
  * The mdb_t specifies a particular mapping database, e.g., for page
  * frames, I/O ports, etc.  Certain operations on the mapping database
@@ -58,101 +156,12 @@ class mdb_table_t;
  * of memory, must be defined on a per mapping database basis in
  * derived classes.
  */
+#if defined(__cplusplus)
 class mdb_t
 {
 public:
-    class ctrl_t {
-    public:
-	union {
-	    struct {
-		word_t __pad1		: 6;
-		word_t mapctrl_self	: 1;
-		word_t unmap		: 1;
-		word_t set_rights	: 1;
-		word_t reset_status	: 1;
-		word_t deliver_status	: 1;
-		word_t set_attribute	: 1;
-		word_t __pad2		: BITS_WORD - 12;
-	    };
-	    word_t raw;
-	};
-
-	ctrl_t (void) {}
-	ctrl_t (word_t num) { raw = num; }
-
-	static ctrl_t flush (void)
-	    {
-		ctrl_t ctrl (0);
-		ctrl.mapctrl_self = ctrl.unmap = ctrl.deliver_status = true;
-		return ctrl;
-	    }
-	
-	char *string()
-	    {
-		char *s = (char *) "~~~~~~";
-		
-		s[0] = (set_attribute ? 'm' : '~');
-		s[1] = (deliver_status ? 'd' : '~');
-		s[2] = (reset_status ? 'r' : '~');
-		s[3] = (set_rights ? 'p' : '~');
-		s[4] = (unmap ? 'u' : '~');
-		s[5] = (mapctrl_self ? 'c' : '~');
-		
-		return s;
-	    }
-
-    };
-
-    // Generic class for specifying properly aligned power of 2 sized
-    // ranges using a single word.  SIZE indicates size of region
-    // (log2), IDX indicates location, and C-bit if set (e.g., by
-    // assigning a negative number) indicates the complete range.
-
-    class range_t {
-    public:
-	union {
-	    struct {
-		word_t size		: 6;
-		word_t idx		: BITS_WORD - 7;
-		word_t c		: 1;
-	    };
-	    word_t raw;
-	};
-
-	range_t (word_t n) { raw = n; }
-
-	range_t (addr_t b, word_t s)
-	    {
-		if (s >= 64)
-		    raw = ~0UL;
-		else
-		{
-		    c = 0;
-		    idx = ((word_t) b >> s) & MDB_BITMASK (BITS_WORD - 7);
-		    size = s & MDB_BITMASK (6);
-		}
-	    }
-
-	static range_t full (void)
-	    {
-		range_t range (~0UL);
-		return range;
-	    }
-
-	bool in_range (word_t addr)
-	    {
-		return raw == ~0UL || (addr >> size) == idx;
-	    }
-
-	word_t get_size (void)
-	    { return size; }
-
-	word_t get_low (void)
-	    { return raw == ~0UL ? 0 : idx << size; }
-
-	word_t get_high (void)
-	    { return raw == ~0UL ? ~0UL : ((idx + 1) << size) - 1; }
-    };
+    typedef mdb_ctrl_t ctrl_t;
+    typedef mdb_range_t range_t;
 
     virtual word_t get_radix (word_t objsize);
     virtual word_t get_next_objsize (word_t objsize);
@@ -922,6 +931,7 @@ INLINE void mdb_table_t::set_objsize (word_t s)
 {
     objsize = s & MDB_BITMASK (6);
 }
+#endif /* __cplusplus */
 
 
 /* From generic/mapping_alloc.cc */
