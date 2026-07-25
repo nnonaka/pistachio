@@ -13,25 +13,28 @@
 #ifndef __GLUE__V4_X86__TRAPHANDLER_H__
 #define __GLUE__V4_X86__TRAPHANDLER_H__
 
+BEGIN_DECLS
 /* debugging exceptions */
-extern "C" void exc_debug(void);
-extern "C" void exc_nmi(void);
-extern "C" void exc_breakpoint(void);
+void exc_debug(void);
+void exc_nmi(void);
+void exc_breakpoint(void);
 
 /* gp, pagefault, kip */
-extern "C" void exc_gp(void);
-extern "C" void exc_pagefault(void);
-extern "C" void exc_invalid_opcode(void);
+void exc_gp(void);
+void exc_pagefault(void);
+void exc_invalid_opcode(void);
 
 /* fpu  */
-extern "C" void exc_nomath_coproc(void);
+void exc_nomath_coproc(void);
 
 /* catcher for all other interrupts and exceptions */
 typedef void (*func_exc)(void);
 extern u64_t exc_catch_all[IDT_SIZE] UNIT("x86.exc_all");
-extern "C" void exc_catch_common_wrapper(void);
-extern "C" void exc_catch_common(void);
+void exc_catch_common_wrapper(void);
+void exc_catch_common(void);
+END_DECLS
 
+#if defined(__cplusplus)
 /* exception handling */
 class x86_exc_reg_t
 {
@@ -42,6 +45,7 @@ public:
 };
 
 bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception);
+#endif /* __cplusplus */
 
 
 

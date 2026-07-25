@@ -32,16 +32,18 @@
 #ifndef __API__V4__USER_H__
 #define __API__V4__USER_H__
 
-extern "C" void SECTION(".user.syscall.ipc") user_ipc();
-extern "C" void SECTION(".user.syscall.lipc") user_lipc();
-extern "C" void SECTION(".user.syscall.exregs") user_exchange_registers();
-extern "C" void SECTION(".user.syscall.threadctrl") user_thread_control();
-extern "C" void SECTION(".user.syscall.sysclock") user_system_clock();
-extern "C" void SECTION(".user.syscall.threadswtch") user_thread_switch();
-extern "C" void SECTION(".user.syscall.schedule") user_schedule();
-extern "C" void SECTION(".user.syscall.unmap") user_unmap();
-extern "C" void SECTION(".user.syscall.spacectrl") user_space_control();
-extern "C" void SECTION(".user.syscall.procctrl") user_processor_control();
-extern "C" void SECTION(".user.syscall.memctrl") user_memory_control();
+BEGIN_DECLS
+void SECTION(".user.syscall.ipc") user_ipc();
+void SECTION(".user.syscall.lipc") user_lipc();
+void SECTION(".user.syscall.exregs") user_exchange_registers();
+void SECTION(".user.syscall.threadctrl") user_thread_control();
+void SECTION(".user.syscall.sysclock") user_system_clock();
+void SECTION(".user.syscall.threadswtch") user_thread_switch();
+void SECTION(".user.syscall.schedule") user_schedule();
+void SECTION(".user.syscall.unmap") user_unmap();
+void SECTION(".user.syscall.spacectrl") user_space_control();
+void SECTION(".user.syscall.procctrl") user_processor_control();
+void SECTION(".user.syscall.memctrl") user_memory_control();
+END_DECLS
 
 #endif /* !__API__V4__USER_H__ */

@@ -16,8 +16,9 @@
 #include INC_ARCH(trapgate.h)
 #include <kdb/tracepoints.h>
 
+#if defined(__cplusplus)
 class arch_ctrlxfer_item_t
-{ 
+{
 public:
     enum id_e {
 	id_gpregs   	=   0,
@@ -66,6 +67,7 @@ public:
 };
 
 x86_exceptionframe_t *get_user_frame(tcb_t *tcb);
+#endif /* __cplusplus */
 
 
 

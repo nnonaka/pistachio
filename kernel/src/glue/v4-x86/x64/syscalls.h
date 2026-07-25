@@ -296,10 +296,12 @@ typedef struct {
 
 
 /* entry functions for dispatching syscalls */
-extern "C" void syscall_entry();
+BEGIN_DECLS
+void syscall_entry();
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-extern "C" void syscall_entry_32();
-extern "C" void sysenter_entry_32();
+void syscall_entry_32();
+void sysenter_entry_32();
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
+END_DECLS
 
 #endif /* !__GLUE_V4_X86__X64__SYSCALLS_H__ */

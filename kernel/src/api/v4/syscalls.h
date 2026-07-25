@@ -40,7 +40,7 @@
 #include INC_GLUE(config.h)
 #include INC_GLUE(syscalls.h)
 
-extern "C" {
+BEGIN_DECLS
 
 /**
  * the ipc system call
@@ -152,7 +152,7 @@ SYS_MEMORY_CONTROL (word_t control,
 		    word_t attribute0, word_t attribute1, 
 		    word_t attribute2, word_t attribute3);
 
-} /* extern "C" */
+END_DECLS
 
 
 /*********************************************************************
@@ -160,8 +160,9 @@ SYS_MEMORY_CONTROL (word_t control,
  *********************************************************************/
 
 
+#if defined(__cplusplus)
 class exregs_ctrl_t {
-    
+
 public:
     enum flag_e {
 	halt_flag        	= 0,
@@ -284,6 +285,7 @@ struct schedule_ctrl_t {
 	}
 
 };
+#endif /* __cplusplus */
 
 /*
  * Error code values

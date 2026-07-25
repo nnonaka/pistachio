@@ -46,6 +46,7 @@
 extern word_t hw_pgshifts[];
 
 
+#if defined(__cplusplus)
 /*
  * Define some operators on the pgsize enum to make code more
  * readable.
@@ -199,6 +200,7 @@ INLINE bool readmem (space_t * space, addr_t vaddr, T * v)
 
     return true;
 }
+#endif /* __cplusplus */
 
 
 #endif /* !__LINEAR_PTAB_H__ */

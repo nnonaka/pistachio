@@ -37,7 +37,12 @@
 #include <debug.h>
 #include <kdb/tracepoints.h>
 
+#if defined(__cplusplus)
 class tcb_t;
+#else
+struct tcb_t;
+typedef struct tcb_t tcb_t;
+#endif
 
 
 /**
@@ -69,8 +74,9 @@ class tcb_t;
 #define IPC_NESTING_LEVEL	1	
 
 
-class msg_tag_t 
+struct msg_tag_t
 {
+#if defined(__cplusplus)
 public:
     inline msg_tag_t () { }
     inline msg_tag_t (word_t raw)
@@ -137,8 +143,8 @@ public:
 			(write ? 1 << 1 : 0) | 
 			(exec  ? 1 << 0 : 0));
 	}
-    
-public:
+#endif /* __cplusplus */
+
     union {
 	word_t raw;
 	struct {
@@ -153,16 +159,20 @@ public:
 	} x;
     };
 };
+typedef struct msg_tag_t msg_tag_t;
 
+#if defined(__cplusplus)
 INLINE msg_tag_t msgtag (word_t rawtag)
 {
     msg_tag_t t;
     t.raw = rawtag;
     return t;
 }
+#endif /* __cplusplus */
 
-class msg_item_t
+struct msg_item_t
 {
+#if defined(__cplusplus)
 public:
     inline bool is_map_item() 
 	{ return type == 4; }
@@ -206,7 +216,7 @@ public:
     
     inline void operator = (word_t raw) 
 	{ this->raw = raw; }
-public:
+#endif /* __cplusplus */
     union {
 	word_t raw;
 	union {
@@ -233,9 +243,11 @@ public:
 	} __attribute__((packed));
     };
 };
+typedef struct msg_item_t msg_item_t;
 
-class acceptor_t
+struct acceptor_t
 {
+#if defined(__cplusplus)
 public:
     inline acceptor_t () { }
     inline acceptor_t (word_t raw)
@@ -260,8 +272,7 @@ public:
 	{ word_t window = fpage.raw >> 4; x.rcv_window = window & (~0UL >> 4); };
 
     fpage_t get_arch_specific_rcvwindow(tcb_t *dest);
-    
-public:
+#endif /* __cplusplus */
     union {
 	word_t raw;
 	struct {
@@ -274,6 +285,7 @@ public:
     };
     
 };
+typedef struct acceptor_t acceptor_t;
 
 #if !defined(CONFIG_X_CTRLXFER_MSG)
 #define IPC_NUM_SAVED_MRS	3
