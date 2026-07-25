@@ -346,3 +346,24 @@ it in exc_invalid_opcode (glue/v4-x86/exception.cc:481), returning the KIP base 
 KIP area set. Next step: check how sigma0's space / kip_area is initialised (space_t::init /
 the root-server creation path) — a genuine kernel/space-init issue, unrelated to the
 trampoline fixes and to the C++→C conversion.
+
+## 13. Full boot achieved — l4test runs (2026-07-25)
+
+After the crt0 alignment fix the whole chain works end to end: kernel boots, sigma0 pages
+the root task, and **l4test reaches its menu and runs the suite**. Driving it (send "8" =
+All tests over the serial console once booted) runs Kernel-Interface-Page tests (all pass),
+memtest Page-touch OK, and the Simple IPC test — From parameter / Send / ReplyWait / Send
+timeout / Receive timeout all **OK** — then **"Local destination Id: FAILED"**, which drops
+into kdb. So: from "triple-faults on the first instruction" to a booting kernel running the
+test suite, mostly passing.
+
+Fixes that got here (all pre-existing modern-toolchain bugs, none related to the C++→C
+conversion): kickstart free-memory search; long-mode helper inlining; the objcopy addend
+drop in init_paging's page tables + GDT (the big one, found via a live gdb watchpoint on
+physical 0xd1d000); and sigma0's crt0 stack-alignment (`andq $-16,%rsp`) so modern-gcc SSE
+in userland doesn't #GP.
+
+**Open — the one failing subtest:** "Local destination Id" in the inter-AS untyped-word IPC
+test (l4test eip ~0x1000295). Local-thread-ID IPC addressing; next thing to chase if a green
+test run is wanted. Note the kernel build currently has CONFIG_KDB_CONS_COM and
+CONFIG_VERBOSE_INIT enabled in the (gitignored) build config for testing.
