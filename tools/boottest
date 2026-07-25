@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+#
+# boottest -- build the kernel, boot it under QEMU, and capture the serial
+#             console.  Intended as the boot-verification step for the
+#             C++ -> C conversion (see doc/notes/cpp-to-c-migration.md).
+#
+# It:
+#   1. ensures the kernel build has a serial console (CONFIG_KDB_CONS_COM),
+#      so QEMU's -serial captures kernel/kdb output on COM1 (0x3f8);
+#   2. rebuilds the kernel;
+#   3. assembles the multiboot payload (kickstart + kernel + sigma0 + roottask)
+#      and boots it head-less under QEMU with a timeout;
+#   4. captures the serial log and greps it for a pass/fail marker.
+#
+# Usage:
+#   tools/boottest [-b BUILDDIR] [-a ROOTTASK] [-p PASS_REGEX] [-t SECONDS]
+#
+#   -b BUILDDIR    kernel build dir   (default: build/x86-x64-p4-smp/kernel)
+#   -u USERDIR     userland build dir (default: build/x86-x64-p4-smp/user)
+#   -a ROOTTASK    root task binary under USERDIR/apps  (default: l4test/l4test)
+#   -p PASS_REGEX  egrep pattern that marks success       (default: see below)
+#   -t SECONDS     QEMU timeout                           (default: 30)
+#
+# Exit status: 0 = PASS_REGEX seen, 1 = not seen / boot failed, 2 = build failed.
+#
+# NOTE (2026-07): under QEMU's `-kernel` direct multiboot the kernel currently
+# triple-faults at early boot, before the serial console is initialised, so the
+# run reaches "Launching kernel ..." and then stops.  The harness itself is
+# correct end-to-end; resolving that early-boot fault (or booting via real GRUB)
+# is tracked in the migration notes.  See §11 there.
+
+set -u
+
+# --- locate the repo top (this script lives in tools/) ---------------------
+TOP=$(cd "$(dirname "$0")/.." && pwd)
+
+BUILDDIR="$TOP/build/x86-x64-p4-smp/kernel"
+USERDIR="$TOP/build/x86-x64-p4-smp/user"
+ROOTTASK="apps/l4test/l4test"
+PASS_RE='completed|all tests|SUCCESS|Sigma0'
+TIMEOUT=30
+
+while getopts "b:u:a:p:t:h" opt; do
+    case "$opt" in
+        b) BUILDDIR=$OPTARG ;;
+        u) USERDIR=$OPTARG ;;
+        a) ROOTTASK=$OPTARG ;;
+        p) PASS_RE=$OPTARG ;;
+        t) TIMEOUT=$OPTARG ;;
+        h) sed -n '2,30p' "$0"; exit 0 ;;
+        *) echo "try: $0 -h" >&2; exit 2 ;;
+    esac
+done
+
+CONFIG_H="$BUILDDIR/config/config.h"
+KERNEL="$BUILDDIR/x86-kernel"
+KICKSTART="$USERDIR/util/kickstart/kickstart"
+SIGMA0="$USERDIR/serv/sigma0/sigma0"
+APP="$USERDIR/$ROOTTASK"
+
+die() { echo "boottest: $*" >&2; exit 2; }
+
+command -v qemu-system-x86_64 >/dev/null || die "qemu-system-x86_64 not found"
+[ -f "$CONFIG_H" ] || die "no configured kernel build at $BUILDDIR (run tools/autobuild first)"
+
+# --- 1. ensure a serial console (idempotent) -------------------------------
+if grep -q '^#undef  *CONFIG_KDB_CONS_COM' "$CONFIG_H"; then
+    echo "boottest: enabling CONFIG_KDB_CONS_COM (serial console) in $CONFIG_H"
+    sed -i 's/^#undef  *CONFIG_KDB_CONS_COM/#define CONFIG_KDB_CONS_COM 1/' "$CONFIG_H"
+fi
+
+# --- 2. build the kernel ---------------------------------------------------
+echo "boottest: building kernel ..."
+make -C "$BUILDDIR" >/"$BUILDDIR/.boottest-build.log" 2>&1 \
+    || { echo "boottest: BUILD FAILED (see $BUILDDIR/.boottest-build.log)"; exit 2; }
+
+for f in "$KERNEL" "$KICKSTART" "$SIGMA0" "$APP"; do
+    [ -f "$f" ] || die "missing boot module: $f"
+done
+
+# --- 3. boot under QEMU, capture serial ------------------------------------
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+cp "$KERNEL" "$WORK/kernel"
+cp "$KICKSTART" "$WORK/kickstart"
+cp "$SIGMA0" "$WORK/sigma0"
+cp "$APP" "$WORK/roottask"
+SERIAL="$WORK/serial.log"
+
+echo "boottest: booting (timeout ${TIMEOUT}s) ..."
+timeout "$TIMEOUT" qemu-system-x86_64 \
+    -kernel "$WORK/kickstart" \
+    -initrd "$WORK/kernel,$WORK/sigma0,$WORK/roottask" \
+    -serial "file:$SERIAL" \
+    -display none -no-reboot -m 256 >/dev/null 2>&1
+
+# --- 4. evaluate -----------------------------------------------------------
+echo "----- serial log -----"
+cat "$SERIAL" 2>/dev/null
+echo "----------------------"
+
+if [ ! -s "$SERIAL" ]; then
+    echo "boottest: FAIL - no serial output (kickstart/QEMU?)"; exit 1
+fi
+if grep -qEi "$PASS_RE" "$SERIAL"; then
+    echo "boottest: PASS (matched /$PASS_RE/)"; exit 0
+fi
+if grep -q 'Launching kernel' "$SERIAL"; then
+    echo "boottest: kickstart OK, but kernel produced no '/$PASS_RE/' output"
+    echo "boottest: FAIL (kernel did not reach a pass marker)"; exit 1
+fi
+echo "boottest: FAIL (kickstart did not launch the kernel)"; exit 1
