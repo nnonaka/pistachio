@@ -44,8 +44,12 @@
 /**
  * thread_state_t: current thread state
  */
-class thread_state_t 
+struct thread_state_t
 {
+    /* thread_state_e in C++; stored as its word-wide backing type so the
+       member is plain C (the enum itself is C++-only, guarded below). */
+    word_t state;
+#if defined(__cplusplus)
 public:
     enum thread_state_e
     {
@@ -148,14 +152,16 @@ public:
 	    }
 	}
 
-private:
-    thread_state_e state;
+#endif /* __cplusplus */
 };
+typedef struct thread_state_t thread_state_t;
 
+#if defined(__cplusplus)
 INLINE bool thread_state_t::is_runnable()
 {
     /* invers logic - lowestmost bit no set means runnable */
     return !((word_t)this->state & 1);
 }
+#endif /* __cplusplus */
 
 #endif /* __API__V4__THREADSTATE_H__ */
