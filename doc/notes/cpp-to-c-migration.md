@@ -664,3 +664,28 @@ together would clear the largest CPU-gated cluster.  `api/v4/types.h` is the fou
 converting it early pays off transitively.  Note these tallies are *first*-blocker only; the
 true unblock of a file needs its whole closure done, so expect to convert a small connected
 group before the next `.cc` actually flips.
+
+
+## 21. `hwspace.h` → macros + re-scan (2026-07-25, commit 87d317c)
+
+`glue/v4-x86/hwspace.h`: the `virt_to_phys<T>` / `phys_to_virt<T>` function templates became
+`__typeof__` macros (plan §4).  Byte-size-identical (362352), boots.  ~112 call sites
+unchanged (all plain calls).
+
+Re-ran the closure scan afterward.  **Lesson confirmed: clearing a first-blocker rarely flips
+a file by itself** — hwspace.h gated 9 files, but all 9 also need the `cpu.h` family, so 0 new
+CLEAN files.  What changed is the tally: `arch/x86/x64/cpu.h` jumped from 5 → **13** first-block
+hits (the ex-hwspace files surfaced it as their next gate).  Updated ranking:
+
+| Blocker | # gated (first) | note |
+|---|---|---|
+| `arch/x86/x64/cpu.h` | 13 | now the dominant gate |
+| `api/v4/cpu.h` | 9 | 1 class |
+| `api/v4/types.h` | 5 | foundational |
+| `api/v4/user.h` | 2 | |
+| `generic/acpi.h`, `x64/syscalls.h`, `threadstate.h` | 1 each | |
+
+**Takeaway for sequencing:** stop chasing individual first-blockers; convert the **`cpu.h`
+family as a unit** (`arch/x86/x64/cpu.h` + `api/v4/cpu.h` + `arch/x86/cpu.h`) plus
+`api/v4/types.h`.  That cluster gates ~22 of the 32 compiled `.cc` and is the thing standing
+between here and the first wave of actual `.cc` flips.
