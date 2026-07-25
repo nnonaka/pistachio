@@ -505,3 +505,78 @@ Pattern note: for a value type, dual-representation with the access specifiers p
 inside the `__cplusplus` guard keeps the C++ side literally identical (byte-identical proof),
 which is the safest possible way to land the struct.  Free functions follow the first
 consumer, never speculatively (they'd be untestable until then).
+
+
+## 18. SCOPE — `kernelinterface.h` / KIP closure (2026-07-25, planned)
+
+Goal: make the Kernel Interface Page header C-includable via dual-representation, which in
+turn makes **`thread.h` fully C-includable** (its only non-C-safe include).  This is the
+gate blocking the thread/value-type layer.
+
+### Closure — exactly 4 headers, ~20 classes, and it does NOT cascade
+- `api/v4/kernelinterface.h` (449 lines, 18 classes)
+- `generic/memregion.h` (1 class: `mem_region_t`)
+- `api/v4/memdesc.h` (1 class: `memdesc_t`)
+- `api/v4/procdesc.h` (1 class: `procdesc_t`)
+
+The three sub-includes pull in nothing further.  `thread.h`'s other include,
+`api/v4/config.h`, is **already C-safe** (79 lines of `#define`, 0 classes).  Blast radius is
+49 files, but only 2 headers include the KIP directly (`thread.h`, `glue/v4-x86/schedule.h`);
+the rest are `.cc`.  `tcb.h` / `space.h` do **not** embed KIP classes by value.
+
+### Difficulty: LOW.  It is ~20 plain-POD classes, mechanical to dual-represent
+The whole closure has **none** of the genuinely hard constructs: no ctors/dtors, no virtual,
+no inheritance, no templates, no `friend`, no static data members, no reference *members*, no
+default arguments, no member initializers, no true nested classes (`memdesc_t::type_e` is the
+lone nested *enum*).  Every class's data is plain C — `word_t` / bitfield-unions (`BITFIELD*`
+macros are C-safe) / char[4] arrays / by-value sub-structs / one flexible array member.
+
+The only constructs that a bare `class→struct` can't express in C — and all are handled the
+spinlock/threadid way, by **guarding them under `#if defined(__cplusplus)` (zero call-site
+changes, since C++ keeps them)**:
+- 3 operator overloads: `api_flags_t::operator word_t()`, `api_version_t::operator word_t()`,
+  `mem_region_t::operator+=`.
+- 3 overloaded methods: `memory_info_t::insert` ×2, `memdesc_t::set` ×2.
+- reference *parameters* on `mem_region_t` / `memdesc_t` methods — fine, the methods are
+  guarded out for C.
+
+### Conversion order (inner-first — `kernel_interface_page_t` embeds ~20 classes BY VALUE)
+1. Leaf value types: `mem_region_t`, `procdesc_t`, `memdesc_t`, `magic_word_t`, and the
+   bitfield info classes (`utcb_info_t`, `kip_area_info_t`, `clock_info_t`, `thread_info_t`,
+   `page_info_t`, `processor_info_t`, `api_flags_t`, `api_version_t`, `memory_info_t`,
+   `kernel_id_t`, `kernel_gen_date_t`, `kernel_version_t`, `kernel_supplier_t`).
+2. Aggregates: `root_server_t` (embeds `mem_region_t`), `kernel_descriptor_t` (embeds the 4
+   kernel_* value types).
+3. `kernel_interface_page_t` (embeds nearly all of the above by value) + the trivial
+   `get_kip()` (`return &KIP`; `KIP` is **already** `extern "C"`, so C sees the same symbol).
+
+Because it's one header (plus 3 tiny ones), the whole thing can land as a **single
+dual-representation slice** — there are no `.cc` flips here, so no per-file staging.
+
+### Verification
+- C++ regression build must come out **byte-identical** (class→struct is ABI-neutral, and the
+  KIP layout is load-bearing — it is emitted into a fixed linker section and read by userland,
+  so byte-identity is both the correctness proof and a hard requirement).
+- boottest (the KIP is read constantly during boot).
+- standalone C-parse of `kernelinterface.h` (and then of `thread.h`) to prove C-includability.
+
+### Payoff / what it unblocks
+- `thread.h` becomes C-includable → `threadid_t` can grow its real C free-function API,
+  including `is_interrupt()` (now expressible: `get_kip()->thread_info.get_system_base()`
+  becomes `thread_info_get_system_base(&get_kip()->thread_info)`).
+- Any `.cc` whose only C++-header dependency was `thread.h` / the KIP becomes a flip candidate.
+
+### Risks / watch-items
+- **Byte layout is ABI**: keep every field, every `#if CONFIG_*` field variant, the anonymous
+  `char[4]/word_t` unions, and the `version_parts[0]` flexible array exactly as-is.  The
+  byte-identical build is the guardrail.
+- Forward-decl tag rule (seen in §16): `kernel_descriptor_t` is forward-declared then defined;
+  use `struct` consistently, and guard any `class`-defined-elsewhere forward decls.
+- `kdb/api/v4/kernelinterface.cc` and other kdb files read KIP fields — they stay C++, so
+  dual-representation (methods retained under the guard) leaves them untouched.
+
+### Estimate
+One focused slice.  ~20 mechanical class→struct + guard edits in one main header plus 3 tiny
+ones, no call-site churn, no `.cc` flips.  Comparable in effort to the `mapping.h` conversion
+(§16) but lower-risk (no include-guarding gymnastics, no linkage changes — pure
+dual-representation), gated on the byte-identical build passing.
