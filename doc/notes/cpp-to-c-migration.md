@@ -470,3 +470,38 @@ the C++ front end warns on the tag mismatch.  Types converted in-file (`mapnode_
 Boot-verified: the MDB allocator is driven by every page mapping, so reaching l4test with no
 "Illegal MDB buffer allocation" panic confirms it.  Three generic C files now: `lib.c`,
 `kmemory.c`, `mapping_alloc.c`.
+
+
+## 17. `threadid_t` → struct (dual-representation) — DONE (2026-07-25, commit 3e4e6a7)
+
+First **value type**.  `class threadid_t` → `struct threadid_t` in `api/v4/thread.h`: the
+full C++ API (static factories, `is_*`/`get_*`/`set_*` accessors, `==`/`!=` operators, the
+out-of-line `set_global_id`, the `threadid(rawid)` helper) is guarded under `__cplusplus`;
+the bitfield union (`raw` / `local` / `global`) stays C-visible.  The original
+`public:`/`private:` is preserved *inside* the guard:
+
+    struct threadid_t {
+    #if defined(__cplusplus)
+    public:
+        ... methods / statics / operators ...
+    private:
+    #endif
+        union { word_t raw; struct {...} local; struct {...} global; };
+    } __attribute__((packed));
+    typedef struct threadid_t threadid_t;
+
+ABI-neutral (no vtables) — the linked kernel came out **byte-for-byte identical** and all ~38
+call sites are untouched.  Verified additionally by a standalone C compile of the C-visible
+struct (parses, word-sized, union members reachable).
+
+**Honest status:** this makes the *type* C-ready, but it does not yet let any file flip,
+because `thread.h` pulls in `kernelinterface.h` (the KIP) at the top, and `is_interrupt()`
+needs `get_kip()`.  So the value-type layer and the KIP are entangled: the natural next
+domino is the **`kernelinterface.h` / KIP** closure, after which thread.h becomes a candidate
+for C-includability and threadid_t's C free-function API (raw/equality/predicates/factories,
+minus the KIP-dependent `is_interrupt`) can be added and exercised by a real C consumer.
+
+Pattern note: for a value type, dual-representation with the access specifiers preserved
+inside the `__cplusplus` guard keeps the C++ side literally identical (byte-identical proof),
+which is the safest possible way to land the struct.  Free functions follow the first
+consumer, never speculatively (they'd be untestable until then).
