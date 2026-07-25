@@ -595,3 +595,37 @@ One focused slice.  ~20 mechanical class→struct + guard edits in one main head
 ones, no call-site churn, no `.cc` flips.  Comparable in effort to the `mapping.h` conversion
 (§16) but lower-risk (no include-guarding gymnastics, no linkage changes — pure
 dual-representation), gated on the byte-identical build passing.
+
+
+## 19. `threadid_t` C free-function API — DONE (2026-07-25, commit 1266a41)
+
+With the KIP now C-includable (§18), `threadid_t` got the full C API promised in §17, and its
+~20 C++ methods became one-line forwarders — the **spinlock_t pattern applied to a value
+type, second stage** (§17 landed the struct; this landed the functions).
+
+- Logic moved out of the in-class method bodies into `threadid_*` free functions (factories,
+  accessors, predicates, compare) available to both C and C++.  `is_interrupt()` now reads
+  `get_kip()->thread_info.system_base` directly (KIP is C-visible) instead of the
+  `__cplusplus`-guarded `get_system_base()` accessor — same value.
+- C++ methods: declared in the struct, defined out-of-line as forwarders under `__cplusplus`.
+  `NILTHREAD`/`ANYTHREAD`/`ANYLOCALTHREAD`/`IDLETHREAD` macros made dual so they resolve in C.
+- The data union was made **public** — the free functions are non-members, so in C++ they
+  can't touch a private union.  Access control is compile-time only, so still ABI-neutral.
+
+**Two-layer verification worth repeating for value types:**
+1. The forwarding refactor came out **byte-for-byte identical** (362368).  That is the proof
+   the free functions are behaviour-equivalent to the original methods — every one of the ~38
+   C++ call sites now routes through them, and the codegen didn't move.
+2. A standalone **C** program linked the free functions and asserted values at runtime
+   (nilthread==0, anythread==~0, idlethread==0x1d1e…, raw round-trip, global-id accessors,
+   equality, the `NILTHREAD` macro).  This is the piece boot alone can't give: it exercises
+   the *C* compilation of the API, not just the C++ forwarders.
+
+Gotcha logged: non-member free functions can't read a `private` union in C++ — either make the
+data public (done here) or the functions would need friendship.  For a value type whose data
+is now the shared C/C++ contract, public data is the right call.
+
+Pattern crystallised (value type, two stages): §17 land the struct dual-representation
+(byte-identical, call sites untouched); later, once the type's own dependencies are C-visible,
+§19 move the bodies into free functions + forward (byte-identical again) and value-test the C
+side.  Free functions still never land before their dependencies are C-ready.
