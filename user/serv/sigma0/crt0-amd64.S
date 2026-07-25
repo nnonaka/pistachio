@@ -40,6 +40,11 @@ _start:
 	leaq	stack, %rsp
 	/* KIP pointer in eax - L4/KA */
 	pushq	%rax
+	/* Re-establish 16-byte stack alignment before calling into C code.
+	 * The push above leaves %rsp mis-aligned; without this a modern gcc's
+	 * SSE (movdqa) accesses in __L4_Init/sigma0_main #GP.  (%rax stays on
+	 * the stack just above %rsp.) */
+	andq	$-16, %rsp
 	/* Initialize Syscalls */
 	callq	__L4_Init
 	/* Return address */
