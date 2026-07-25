@@ -38,11 +38,14 @@
 
 #if defined(CONFIG_DEBUG)
 
+#if defined(__cplusplus)
 #include <kdb/tracepoints.h>
+#endif
 
 #define DEBUG_SCREEN (KERNEL_OFFSET + 0xb8000)
 #define KDB_STACK_SIZE	KTCB_SIZE
 
+#if defined(__cplusplus)
 INLINE void spin_forever(int pos = 0)
 {
 #if defined(CONFIG_SPIN_WHEELS)
@@ -75,6 +78,7 @@ INLINE void spin(int pos, int cpu = 0)
     ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2 + 1] = 7;
 #endif /* defined(CONFIG_SPIN_WHEELS) */
 }
+#endif /* defined(__cplusplus) */
 
 #define enter_kdebug(arg...)                    \
     __asm__ __volatile__ (                      \
@@ -89,6 +93,7 @@ INLINE void spin(int pos, int cpu = 0)
             :                                   \
             : "a" (0UL))
 
+#if defined(__cplusplus)
 extern void do_enter_kdebug(x86_exceptionframe_t *frame, const word_t exception);
 
 enum x86_breakpoint_type_e {
@@ -102,6 +107,7 @@ extern void x86_set_kdb_dr(word_t num, x86_breakpoint_type_e type, word_t addr, 
 
 extern "C" void x86_reset(void);
 extern bool x86_reboot_scheduled;
+#endif /* defined(__cplusplus) */
 
 
 

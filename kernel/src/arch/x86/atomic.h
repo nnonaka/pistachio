@@ -20,9 +20,9 @@
 #endif
 
 
-class atomic_t {
-public:
-    word_t operator ++ (int) 
+struct atomic_t {
+#if defined(__cplusplus)
+    word_t operator ++ (int)
 	{
 	    // %z0 emits the operand size suffix -- without it the assembler
 	    // defaults to "addl", which only updates half of a 64 bit word_t.
@@ -71,10 +71,12 @@ public:
 		);
 	    return (result);
 	}
+#endif /* defined(__cplusplus) */
 
-private:
     word_t val;
 };
+
+typedef struct atomic_t atomic_t;
 
 
 #endif /* !__ARCH__X86__ATOMIC_H__ */

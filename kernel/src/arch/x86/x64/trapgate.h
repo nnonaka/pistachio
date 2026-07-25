@@ -34,11 +34,13 @@
 #define __ARCH__X86__X64__TRAPGATE_H__
 
  
-class x86_exceptionregs_t
+#define X86_EXCEPTIONREGS_NUM_REGS 22
+
+struct x86_exceptionregs_t
 {
-public:
-    static const word_t		num_regs = 22;
-    
+#if defined(__cplusplus)
+    enum { num_regs = X86_EXCEPTIONREGS_NUM_REGS };
+
     enum reg_e {
 	r15reg =   1,	r14reg =   2,	r13reg =   3,	r12reg =   4,
 	r11reg =   5,	r10reg =   6,	r9reg  =   7,	r8reg  =   8,
@@ -47,7 +49,8 @@ public:
 	ipreg  =  17,	csreg  =  18,	freg   =  19,	spreg  =  20,
 	ssreg  =  21,
     };
-    
+#endif /* defined(__cplusplus) */
+
     union
     {
 	struct
@@ -77,13 +80,15 @@ public:
 	    u64_t rsp;			/* 20 */
 	    u64_t ss;			/* 21 */
 	};
-	word_t			regs[num_regs];
-    };    
-#if defined(CONFIG_DEBUG)
-    static const word_t		num_dbgregs = 18;
+	word_t			regs[X86_EXCEPTIONREGS_NUM_REGS];
+    };
+#if defined(CONFIG_DEBUG) && defined(__cplusplus)
+    enum { num_dbgregs = 18 };
 #endif
 
 };
+
+typedef struct x86_exceptionregs_t x86_exceptionregs_t;
 
 
 

@@ -38,6 +38,18 @@
 #include INC_ARCH(types.h)
 /* At this point we should have word_t defined */
 
+#if !defined(__cplusplus)
+/*
+ * The kernel's C++ sources use bool/true/false freely.  Headers shared with
+ * C translation units (during the C++ -> C conversion) must therefore parse
+ * these in C too.  _Bool is a C99/gnu11 keyword; this mirrors <stdbool.h>
+ * without depending on the (nostdinc) include search path.
+ */
+typedef _Bool bool;
+#define true  1
+#define false 0
+#endif
+
 #if defined(CONFIG_IS_32BIT)
 #define SIZE_T unsigned int
 #else

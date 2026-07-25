@@ -16,13 +16,16 @@
 #include INC_ARCH_SA(trapgate.h)
 
 #if defined(CONFIG_DEBUG)
-extern "C" int printf(const char* format, ...);
+BEGIN_DECLS
+int printf(const char* format, ...);
+END_DECLS
 #endif
 
+#if defined(__cplusplus)
 class x86_exceptionframe_t : public x86_exceptionregs_t
 {
 public:
-   
+
 #if defined(CONFIG_DEBUG)
     static const char		*name[num_regs];
     static const word_t		dbgreg[num_dbgregs];
@@ -72,7 +75,15 @@ public:
 	}
 #endif /* defined(CONFIG_DEBUG */
 
-   
 };
+#else /* !defined(__cplusplus) */
+/*
+ * C sees the exception frame as a plain register frame (same layout as the
+ * C++ class, which adds only static members and methods on top of the base).
+ */
+struct x86_exceptionframe_t { struct x86_exceptionregs_t __base; };
+#endif /* defined(__cplusplus) */
+
+typedef struct x86_exceptionframe_t x86_exceptionframe_t;
 
 #endif /* !__ARCH__X86__TRAPGATE_H__ */

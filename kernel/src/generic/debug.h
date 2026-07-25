@@ -65,8 +65,12 @@
 #if defined(CONFIG_DEBUG)
 
 void init_console (void);
-extern "C" int printf (const char * format, ...);
+BEGIN_DECLS
+int printf (const char * format, ...);
+END_DECLS
+#if defined(__cplusplus)
 tcb_t *get_kdebug_tcb();
+#endif
 
 # define UNIMPLEMENTED()                                        \
 do {                                                            \
