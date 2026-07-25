@@ -33,7 +33,9 @@
 #define __API__V4__CPU_H__
 
 typedef u16_t cpuid_t;
+BEGIN_DECLS
 void init_cpu(cpuid_t processor, word_t external_freq, word_t internal_freq);
+END_DECLS
 
 struct cpu_t {
     word_t id;

@@ -67,17 +67,17 @@ init_cpu(cpuid_t processor, word_t external_freq, word_t internal_freq)
 {
     TRACE_INIT("\tRegistering processor %d in KIP (%dMHz, %dMHz)\n", 
 	       processor, external_freq/1000, internal_freq/1000);
-    kiplock.lock();
+    spinlock_lock (&kiplock);
 
-    procdesc_t * pdesc = get_kip()->processor_info.get_procdesc(processor);
+    procdesc_t * pdesc = processor_info_get_procdesc (&get_kip()->processor_info, processor);
     ASSERT (pdesc);
 
-    pdesc->set_external_frequency(external_freq);
-    pdesc->set_internal_frequency(internal_freq);
+    pdesc->external_freq = external_freq;	/* set_external_frequency */
+    pdesc->internal_freq = internal_freq;	/* set_internal_frequency */
 
     // make processor available in KIP
     if ( get_kip()->processor_info.processors < processor )
 	get_kip()->processor_info.processors = processor;
-    
-    kiplock.unlock();
+
+    spinlock_unlock (&kiplock);
 }
