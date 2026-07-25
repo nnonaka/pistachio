@@ -35,9 +35,8 @@
 #if !defined(ASSEMBLY)
 
 // make sure sizeof(procdesc_t) == 2^n
-class procdesc_t
+struct procdesc_t
 {
-public:
     word_t external_freq;
     word_t internal_freq;
     word_t freq_change;
@@ -48,13 +47,15 @@ public:
      */
     word_t arch1;
 
-public:
+#if defined(__cplusplus)
     void set_external_frequency(word_t freq)
 	{ external_freq = freq; }
-    
+
     void set_internal_frequency(word_t freq)
 	{ internal_freq = freq; }
+#endif
 };
+typedef struct procdesc_t procdesc_t;
 
 
 #endif /* !ASSEMBLY */

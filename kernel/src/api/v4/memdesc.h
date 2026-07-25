@@ -38,7 +38,7 @@
  * page.  Regions have a type, an upper, a lower limit (multiple of
  * 1K), and are valid for either virtual memory or physical memory.
  */
-class memdesc_t
+struct memdesc_t
 {
     BITFIELD5(word_t,
 	_type	: 4,
@@ -52,7 +52,7 @@ class memdesc_t
 	_high	: BITS_WORD - 10
 	);
 
-public:
+#if defined(__cplusplus)
 
     enum type_e {
 	undefined	= 0x0,
@@ -130,7 +130,9 @@ public:
 	{
 	    *this = memdesc;
 	}
+#endif /* __cplusplus */
 };
+typedef struct memdesc_t memdesc_t;
 
 
 

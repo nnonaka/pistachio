@@ -35,24 +35,26 @@
 /**
  * mem_region_t:
  */
-class mem_region_t
+struct mem_region_t
 {
-public:
+    addr_t	low;
+    addr_t	high;
+
+#if defined(__cplusplus)
     bool is_adjacent(const mem_region_t & reg);
     bool is_intersection(const mem_region_t & reg);
     bool is_empty();
     void set_empty();
     void operator += (const mem_region_t & reg);
     void set(addr_t low, addr_t high);
-    word_t get_size() 
+    word_t get_size()
 	{ return is_empty() ? 0 : (word_t)high-(word_t)low; }
-
-public:
-    addr_t	low;
-    addr_t	high;
+#endif
 };
+typedef struct mem_region_t mem_region_t;
 
 
+#if defined(__cplusplus)
 INLINE void mem_region_t::operator += (const mem_region_t & reg)
 {
     if (this->low > reg.low) this->low = reg.low;
@@ -83,10 +85,11 @@ INLINE void mem_region_t::set_empty()
 }
 
 INLINE void mem_region_t::set(addr_t low, addr_t high)
-{ 
-    this->low = low; 
-    this->high = high; 
+{
+    this->low = low;
+    this->high = high;
 }
+#endif /* __cplusplus */
 
 
 #endif /* !__GENERIC__MEMREGION_H__ */
