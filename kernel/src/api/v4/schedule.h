@@ -67,6 +67,7 @@ const sched_flags_t sched_rcverr  = FLAGFIELD3(sched_ds2_flag, rr_tsdonate_flag,
 const sched_flags_t sched_rplywt  = FLAGFIELD3(sched_chk_flag, rr_tsdonate_flag, sched_timeout_flag); 
 
 
+#if defined(__cplusplus)
 class schedule_req_t 
 {
 public:
@@ -361,6 +362,8 @@ INLINE word_t flags_stringword(sched_flags_t f)
 
 
 
+
+#endif /* __cplusplus */
 
 #endif /*__API__V4__SCHEDULE_H__*/
 

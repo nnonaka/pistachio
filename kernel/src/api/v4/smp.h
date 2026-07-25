@@ -36,6 +36,7 @@
 #include INC_API(tcb.h)
 #include <generic/linear_ptab.h>
 
+#if defined(__cplusplus)
 template<typename T> INLINE T *get_on_cpu(cpuid_t cpu, T *item)
 {
 #if defined(CONFIG_SMP)
@@ -54,11 +55,13 @@ template<typename T> INLINE T *get_on_cpu(cpuid_t cpu, T *item)
     return item;
 #endif
 }
+#endif /* __cplusplus */
 
 #if defined(CONFIG_SMP)
 
 #define ON_CONFIG_SMP(x) do { x; } while(0)
 
+#if defined(__cplusplus)
 /**
  * central SMP handler function; should be called in processor_sleep
  * deals with both, sync and async 
@@ -269,6 +272,7 @@ void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
 #endif /* CONFIG_SMP_SYNC_REQUEST */
 
 #include INC_GLUE(smp.h)
+#endif /* __cplusplus */
 
 #else /* ! CONFIG_SMP */
 
