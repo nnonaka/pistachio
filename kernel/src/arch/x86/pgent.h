@@ -30,17 +30,22 @@ EXTERN_KMEM_GROUP (kmem_pgtab);
 #endif
 
 
+#if defined(__cplusplus)
 class mapnode_t;
 class space_t;
+#else
+struct mapnode_t;
+struct space_t;
+#endif
 
-class pgent_t
+struct pgent_t
 {
-public:
     union {
 	x86_pgent_t    pgent;
 	word_t		raw;
     };
 
+#if defined(__cplusplus)
     enum pgsize_e X86_PGSIZES;
 
 private:
@@ -375,7 +380,9 @@ public:
 		printf (pgent.is_cache_disabled() ? "UC" :
 			pgent.is_write_through()  ? "WT" : "WB");
 	}
+#endif /* __cplusplus */
 };
+typedef struct pgent_t pgent_t;
 
 #if defined(CONFIG_NEW_MDB)
 #undef mapnode_t

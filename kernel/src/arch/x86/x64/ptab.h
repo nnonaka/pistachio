@@ -47,9 +47,9 @@
 #define X86_PGSIZES		{ size_4k = 0, size_2m = 1, size_1g = 2, size_512g = 3, \
 				  size_sync = size_1g, size_superpage = size_2m, size_max = size_512g }
 
-#if defined(__cplusplus)
-class x86_pgent_t
+struct x86_pgent_t
 {
+#if defined(__cplusplus)
 public:
     enum pagesize_e {
 	size_4k = 0,
@@ -162,7 +162,7 @@ public:
 	    raw = ((u64_t)(addr) & X86_X64_PTE_MASK) | X86_PAGE_VALID | (attrib & X86_X64_PTE_FLAGS_MASK);
 	}
 		
-private:
+#endif /* __cplusplus */
     union {
 	struct {
 	    u64_t present		:1;
@@ -173,7 +173,7 @@ private:
 	    u64_t cache_disabled	:1;
 	    u64_t accessed		:1;
 	    u64_t dirty			:1;
-	    u64_t pat			:1;  
+	    u64_t pat			:1;
 
 	    u64_t global		:1;
 	    u64_t cpulocal		:1;
@@ -209,9 +209,11 @@ private:
 	u64_t raw;
     };
 
+#if defined(__cplusplus)
     friend class pgent_t;
-};
 #endif /* __cplusplus */
+};
+typedef struct x86_pgent_t x86_pgent_t;
 
 #endif /* !ASSEMBLY */
 
