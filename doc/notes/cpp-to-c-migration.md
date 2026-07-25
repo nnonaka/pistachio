@@ -1048,3 +1048,25 @@ Confirms the API-layer flip recipe is now routine: (1) header closure CLEAN, (2)
 functions / inlined one-use method calls / spinlock+get_procdesc free fns, (3) BEGIN_DECLS the
 functions this file *defines* that C++ still calls.  Next .cc flips wait on the tcb cluster
 (ktcb.h ringlist template) or can pick any file whose closure is already CLEAN.
+
+
+## 38. ktcb/utcb chain -> tcb.h (2026-07-25, commits bbc9e8d, fcc5d44)
+
+Walked the 23-file tcb cluster down its include chain, all byte-identical (362168):
+ringlist_t (types.h, concrete ringlist_tcb_t) -> rr_sched_ktcb_t -> sched_ktcb_t (sktcb.h) ->
+arch_ktcb_t (empty member -> 1-byte C struct) -> utcb_t + generic-utcb.h.  Each was a routine
+dual-rep / inheritance-split / template-concrete-type.
+
+**Arrived at the final wall: api/v4/tcb.h (837 lines, the tcb_t thread control block).**  It's
+the biggest and most ABI-critical class -- the TCB layout is read by hand-written asm and
+scraped by Makefile.voodoo (tcb_layout.h) between TCB_START/END_MARKER.  Its data section
+(lines ~300-356) has **8 interspersed private:/public: labels** and members of every type
+converted so far (threadid_t, thread_state_t, resource_bits_t, queue_state_t, ringlist_tcb_t,
+sched_ktcb_t, spinlock_t, lockstate_t, bitmask_word_t, arch_ktcb_t, thread_resources_t,
+misc_tcb_t, utcb_t*, space_t*, tcb_t*) -- all now C-visible.  So the conversion is bounded but
+intricate: guard the enums+methods block, guard each of the 8 access labels in the data section,
+keep the data C-visible, guard the friends/static; byte-identity is the ABI proof.  Worth a
+dedicated careful pass (no inheritance -- tcb_t is not derived).
+
+Cluster is one header from cascading: tcb.h -> then re-scan should flip many api/glue .cc to
+CLEAN.  segdesc.h (5, arch/x86 parent) and acpi.h (1) remain independent.
