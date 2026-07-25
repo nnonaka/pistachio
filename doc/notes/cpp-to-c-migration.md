@@ -874,3 +874,28 @@ independent gates unchanged: segdesc.h (4), x64/syscalls.h (3), user.h (2), acpi
 Header conversions this campaign (13): KIP closure, cpu-family+types, hwspace, queuestate, mmu,
 threadstate, generic-archfpage, fpage, pgent+x86_pgent, mdb.  Plus 2 .cc flips (cpu, ctors).
 The mapping/space core is now one header deep (space.h) from the big cluster flip.
+
+
+## 30. x86_space_t (address-space base) → struct — DONE (2026-07-25, commit 6dfa1c3)
+
+The kernel's most layout-critical class, and the first of the space_t chain.  x64/space.h's
+x86_space_t dual-represented via the nested-value-type-hoist pattern (§29), **byte-identical**
+(362272), boots.  kernel_pdp_t/top_pdir_t hoisted to x86_kernel_pdp_t/x86_top_pdir_t (needed
+because `data` holds a `top_pdir_t*`); re-aliased with typedefs so external
+`sizeof(top_pdir_t)` / `space_t::top_pdir_t` keep working.  `data` struct C-visible (all members
+already C: x86_top_pdir_t*, atomic_t, fpage_t, word_t).
+
+**Two gotchas for the C forward-decl bridge (both hit here):**
+- `class X; #else struct X;` is not enough -- a bare `X *` in C needs the typedef too:
+  `struct X; typedef struct X X;`.  (space_t used as `space_t *` in x86_top_pdir_t.)
+- Missed forward decls (tcb_t/utcb_t) show up as `unknown type name 'class'` and cascade into
+  spurious downstream errors; fix the first, re-scan.
+
+Byte-identity is the proof for paging-layout classes: if the struct came out identical, the
+hoist+re-alias preserved the exact ABI.
+
+Frontier: x64/space.h done; 21-file cluster now at parent `glue/v4-x86/space.h`
+(`class space_t : public x86_space_t`).  Next slice is the **single-inheritance -> embedding**
+step (plan §4: base as first member), on top of a space_t class that itself has the mapctrl /
+mdb_t::ctrl_t methods.  The space chain: x86_space_t (done) -> space_t [glue] -> generic
+space_t [api] -- 2 headers left in the core.
