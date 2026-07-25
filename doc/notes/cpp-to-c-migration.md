@@ -822,3 +822,31 @@ next real job and a big one; converting it should cascade the mapping/space/glue
 CLEAN in one shot.  Headers cleared to get here: KIP closure, cpu-family+types, hwspace,
 queuestate, mmu, threadstate, generic-archfpage, fpage.  Value-type/dual-rep muscle is well
 warmed up; pgent.h is where it pays off.
+
+
+## 28. pgent.h + x86_pgent_t → structs; next wall is mdb.h (2026-07-25, commit 6218518)
+
+The page-table-entry wall, done.  Two coupled classes dual-represented, byte-identical (362280),
+boots:
+- `x86_pgent_t` (ptab.h): the §16 whole-class `__cplusplus` guard replaced by dual-rep -- the
+  pg4k/pg2m/raw bitfield union is now C-visible; enum + ~24 methods + `friend pgent_t` guarded.
+- `pgent_t` (pgent.h): struct; `union{x86_pgent_t pgent; word_t raw}` C-visible; pgsize_e enum +
+  ~50 methods guarded; mapnode_t/space_t forward decls dual.
+
+**Next wall: `generic/mdb.h` -- and it's a different kind of wall.**  The same 21 files now
+block on it.  It is 961 lines, **7 classes, zero CONFIG_NEW_MDB guards** (all unconditional),
+and `mdb_t` has **18 virtual functions** -- the virtual-dispatch class the plan (§2) flagged as
+genuinely hard.  BUT: mdb_t is never instantiated in this config (NEW_MDB off -> 0 vtables in
+the linked kernel), and the mapping/space cluster needs exactly **one** thing from the header:
+the nested value type `mdb_t::ctrl_t` (space.h: `fpage_t mapctrl(fpage_t, mdb_t::ctrl_t, ...)`,
+"Even if new MDB is not used we need the mdb_t::ctrl_t").
+
+So mdb.h is NOT a mechanical dual-rep like the last dozen headers.  Strategy to decide before
+touching it:
+- guard the virtual `mdb_t` body + the NEW_MDB-only classes (mdb_node_t/tableent_t/table_t,
+  vrt_t, etc.) under `__cplusplus` -- C never needs mdb_t's layout since nothing instantiates it;
+- expose only `ctrl_t` to C, which means hoisting the nested `mdb_t::ctrl_t` to a top-level
+  C struct (`mdb_ctrl_t`?) with dual-rep, and teaching space.h's `mdb_t::ctrl_t` usage to
+  resolve in both C and C++ (typedef / macro bridge).
+This is a design call (nested-type hoist + a virtual class guarded wholesale), not a
+copy-the-pattern job -- worth deciding deliberately rather than barreling in.
