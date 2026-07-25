@@ -35,9 +35,8 @@
 #include INC_API(config.h)
 #include INC_GLUE(fpage.h)
 
-class mempage_t 
+struct mempage_t
 {
-public:
     union {
 	struct {
 	    BITFIELD7(word_t,
@@ -53,22 +52,23 @@ public:
 	word_t raw;
     };
 };
+typedef struct mempage_t mempage_t;
 
 /**
  * Flexpages are size-aligned memory objects and can cover 
  * multiple hardware pages. fpage_t implements the V4 specific
  * flexpage type, having read, write and execute bits.
  */
-class fpage_t
+struct fpage_t
 {
     /* data members */
-public:
     union {
 	mempage_t mem;
 	arch_fpage_t arch;
 	word_t raw;
     };
     /* member functions */
+#if defined(__cplusplus)
 public:
     /**
      * sets the flexpage
@@ -278,15 +278,17 @@ public:
 	    ret.raw = 0;
 	    return ret;
 	}
-    
+#endif /* __cplusplus */
 
 };
+typedef struct fpage_t fpage_t;
 
 
 /*
  * Helper functions used in conjunction with mapping.
  */
 
+#if defined(__cplusplus)
 INLINE word_t base_mask (fpage_t fp, word_t size)
 {
     return ((~0UL) >> ((sizeof (word_t) * 8) - fp.get_size_log2 ())) &
@@ -297,6 +299,7 @@ INLINE addr_t address (fpage_t fp, word_t size)
 {
     return (addr_t) ((word_t) fp.get_base () & ~((1UL << size) - 1));
 }
+#endif /* __cplusplus */
 
 
 #endif /* !__API__V4__FPAGE_H__ */
