@@ -979,3 +979,31 @@ base; ... }`; empty base -> just the derived's own fields, base guarded away.
 Frontier: 14-file cluster (the tcb.h include chain) advances resources.h -> `api/v4/preempt.h`;
 `generic/linear_ptab.h` (7) unchanged.  The cluster is walking down tcb.h's includes one class
 per slice (bitmask -> resources -> preempt -> ...); tcb_t itself is the eventual big one.
+
+
+## 35. Batched header pass toward the .cc flips (2026-07-25, commits 11e4657, 5dcdacf)
+
+Switched from one-header-per-slice to batching: convert all currently-visible blocker headers,
+build once, re-scan, repeat.  All byte-identical (362272), boots.
+
+Headers this pass: linear_ptab.h (guard pgsize_e operators + readmem<T> template), api/v4/user.h
++ glue x64/syscalls.h + traphandler.h (extern "C" -> BEGIN_DECLS; static-only x86_exc_reg_t
+guarded), glue/v4-x86/ipc.h (arch_ctrlxfer_item_t guarded), api/v4/ipc.h (msg_tag_t / msg_item_t
+/ acceptor_t dual-rep; ctrlxfer_item_t is config-off), api/v4/syscalls.h (extern "C" block ->
+BEGIN_DECLS; exregs_ctrl_t/schedule_ctrl_t guarded wholesale for now), x64/segdesc.h (3
+descriptor classes dual-rep).
+
+**Payoff reached: the first .cc closures went CLEAN** -- `api/v4/kernelinterface.cc` and
+`api/v4/processor.cc` now have fully C-includable header closures (their bodies still need the
+Pass-B flip: rename + body C-isms + Makeconf + linkage).
+
+Remaining gates on the tcb.h cluster (23 files): `api/v4/sched-rr/ktcb.h` -- has a
+`ringlist_t<tcb_t>` **template member** (needs the §33 bitmask-style concrete-type treatment);
+`arch/x86/segdesc.h` (the parent, its own descriptor classes); `acpi.h` (1 file, ~10 ACPI-table
+classes -- can be guarded wholesale, only acpi.cc uses them).  perl (not the Edit tool) is the
+right tool for these tab-heavy multi-class headers -- anchor subs on class names / distinctive
+trailing content, never on whitespace.
+
+Tally so far: ~23 headers converted + 2 .cc flipped (cpu, ctors); 2 more .cc are CLEAN-closure
+and ready to flip.  Next: ringlist_t concrete type -> ktcb.h -> the cluster cascades, then flip
+kernelinterface.cc / processor.cc to actually bank .c files.
