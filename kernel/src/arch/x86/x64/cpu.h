@@ -160,9 +160,8 @@ typedef union {
 
 
 
-class x86_x64_cpu_features_t{
+struct x86_x64_cpu_features_t{
 
-private:
     char cpu_vendor[14];
     char cpu_name[49];
     u8_t family;
@@ -191,7 +190,8 @@ private:
 
     u8_t paddr_bits;
     u8_t vaddr_bits;
-    
+
+#if defined(__cplusplus)
 public:
     x86_x64_cpu_features_t() SECTION(SEC_INIT);
     void dump_features();
@@ -222,8 +222,10 @@ public:
     
     u8_t get_paddr_bits() { return paddr_bits; }
     u8_t get_vaddr_bits() { return vaddr_bits; }
+#endif /* __cplusplus */
 
 };
+typedef struct x86_x64_cpu_features_t x86_x64_cpu_features_t;
 
 INLINE __attribute__((always_inline)) bool x86_x64_has_cpuid() {
 

@@ -43,8 +43,9 @@
 #endif /* !defined(TIME_BITS_WORD) */
 
 /* time */
-class time_t 
+struct time_t
 {
+#if defined(__cplusplus)
 public:
     u64_t get_microseconds();
     
@@ -91,7 +92,8 @@ public:
 
     bool operator< (time_t & r);
     operator u16_t() { return raw ; }
-    
+#endif /* __cplusplus */
+
     union {
 	u16_t raw;
 	struct {
@@ -100,26 +102,30 @@ public:
 		exponent	: 5,
 		type		: 1);
 	} __attribute__((packed)) time;
-    } __attribute__((packed)); 
+    } __attribute__((packed));
 } __attribute__((packed));
+typedef struct time_t time_t;
 
+#if defined(__cplusplus)
 INLINE u64_t time_t::get_microseconds()
 {
     return (1 << time.exponent) * time.mantissa;
 }
+#endif /* __cplusplus */
 
 
-class timeout_t 
+struct timeout_t
 {
+#if defined(__cplusplus)
 public:
-    static timeout_t never() 
+    static timeout_t never()
 	{return (timeout_t){{raw: 0}};}
 
     inline time_t get_rcv() { return x.rcv_timeout; }
     inline time_t get_snd() { return x.snd_timeout; }
     inline void set_raw(word_t raw) { this->raw = raw; }
     inline bool is_never() { return this->raw == never().raw; }
-public:
+#endif /* __cplusplus */
     union {
 	struct {
 #if TIME_BITS_WORD == 64
@@ -138,8 +144,9 @@ public:
 	} __attribute__((packed)) x;
 	word_t raw;
     };
-    
+
 };
+typedef struct timeout_t timeout_t;
 
 
 typedef u16_t cpuid_t;

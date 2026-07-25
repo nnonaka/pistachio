@@ -35,9 +35,10 @@
 typedef u16_t cpuid_t;
 void init_cpu(cpuid_t processor, word_t external_freq, word_t internal_freq);
 
-class cpu_t {
-public:
-    cpu_t() 
+struct cpu_t {
+    word_t id;
+#if defined(__cplusplus)
+    cpu_t()
 	{ id = ~0UL; }
 
     bool is_valid()
@@ -46,13 +47,10 @@ public:
     void set_id(word_t id)
 	{ this->id = id; }
 
-    word_t get_id() 
+    word_t get_id()
 	{ return id; }
 
-private:
-    word_t id;
     static cpu_t descriptors[CONFIG_SMP_MAX_CPUS];
-public:
     static word_t count;
     static cpu_t * get(cpuid_t cpuid) {
 	return &descriptors[cpuid];
@@ -64,7 +62,9 @@ public:
 	descriptors[count++].id = id;
 	return true;
     }
+#endif /* __cplusplus */
 };
+typedef struct cpu_t cpu_t;
 
 INLINE cpuid_t get_current_cpu()
 {
