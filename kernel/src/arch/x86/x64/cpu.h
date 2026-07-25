@@ -225,7 +225,7 @@ public:
 
 };
 
-INLINE bool x86_x64_has_cpuid() {
+INLINE __attribute__((always_inline)) bool x86_x64_has_cpuid() {
 
     /* 
      * According to the IA-32 Intel Architecture Software Developer's

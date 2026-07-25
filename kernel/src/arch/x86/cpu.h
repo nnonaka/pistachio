@@ -32,7 +32,7 @@
 #ifndef __ARCH__X86__CPU_H__
 #define __ARCH__X86__CPU_H__
 
-INLINE void x86_cpuid(word_t index,
+INLINE __attribute__((always_inline)) void x86_cpuid(word_t index,
 		      u32_t* eax, u32_t* ebx, u32_t* ecx, u32_t* edx)
 {
     __asm__ (

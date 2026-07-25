@@ -141,7 +141,7 @@ INLINE void x86_mmu_t::enable_pae_mode()
  * Checks if CPU has long mode
  *       
  */
-INLINE bool x86_mmu_t::has_long_mode()
+INLINE __attribute__((always_inline)) bool x86_mmu_t::has_long_mode()
 {
     if (!(x86_x64_has_cpuid()))
         return false;
