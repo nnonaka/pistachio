@@ -193,7 +193,9 @@ struct x86_x64_cpu_features_t{
 
 #if defined(__cplusplus)
 public:
-    x86_x64_cpu_features_t() SECTION(SEC_INIT);
+    /* thin forwarder to x86_x64_cpu_features_init(); the SEC_INIT lives on
+       that free function in cpu.c, so no section attribute here. */
+    x86_x64_cpu_features_t();
     void dump_features();
 
     char *get_cpu_vendor() { return cpu_vendor; }
@@ -226,6 +228,22 @@ public:
 
 };
 typedef struct x86_x64_cpu_features_t x86_x64_cpu_features_t;
+
+/*
+ * The probing logic lives in arch/x86/x64/cpu.c (compiled as C).  The C++
+ * constructor and dump_features() method are kept as thin forwarders so
+ * CTORPRIO global construction of boot_cpu_ft and every `.dump_features()`
+ * call site keep working unchanged.
+ */
+BEGIN_DECLS
+void x86_x64_cpu_features_init (x86_x64_cpu_features_t *self);
+void x86_x64_cpu_features_dump (x86_x64_cpu_features_t *self);
+END_DECLS
+
+#if defined(__cplusplus)
+INLINE x86_x64_cpu_features_t::x86_x64_cpu_features_t () { x86_x64_cpu_features_init (this); }
+INLINE void x86_x64_cpu_features_t::dump_features () { x86_x64_cpu_features_dump (this); }
+#endif
 
 INLINE __attribute__((always_inline)) bool x86_x64_has_cpuid() {
 

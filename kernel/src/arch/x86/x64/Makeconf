@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/arch/x86/x64/, init32.cc cpu.cc)
+SOURCES += $(addprefix src/arch/x86/x64/, init32.cc cpu.c)
 
 CCFLAGS_src/arch/x86/x64/init32 = -DX64_32BIT_CODE\
 				  $(patsubst -m64, -m32,\
