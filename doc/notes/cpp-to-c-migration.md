@@ -507,7 +507,22 @@ which is the safest possible way to land the struct.  Free functions follow the 
 consumer, never speculatively (they'd be untestable until then).
 
 
-## 18. SCOPE — `kernelinterface.h` / KIP closure (2026-07-25, planned)
+## 18. `kernelinterface.h` / KIP closure — SCOPED + DONE (2026-07-25, commit 0f38291)
+
+**Outcome:** executed exactly as scoped below, in one slice.  All ~20 classes across the 4
+headers became dual-representation structs; the linked kernel is **byte-for-byte identical**
+(362368) and boots l4test.  Milestone proven: a standalone C compile that `#include`s
+`thread.h` reaches `threadid_t`, `get_kip()`, the nested info structs, bitfields, the
+`char[4]/word_t` unions, and `mem_region_t`-by-value — all from C.  `thread.h` + the KIP are
+now C-includable.  The scope below matched reality with no surprises (the operator/overload
+constructs all sat cleanly inside the `__cplusplus` guard; no call-site churn).  Reconfirmed
+that anonymous `struct`-in-`union` (memory_info_t) and `union`-in-`struct` compile under
+`-std=gnu99`.  Next: threadid_t's C free-function API, and hunting `.cc` files whose only
+non-C-safe include was `thread.h`/KIP.
+
+---
+
+### Original scope (2026-07-25)
 
 Goal: make the Kernel Interface Page header C-includable via dual-representation, which in
 turn makes **`thread.h` fully C-includable** (its only non-C-safe include).  This is the
