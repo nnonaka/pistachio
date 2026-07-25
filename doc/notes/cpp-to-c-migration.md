@@ -433,3 +433,40 @@ flip consumer files one at a time.
   (e.g. `mapping_alloc.cc`) — each just needs its own includes checked + a boottest.
 - Value types next: `threadid_t` / `spaceid_t` (many consumers, but pure data + methods →
   dual-representation keeps call sites intact), then work up toward `tcb_t` / `space_t`.
+
+
+## 16. `mapping_alloc.cc` → C (Pass B) — DONE (2026-07-25, commit ce22043)
+
+Third `.c` file.  The lesson here: **a file's difficulty is its include closure, not its
+own code.**  `mapping_alloc` is a plain buffer allocator, but it includes `mapping.h`, the
+MDB *type* header, which `#include`s the entire page-table header stack
+(`pgent.h` → `ptab.h` → `x86.h`, plus `fpage.h`).  Converting all of that (pgent_t /
+fpage_t alone are ~120 methods) would have been a huge slice.
+
+**What kept it bounded:** `mapping_alloc` uses only the MDB node structs (via `sizeof`),
+`mdb_buflist_t`, and the `MDB_NUM_PGSIZES` constant — never `pgent_t` / `fpage_t`.  So
+`mapping.h` now guards `#include pgent.h` / `#include fpage.h` under `__cplusplus` and pulls
+in `ptab.h` directly for the constant.  `ptab.h`'s one class (`x86_pgent_t`) is guarded;
+`x86.h` was already class-free.  The 120-method page-table classes were **not** touched.
+
+- `mapnode_t` / `rootnode_t` / `dualnode_t` / `mdb_buflist_t`: class → struct, methods +
+  nested `pgsize_e` enum + the namespace-scope `pgsize_e` operator overloads guarded under
+  `__cplusplus`.  class↔struct is ABI-neutral (no vtables).  Their bitfield-union data stays
+  C-visible so `sizeof` is correct.
+- Linkage: `mdb_alloc_buffer` / `mdb_free_buffer` (defined in the flipped C file) moved under
+  `BEGIN_DECLS` in **both** `mapping.h` and `mdb.h` so every TU agrees on C linkage;
+  `mapping.cc`'s file-scope forward decl of `mdb_buflist_init` became `extern "C"`.
+  *Gotcha:* a linkage spec (`extern "C"`) is illegal at block scope — it has to sit at file
+  scope, not inside the function that calls it.
+- In-file: the two private structs (`mdb_link_t`, `mdb_mng_t`) needed `struct` tags on their
+  self-referential pointer members + trailing typedefs; one `~(int)` mask got a `word_t`
+  cast for `-Wconversion`.
+
+Forward-decl tag rule reconfirmed: a type still defined as `class` elsewhere (`space_t`,
+`pgent_t`) must keep a `class` forward-decl for C++ and a `struct` one for C (guarded), or
+the C++ front end warns on the tag mismatch.  Types converted in-file (`mapnode_t` etc.) use
+`struct` in both.
+
+Boot-verified: the MDB allocator is driven by every page mapping, so reaching l4test with no
+"Illegal MDB buffer allocation" panic confirms it.  Three generic C files now: `lib.c`,
+`kmemory.c`, `mapping_alloc.c`.
