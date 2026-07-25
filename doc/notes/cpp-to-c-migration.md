@@ -1007,3 +1007,31 @@ trailing content, never on whitespace.
 Tally so far: ~23 headers converted + 2 .cc flipped (cpu, ctors); 2 more .cc are CLEAN-closure
 and ready to flip.  Next: ringlist_t concrete type -> ktcb.h -> the cluster cascades, then flip
 kernelinterface.cc / processor.cc to actually bank .c files.
+
+
+## 36. Flip kernelinterface.cc -> C (the KIP) — DONE (2026-07-25, commit 4165a6e)
+
+First API-layer .cc flipped, and the ABI-critical one: the global Kernel Interface Page
+definition + init.  Compiled by the C frontend, boots l4test (userland reads the KIP).  Not
+byte-identical (362272 -> 362184).  7 C files now.
+
+Mechanic (extends the cpu.cc ctor->init pattern to a whole file of methods):
+- 4 OOL methods -> C free functions (processor_info_get_procdesc / memory_info_get_memdesc /
+  memory_info_insert / kernel_interface_page_init), `this` -> `self`; C++ methods kept as thin
+  forwarders in the header so all `.method()` call sites are unchanged.  A guarded enum param
+  (memdesc_t::type_e) becomes word_t at the forward boundary.
+- Rather than cascade into a memdesc_set free function, memory_info_insert **inlines** the one
+  `md->set(...)` it needs (the _type/_low/... bitfields are C-visible).  Inline a single
+  cross-class method call instead of converting the callee when it's used exactly once.
+- `extern "C" { }` blocks -> BEGIN_DECLS/END_DECLS.  The KIP's GNU colon-designated aggregate
+  initializer (`{string:{...}}`, `{raw: ...}`, SHUFFLEn) compiles unchanged under gcc's C
+  frontend (gnu17) -- no need to rewrite it to C99 `.field =`.
+
+**Linkage lesson (new):** flipping a file to C surfaces every C++ symbol it references by name.
+kdebug_init / kdebug_entry (kdb .cc definitions, and kdebug_entry's debug.h declaration) had to
+become `extern "C"` so the C file's unmangled references resolve.  Pattern: when a flipped .c
+gets "undefined reference to <name>", make that symbol's definition + header decl extern "C"
+(BEGIN_DECLS).
+
+Remaining: processor.cc is the other CLEAN-closure file ready to flip; the 23-file tcb cluster
+still gated on sched-rr/ktcb.h (ringlist_t<tcb_t> template member) + arch/x86/segdesc.h + acpi.h.
