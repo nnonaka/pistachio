@@ -31,6 +31,7 @@
  ********************************************************************/
 
 #include <debug.h>	/* TRACEF */
+#include <ctors.h>
 
 
 // helper type
@@ -42,21 +43,21 @@ extern func_ptr __ctors_NODE__[];
 extern func_ptr __ctors_GLOBAL__[];
 
 /// calls all constructors for CPU-local global objects
-void call_cpu_ctors()
+void call_cpu_ctors(void)
 {
     for (unsigned int i = 0; __ctors_CPU__[i] != 0; i++)
 	__ctors_CPU__[i] ();
 }
 
 /// calls all constructors for node-local global objects
-void call_node_ctors()
+void call_node_ctors(void)
 {
     for (unsigned int i = 0; __ctors_NODE__[i] != 0; i++)
 	__ctors_NODE__[i] ();
 }
 
 /// calls truly global constructors
-void call_global_ctors()
+void call_global_ctors(void)
 {
     for (unsigned int i = 0; __ctors_GLOBAL__[i] != 0; i++)
 	__ctors_GLOBAL__[i] ();

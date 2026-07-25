@@ -54,8 +54,10 @@
 
 
 // prototypes
-void call_cpu_ctors();
-void call_node_ctors();
-void call_global_ctors();
+BEGIN_DECLS
+void call_cpu_ctors(void);
+void call_node_ctors(void);
+void call_global_ctors(void);
+END_DECLS
 
 #endif /* !__CTORS_H__ */
