@@ -20,6 +20,7 @@
 
 extern cpuid_t current_cpu;
 
+#if defined(__cplusplus)
 class space_t : public x86_space_t
 {
 public:
@@ -162,8 +163,16 @@ public:
     friend class pgent_t;
 
 };
+#else /* !__cplusplus */
+struct space_t {
+    /* space_t adds no data of its own; single inheritance from x86_space_t
+       becomes base-as-first-member in C (identical layout, no vtable). */
+    x86_space_t base;
+};
+#endif /* __cplusplus */
+typedef struct space_t space_t;
 
-
+#if defined(__cplusplus)
 /**********************************************************************
  *
  *                      inline functions
@@ -445,6 +454,7 @@ INLINE void align_memregion(mem_region_t & region, word_t size)
     region.low = addr_t((word_t)region.low & ~(size - 1));
     region.high = addr_t(((word_t)region.high + size - 1) & ~(size - 1));
 }
+#endif /* __cplusplus */
 
 
 
