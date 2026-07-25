@@ -35,8 +35,13 @@
 
 #include INC_API(config.h)
 
+#if defined(__cplusplus)
 class fpage_t;
 class tcb_t;
+#else
+struct fpage_t;
+struct tcb_t;
+#endif
 
 
 /**
@@ -44,12 +49,12 @@ class tcb_t;
  * pages. arch_fpage_t implements the architecture-specific flexpage type,
  * having read, write and execute bits.
  */
-class arch_fpage_t
+struct arch_fpage_t
 {
     /* data members */
-public:
     word_t raw;
     /* member functions */
+#if defined(__cplusplus)
 public:
 
     /**
@@ -130,9 +135,10 @@ public:
      * @return delivers an fpage covering the complete arch-specific space
      */
     static arch_fpage_t complete() { return (arch_fpage_t) { raw:0}; }
-    
+#endif /* __cplusplus */
 
 };
+typedef struct arch_fpage_t arch_fpage_t;
 
 
 #endif /* !__GENERIC__FPAGE_H__ */
