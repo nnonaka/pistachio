@@ -919,3 +919,27 @@ Frontier: 21-file cluster split onto `api/v4/space.h` (generic space_t, **14**) 
 `generic/linear_ptab.h` (**7**).  Space chain: x86_space_t -> glue space_t (both done) ->
 api/v4/space.h next (the generic/API space layer).  Down to ~2 core headers before the cluster
 finally goes CLEAN.
+
+
+## 32. api/v4/space.h done — space wall fully down; frontier is now TEMPLATES (2026-07-25, commit 4dba989)
+
+Final link of the space chain: api/v4/space.h (extern space_t* globals + is_*_space free
+predicates [kept C-visible, pointer compares] + OOL space_t:: method bodies [guarded]).
+Byte-identical (362272), boots.  **The entire space_t chain -- x86_space_t -> glue space_t ->
+api/v4/space.h -- is now C-includable.** This was the hardest, most layout-critical part of the
+migration, landed across §30-32 all byte-identical.
+
+New frontier, and it's a different animal -- **templates** (plan §4: templates -> concrete
+structs / X-macros, not class dual-rep):
+- `generic/bitmask.h` (**14**): `template<typename T> class bitmask_t` -- a T-wrapper with
+  ctors + operators.  Only 3 instantiations in the tree: bitmask_t<u16_t>, <u32_t>, <word_t>.
+  Approach: guard the template under __cplusplus, emit the 3 concrete C structs (X-macro or
+  hand-written), typedef-bridge where used as struct members.
+- `generic/linear_ptab.h` (**7**): a `template<typename T>` (the linear page-table walker) --
+  needs the same treatment.
+Minor independent gates unchanged: segdesc.h (4), x64/syscalls.h (3), user.h (2), acpi.h (1).
+
+Milestone: 16 header conversions + 2 .cc flips this campaign; every value/KIP/space header now
+C-includable.  The remaining walls (bitmask, linear_ptab) are templates -- mechanically
+different but small (3 instantiations / 1 walker), and they're the last thing between here and
+the first mapping/space/api .cc flips.
