@@ -42,8 +42,9 @@
 #define TID_LOCAL_ID_BITS		L4_LOCAL_ID_BITS
 #endif /* !defined(TID_GLOBAL_VERSION_BITS) */
 
-class threadid_t
+struct threadid_t
 {
+#if defined(__cplusplus)
 public:
     static threadid_t anythread()
     {
@@ -122,6 +123,7 @@ public:
 
 
 private:
+#endif /* __cplusplus */
     union {
 	word_t raw;
 
@@ -138,7 +140,9 @@ private:
 	} global;
     };
 } __attribute__((packed));
+typedef struct threadid_t threadid_t;
 
+#if defined(__cplusplus)
 INLINE void threadid_t::set_global_id(word_t threadno, word_t version)
 {
     global.threadno = threadno & (~0UL >> (BITS_WORD - TID_GLOBAL_THREADNO_BITS));
@@ -151,6 +155,7 @@ INLINE threadid_t threadid(word_t rawid)
     t.set_raw(rawid);
     return t;
 }
+#endif /* __cplusplus */
 
 /* special thread ids */
 #define NILTHREAD	(threadid_t::nilthread())
