@@ -32,9 +32,8 @@
 #ifndef __API__V4__PREEMPT_H__
 #define __API__V4__PREEMPT_H__
 
-class preempt_flags_t
+struct preempt_flags_t
 {
-public:
     union {
 	u8_t raw;
 	struct {
@@ -46,6 +45,7 @@ public:
 	} flags;
     };
 
+#if defined(__cplusplus)
     bool is_signaled()	{ return flags.signaled; }
     bool is_delayed()	{ return flags.delayed; }
     bool is_pending()	{ return flags.pending; }
@@ -59,6 +59,8 @@ public:
 	    flags.pending = false;
 	    return (*this);
 	}
+#endif /* __cplusplus */
 } __attribute__((packed));
+typedef struct preempt_flags_t preempt_flags_t;
 
 #endif /* !__API__V4__PREEMPT_H__ */
