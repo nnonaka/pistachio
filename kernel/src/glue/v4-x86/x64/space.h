@@ -48,8 +48,15 @@
 #include <mdb.h>
 
 /* forward declarations - space_t depends on tcb_t and utcb_t */
+#if defined(__cplusplus)
 class tcb_t;
 class utcb_t;
+#else
+struct tcb_t;
+typedef struct tcb_t tcb_t;
+struct utcb_t;
+typedef struct utcb_t utcb_t;
+#endif
 
 #define PGSIZE_UTCB	(pgent_t::size_4k)
 #define PGSIZE_KTCB	(pgent_t::size_4k)
@@ -64,10 +71,58 @@ extern struct transTable_t {
 	word_t size;
 } transTable[TRANSLATION_TABLE_ENTRIES];
    
+#if defined(__cplusplus)
+class space_t;
+#else
+struct space_t;
+typedef struct space_t space_t;
+#endif
+
+/*
+ * kernel_pdp_t / top_pdir_t were nested in x86_space_t.  Hoisted to
+ * top-level structs so x86_space_t's data (which holds a top_pdir_t*) is
+ * C-visible; re-aliased with typedefs inside x86_space_t below so
+ * x86_space_t::top_pdir_t / sizeof(top_pdir_t) keep working in C++.
+ */
+struct x86_kernel_pdp_t {
+    union {
+	x86_pgent_t pdpe[512];
+	struct {
+	    /* Copy area */
+	    x86_pgent_t copy_area[COPY_AREA_COUNT][COPY_AREA_SIZE >> X86_X64_PDP_BITS];
+	    /* Kernel area */
+	    x86_pgent_t reserved[512 - 6 - COPY_AREA_COUNT * ((COPY_AREA_SIZE >> X86_X64_PDP_BITS))];
+	    x86_pgent_t ktcb;
+	    x86_pgent_t remap32[4];
+	    x86_pgent_t kernel_area;
+	} __attribute__((aligned(X86_PTAB_BYTES)));
+    };
+};
+typedef struct x86_kernel_pdp_t x86_kernel_pdp_t;
+
+struct x86_top_pdir_t {
+    union {
+	pgent_t pgent[512];
+	struct {
+	    pgent_t user_area[X86_X64_PML4_IDX(USER_AREA_END)];
+	    space_t * space; /* space backlink */
+	    pgent_t kernel_pdp;
+	} __attribute__((aligned(X86_PTAB_BYTES)));
+    };
+#if defined(__cplusplus)
+    pgent_t *get_kernel_pdp_pgent()
+	{  return kernel_pdp.subtree((space_t *) this, pgent_t::size_512g); }
+    x86_kernel_pdp_t *get_kernel_pdp()
+	{  return (x86_kernel_pdp_t *) get_kernel_pdp_pgent(); }
+#endif
+};
+typedef struct x86_top_pdir_t x86_top_pdir_t;
+
 /**
  * The address space representation
  */
-class x86_space_t {
+struct x86_space_t {
+#if defined(__cplusplus)
 public:
     enum access_e {
 	read		= 0,
@@ -75,46 +130,16 @@ public:
 	readwrite	= -1,
 	execute		= 16
     };
-    
+
+    typedef x86_kernel_pdp_t kernel_pdp_t;
+    typedef x86_top_pdir_t top_pdir_t;
 protected:
-    class kernel_pdp_t {
-    public:
-	union {
-	    x86_pgent_t pdpe[512];
-	    struct {	
-		/* Copy area */
-		x86_pgent_t copy_area[COPY_AREA_COUNT][COPY_AREA_SIZE >> X86_X64_PDP_BITS];
-		/* Kernel area */
-		x86_pgent_t reserved[512 - 6 - COPY_AREA_COUNT * ((COPY_AREA_SIZE >> X86_X64_PDP_BITS))];
-		x86_pgent_t ktcb;
-		x86_pgent_t remap32[4];
-		x86_pgent_t kernel_area;
-	    } __attribute__((aligned(X86_PTAB_BYTES)));
-	};
-    };
-
-    class top_pdir_t {
-    public:
-	union {
-	    pgent_t pgent[512];
-	    struct {
-		pgent_t user_area[X86_X64_PML4_IDX(USER_AREA_END)];
-		space_t * space; /* space backlink */
-		pgent_t kernel_pdp;
-	    } __attribute__((aligned(X86_PTAB_BYTES)));
-	};
-	pgent_t *get_kernel_pdp_pgent()
-	    {  return kernel_pdp.subtree((space_t *) this, pgent_t::size_512g); }
-	kernel_pdp_t *get_kernel_pdp()
-	    {  return (kernel_pdp_t *) get_kernel_pdp_pgent(); }
-
-    };
-
+#endif
     struct
     {	
 	struct {
 	    /* CPU-specific ptabs */
-	    top_pdir_t* top_pdir;
+	    x86_top_pdir_t* top_pdir;
 	    atomic_t thread_count;
 	} cpu_ptab [CONFIG_SMP_MAX_CPUS];
 	word_t reference_ptab;
@@ -129,17 +154,20 @@ protected:
 #endif		    
     } data;
 
+#if defined(__cplusplus)
 public:
 
-    static const addr_t sign_extend(addr_t addr) 
+    static const addr_t sign_extend(addr_t addr)
 	{ return (addr_t) ((word_t) addr | X86_X64_SIGN_EXTENSION); }
-    
+
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
     /* Compatibility Mode specific functions */
     bool is_compatibility_mode() { return data.compatibility_mode == true; }
 #endif
+#endif /* __cplusplus */
 
 } __attribute__((aligned(X86_PTAB_BYTES)));
+typedef struct x86_space_t x86_space_t;
 
 
 
