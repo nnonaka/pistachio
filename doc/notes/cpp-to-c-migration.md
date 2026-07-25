@@ -1070,3 +1070,30 @@ dedicated careful pass (no inheritance -- tcb_t is not derived).
 
 Cluster is one header from cascading: tcb.h -> then re-scan should flip many api/glue .cc to
 CLEAN.  segdesc.h (5, arch/x86 parent) and acpi.h (1) remain independent.
+
+
+## 39. tcb.h (the thread control block) -- the keystone, cluster cascades (2026-07-25, commit 6965aff)
+
+The biggest and most ABI-critical class in the kernel, converted byte-identical (362168),
+boots.  Converting it **broke the 23-file logjam**: 5 files went CLEAN at once (mapping.cc,
+asmsyms.cc, x64 exception/syscalls/user), the rest split onto small gates (smp.h 7, schedule.h
+5, segdesc.h 5, intctrl.h/acpi.h 2, mdb_mem.h/tss.h/fpu.h 1).
+
+**Tooling lesson: for a large intricate class, script it, don't hand-edit.**  tcb.h has ~180
+in-class method decls, a nested typedef, 8 interspersed data access labels, in-class + trailing
+friends, and ~90 out-of-line inline methods after the class.  A line-by-line state machine
+(scratchpad/conv_tcb.py: pre -> class-open -> methods -> data -> regionB[friends] ->
+regionC[tail]) did it cleanly and reproducibly; ad-hoc perl/Edit would have been error-prone.
+Byte-identity confirmed the whole thing preserved the layout.
+
+Sub-points worth keeping:
+- A `typedef ... X;` nested inside a class is illegal in C -> hoist to file scope (perl move,
+  no retype, to preserve layout exactly).
+- Guard the data-section access labels *individually* (between the TCB markers); guard the
+  enums+methods as one block before the markers; guard the trailing tail (externs, OOL methods,
+  glue include, prototypes) wholesale after the class `};`.
+
+Milestone: the entire value-type / KIP / space / tcb layer is now C-includable.  ~32 headers
+converted + 4 .cc flipped.  The remaining gates are small and mostly independent (smp.h,
+schedule.h, segdesc.h, intctrl.h, acpi.h, ...) -- the hard structural work is behind us; what's
+left is a longer tail of routine header dual-reps and then the bulk of the .cc flips.
