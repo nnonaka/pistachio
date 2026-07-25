@@ -32,14 +32,14 @@
 #ifndef __GLUE__V4_X86__HWSPACE_H__
 #define __GLUE__V4_X86__HWSPACE_H__
 
-template<typename T> INLINE T virt_to_phys(T x)
-{
-    return (T) ((word_t) x - KERNEL_OFFSET);
-}
-
-template<typename T> INLINE T phys_to_virt(T x)
-{
-    return (T) ((word_t) x + KERNEL_OFFSET);
-}
+/*
+ * virt_to_phys / phys_to_virt were `template<typename T>` inline functions.
+ * They are expressed here as __typeof__ macros so the header is includable
+ * from C as well as C++: the macro preserves the argument's type as the
+ * result type (as the template did), evaluates its argument once
+ * (__typeof__ does not evaluate its operand), and generates identical code.
+ */
+#define virt_to_phys(x)	((__typeof__(x)) ((word_t) (x) - KERNEL_OFFSET))
+#define phys_to_virt(x)	((__typeof__(x)) ((word_t) (x) + KERNEL_OFFSET))
 
 #endif /* !__GLUE__V4_X86__HWSPACE_H__ */
