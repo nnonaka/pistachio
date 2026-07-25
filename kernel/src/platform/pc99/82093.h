@@ -45,6 +45,7 @@ typedef union {
     u32_t raw;
 } ioapic_version_t;
     
+#if defined(__cplusplus)
 class ioapic_redir_t {
 public:
     union {
@@ -177,5 +178,6 @@ public:
 	    return redir;
 	}
 };
+#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__82093_H__ */

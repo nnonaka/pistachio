@@ -45,6 +45,7 @@
 
 #define NUM_REDIR_ENTRIES	(CONFIG_MAX_IOAPICS * I82093_NUM_IRQS)
 
+#if defined(__cplusplus)
 class intctrl_t : public generic_intctrl_t 
 {
 private:
@@ -188,6 +189,7 @@ public:
     
     friend class kdb_t;
 };
+#endif /* __cplusplus */
 
 
 #endif /* !__PLATFORM__GENERIC__INTCTRL_APIC_H__ */

@@ -32,6 +32,8 @@
 #ifndef __ARCH__X86__APIC_H__
 #define __ARCH__X86__APIC_H__
 
+#if defined(__cplusplus)
+
 
 template <word_t base> class local_apic_t
 {
@@ -487,4 +489,5 @@ INLINE void local_apic_t<base>::broadcast_nmi(bool self)
    
 }
 
+#endif /* __cplusplus */
 #endif /* !__ARCH__X86__APIC_H__ */

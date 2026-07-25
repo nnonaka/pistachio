@@ -50,11 +50,14 @@ INLINE bool intctrl_t::is_irq_available(word_t irq)
 /**
  * @return pointer to interrupt controller
  */
+#if defined(__cplusplus)
 INLINE intctrl_t * get_interrupt_ctrl() 
 {
     extern intctrl_t intctrl;
     return &intctrl;
 }
+#endif /* __cplusplus */
+
 
 
 #endif /* !__GLUE__V4_X86__INTCTRL_H__ */
