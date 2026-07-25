@@ -64,13 +64,51 @@ typedef word_t (arch_ktcb_t::*set_ctrlxfer_regs_t)(word_t id, word_t mask, tcb_t
 #endif
 
 
+#if defined(__cplusplus)
 class space_t;
+#else
+struct space_t;
+typedef struct space_t space_t;
+#endif
+
+/* Hoisted out of tcb_t (C forbids a typedef inside a struct). */
+typedef union {
+	struct {
+	    struct 
+	    {
+		/* IPC copy */
+		word_t		mr[IPC_NUM_SAVED_MRS];
+		word_t		br0;
+		threadid_t	partner;
+		threadid_t	vsender;
+		word_t		state;
+		word_t		error;
+	    } saved_state[IPC_NESTING_LEVEL];
+
+	    struct {
+		word_t		copy_length;
+		addr_t		copy_start_src;
+		addr_t		copy_start_dst;
+		addr_t		copy_fault;
+	    } ipc_copy;
+	};
+	struct {
+	    /* Exchange registers */
+	    word_t		control;
+	    word_t		sp;
+	    word_t		ip;
+	    word_t		flags;
+	    threadid_t		pager;
+	    word_t		user_handle;
+	} exregs;
+} misc_tcb_t;
 
 /**
  * tcb_t: kernel thread control block
  */
-class tcb_t
+struct tcb_t
 {
+#if defined(__cplusplus)
 public:
     enum unwind_reason_e {
 	abort		= 1,
@@ -260,36 +298,6 @@ private:
 
 public:
 
-    typedef union {
-	struct {
-	    struct 
-	    {
-		/* IPC copy */
-		word_t		mr[IPC_NUM_SAVED_MRS];
-		word_t		br0;
-		threadid_t	partner;
-		threadid_t	vsender;
-		word_t		state;
-		word_t		error;
-	    } saved_state[IPC_NESTING_LEVEL];
-
-	    struct {
-		word_t		copy_length;
-		addr_t		copy_start_src;
-		addr_t		copy_start_dst;
-		addr_t		copy_fault;
-	    } ipc_copy;
-	};
-	struct {
-	    /* Exchange registers */
-	    word_t		control;
-	    word_t		sp;
-	    word_t		ip;
-	    word_t		flags;
-	    threadid_t		pager;
-	    word_t		user_handle;
-	} exregs;
-    } misc_tcb_t;
     
     void init_saved_state();
     threadid_t get_saved_partner (word_t level = 0);
@@ -297,27 +305,36 @@ public:
     thread_state_t get_saved_state (word_t level = 0);
     void set_saved_state (thread_state_t s, word_t level = 0);
     
+#endif /* __cplusplus */
     /* do not delete this TCB_START_MARKER */
 
     // have relatively static values here
     threadid_t		myself_global;
     threadid_t		myself_local;
 
+#if defined(__cplusplus)
 private:
+#endif
     cpuid_t		cpu;
     utcb_t *		utcb;
     
     thread_state_t 	thread_state;
     threadid_t		partner;
 
+#if defined(__cplusplus)
 public:
+#endif
     resource_bits_t	resource_bits;
     word_t *		stack;
+#if defined(__cplusplus)
 private:
+#endif
     /* VU: pdir_cache should be architecture-specific!!! */
     word_t		pdir_cache;
 
+#if defined(__cplusplus)
 public:
+#endif
     queue_state_t	queue_state;
 
     /* queues and scheduling state */
@@ -335,7 +352,9 @@ public:
     lockstate_t		lock_state;
 #endif
 
+#if defined(__cplusplus)
 private:
+#endif
     /* pager etc */
     space_t *		space;
 
@@ -343,17 +362,24 @@ private:
     ctrlxfer_mask_t	fault_ctrlxfer[4+arch_ktcb_t::fault_max];
 #endif
 
+#if defined(__cplusplus)
 public:
+#endif
     bitmask_word_t	flags;
     arch_ktcb_t		arch;
 
+#if defined(__cplusplus)
 public:
+#endif
     misc_tcb_t		misc;
     thread_resources_t	resources;
 
+#if defined(__cplusplus)
 private:
+#endif
     word_t		kernel_stack[0];
     /* do not delete this TCB_END_MARKER */
+#if defined(__cplusplus)
 
     /* class friends */
     friend void dump_tcb(tcb_t *, bool extended);
@@ -364,7 +390,10 @@ private:
     static  tcb_t *tcb_array[TOTAL_KTCBS];
 #endif
 
+#endif /* __cplusplus */
 };
+
+#if defined(__cplusplus)
 
 /* union to allow allocation of tcb including stack */
 typedef union _whole_tcb_t {
@@ -832,6 +861,8 @@ void init_root_servers();
  */
 void init_kernel_threads();
 
+
+#endif /* __cplusplus */
 
 #endif /* !__API__V4__TCB_H__ */
 
