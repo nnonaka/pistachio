@@ -329,3 +329,20 @@ kickstart) + QEMU `-d int` + reading physical memory and CR3 from the trampoline
 Net: the harness + serial path work and reach `Launching kernel ...`; a full boot to userland
 is blocked on fault #2. Per-slice verification meanwhile relies on the `objdump` byte-identity
 check and the clean C++ rebuild (binary size unchanged).
+
+## 12. Boot progress after the objcopy fix (2026-07-25)
+
+With the addend fix (§11) the kernel boots **all the way through init** (verified with
+CONFIG_VERBOSE_INIT): CPU features, kernel space, TCBs (the KTCB `#PF`s are the *designed*
+on-demand allocation via the page-fault handler — "fault #3" was a non-issue), IDT, KIP,
+ACPI/APIC/IOAPIC, timer, per-CPU bring-up (3494 MHz), threading, "Idle thread started",
+and it creates sigma0 + the root task. sigma0 and l4test run in user mode (cpl=3).
+
+**Next blocker — sigma0 crashes right after L4_KernelInterface().** sigma0's `lock; nop`
+(user/include/l4/amd64/syscalls.h:57) is the L4 KernelInterface magic; the kernel emulates
+it in exc_invalid_opcode (glue/v4-x86/exception.cc:481), returning the KIP base in %rax via
+`space->get_kip_page_area().get_base()`. Immediately afterwards sigma0 does a user read of
+`CR2=0x8` (near-null) → i.e. the returned KIP base is 0, so sigma0's space appears to have no
+KIP area set. Next step: check how sigma0's space / kip_area is initialised (space_t::init /
+the root-server creation path) — a genuine kernel/space-init issue, unrelated to the
+trampoline fixes and to the C++→C conversion.
