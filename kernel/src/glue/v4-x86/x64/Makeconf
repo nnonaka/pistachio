@@ -43,7 +43,7 @@ endif
 
 # use linear_ptab_walker if need be
 SOURCES+=src/generic/linear_ptab_walker.cc \
-	 src/generic/mapping_alloc.cc 
+	 src/generic/mapping_alloc.c 
 
 ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	src/generic/mdb.cc \

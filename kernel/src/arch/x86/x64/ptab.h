@@ -47,7 +47,8 @@
 #define X86_PGSIZES		{ size_4k = 0, size_2m = 1, size_1g = 2, size_512g = 3, \
 				  size_sync = size_1g, size_superpage = size_2m, size_max = size_512g }
 
-class x86_pgent_t 
+#if defined(__cplusplus)
+class x86_pgent_t
 {
 public:
     enum pagesize_e {
@@ -210,6 +211,7 @@ private:
 
     friend class pgent_t;
 };
+#endif /* __cplusplus */
 
 #endif /* !ASSEMBLY */
 

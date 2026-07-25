@@ -99,8 +99,9 @@ mdb_buflist_t mdb_buflists[MDB_NUM_PGSIZES + 3];
  * Structure used for freelists.
  */
 struct mdb_link_t {
-    mdb_link_t		*next;
+    struct mdb_link_t	*next;
 };
+typedef struct mdb_link_t mdb_link_t;
 
 /*
  * Structure used for managing contents of a 4kb page.
@@ -108,10 +109,11 @@ struct mdb_link_t {
 struct mdb_mng_t {
     mdb_link_t		*freelist;
     word_t		num_free;
-    mdb_mng_t 		*next_freelist;
-    mdb_mng_t		*prev_freelist;
+    struct mdb_mng_t 	*next_freelist;
+    struct mdb_mng_t	*prev_freelist;
     mdb_buflist_t 	*bl;
 };
+typedef struct mdb_mng_t mdb_mng_t;
 
 
 void mdb_add_size (word_t size)
@@ -339,7 +341,7 @@ void mdb_free_buffer (addr_t addr, word_t size)
     }
 
     buf = (mdb_link_t *) addr;
-    mng = (mdb_mng_t *) ((word_t) addr & ~(MDB_ALLOC_CHUNKSZ-1));
+    mng = (mdb_mng_t *) ((word_t) addr & ~(word_t)(MDB_ALLOC_CHUNKSZ-1));
     bl = mng->bl;
 
     ASSERT_BL (bl);

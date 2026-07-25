@@ -925,8 +925,10 @@ INLINE void mdb_table_t::set_objsize (word_t s)
 
 
 /* From generic/mapping_alloc.cc */
+BEGIN_DECLS
 addr_t mdb_alloc_buffer (word_t size);
 void mdb_free_buffer (addr_t addr, word_t size);
+END_DECLS
 
 
 

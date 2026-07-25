@@ -50,6 +50,9 @@ static dualnode_t * mdb_create_dual (mapnode_t * map, rootnode_t * root)
     NOINLINE;
 
 
+/* mdb_buflist_init now lives in mapping_alloc.c (C linkage). */
+extern "C" void mdb_buflist_init (void);
+
 /**
  * Initialize mapping database structures
  */
@@ -57,7 +60,6 @@ void SECTION (".init") init_mdb (void)
 {
     dualnode_t *dual;
 
-    void mdb_buflist_init (void);
     mdb_buflist_init ();
 
     mdb_lock.lock();

@@ -32,13 +32,27 @@
 #ifndef __MAPPING_H__
 #define __MAPPING_H__
 
+#if defined(__cplusplus)
 class space_t;
 class pgent_t;
-class mapnode_t;
-class rootnode_t;
+#else
+struct space_t;
+struct pgent_t;
+#endif
+struct mapnode_t;
+struct rootnode_t;
 
+/*
+ * ptab.h provides the (architecture specific) MDB_NUM_PGSIZES constant and
+ * page-shift tables, which C consumers of this header need.  The pgent_t and
+ * fpage_t class machinery, on the other hand, is only touched by the C++
+ * method bodies below, so it is guarded off for the C path.
+ */
+#include INC_ARCH_SA(ptab.h)
+#if defined(__cplusplus)
 #include INC_ARCH(pgent.h)
 #include INC_API(fpage.h)
+#endif
 
 
 /**
@@ -68,14 +82,14 @@ class rootnode_t;
 extern word_t mdb_pgshifts[];
 
 
-class mdb_mng_t;
-class mdb_buflist_t
+struct mdb_mng_t;
+struct mdb_buflist_t
 {
-public:
     word_t	size;
-    mdb_mng_t	*list_of_lists;
+    struct mdb_mng_t	*list_of_lists;
     word_t	max_free;
 };
+typedef struct mdb_buflist_t mdb_buflist_t;
 
 
 /**
@@ -92,19 +106,19 @@ extern mdb_buflist_t mdb_buflists[];
 
 
 /* Top level mapping node for sigma0. */
-extern mapnode_t * sigma0_mapnode;
+extern struct mapnode_t * sigma0_mapnode;
 
 
 
 /**
  * dualnode_t: node containing pointers to root array and mapping tree
  */
-class dualnode_t
+struct dualnode_t
 {
-public:
-    mapnode_t	*map;
-    rootnode_t	*root;
+    struct mapnode_t	*map;
+    struct rootnode_t	*root;
 };
+typedef struct dualnode_t dualnode_t;
 
 #ifndef MDB_SPACE_BITS
 #define MDB_SPACE_BITS	(BITS_WORD - 11)
@@ -113,7 +127,7 @@ public:
 /**
  * mapnode_t: node for holding a mapping databse entry
  */
-class mapnode_t
+struct mapnode_t
 {
     union {
 	struct {
@@ -129,7 +143,7 @@ class mapnode_t
 	word_t raw[3];
     };
 
-public:
+#if defined(__cplusplus)
 
     enum pgsize_e {
 	size_max = MDB_NUM_PGSIZES-1
@@ -293,17 +307,18 @@ public:
 	{
 	    x.tree_depth = depth & MDB_BITMASK (BITS_WORD - MDB_SPACE_BITS - 3);
 	}
+#endif /* __cplusplus */
 
 } __attribute__ ((packed));
+typedef struct mapnode_t mapnode_t;
 
 
 
 /**
  * rootnode_t: root array node representing a physical page frame
  */
-class rootnode_t
+struct rootnode_t
 {
-public:
     union {
 	struct {
 	    word_t is_next_root		: 1;
@@ -313,6 +328,7 @@ public:
 	word_t raw;
     };
 
+#if defined(__cplusplus)
     mapnode_t * get_map (void)
 	{
 	    if (! x.is_next_map)
@@ -376,10 +392,12 @@ public:
 	}
 
     bool is_next_both (void)
-	{ 
+	{
 	    return x.is_next_root && x.is_next_map;
 	}
+#endif /* __cplusplus */
 };
+typedef struct rootnode_t rootnode_t;
 
 
 
@@ -399,6 +417,7 @@ extern word_t mdb_pgshifts[];
  * readable.
  */
 
+#if defined(__cplusplus)
 INLINE mapnode_t::pgsize_e operator-- (mapnode_t::pgsize_e & l, int)
 {
     mapnode_t::pgsize_e ret = l;
@@ -438,10 +457,13 @@ word_t mdb_flush (mapnode_t * f_map, pgent_t * f_pg,
 		  pgent_t::pgsize_e f_hwpgsize, addr_t f_addr,
 		  pgent_t::pgsize_e t_hwpgsize, fpage_t fp, bool unmap_self);
 void init_mdb (void);
+#endif /* __cplusplus */
 
 /* From generic/mapping_alloc.cc */
+BEGIN_DECLS
 addr_t mdb_alloc_buffer (word_t size);
 void mdb_free_buffer (addr_t addr, word_t size);
+END_DECLS
 
 
 #endif /* !__MAPPING_H__ */

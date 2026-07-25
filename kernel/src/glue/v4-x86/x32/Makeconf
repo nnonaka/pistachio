@@ -35,7 +35,7 @@ SOURCES += $(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, init.cc exception.cc
 	space.cc user.cc thread.cc trap.S trampoline.S memcontrol.cc)
 
 SOURCES+=	src/generic/linear_ptab_walker.cc \
-		src/generic/mapping_alloc.cc
+		src/generic/mapping_alloc.c
 ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	src/generic/mdb.cc \
 		src/generic/mdb_mem.cc
