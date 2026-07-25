@@ -1035,3 +1035,16 @@ gets "undefined reference to <name>", make that symbol's definition + header dec
 
 Remaining: processor.cc is the other CLEAN-closure file ready to flip; the 23-file tcb cluster
 still gated on sched-rr/ktcb.h (ringlist_t<tcb_t> template member) + arch/x86/segdesc.h + acpi.h.
+
+
+## 37. Flip processor.cc -> C — DONE (2026-07-25, commit 79f3dc1)
+
+Second API-layer .cc (both CLEAN-closure files now flipped).  init_cpu becomes C: spinlock
+method -> spinlock_lock/unlock free fns; get_procdesc -> processor_info_get_procdesc (the free
+fn from §36); the two procdesc freq setters inlined to direct field writes.  init_cpu wrapped in
+BEGIN_DECLS in cpu.h.  Boots ("Registering processor 0 in KIP (1000MHz, 3494MHz)").  8 C files.
+
+Confirms the API-layer flip recipe is now routine: (1) header closure CLEAN, (2) body -> free
+functions / inlined one-use method calls / spinlock+get_procdesc free fns, (3) BEGIN_DECLS the
+functions this file *defines* that C++ still calls.  Next .cc flips wait on the tcb cluster
+(ktcb.h ringlist template) or can pick any file whose closure is already CLEAN.
