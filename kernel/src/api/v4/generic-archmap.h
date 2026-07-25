@@ -63,12 +63,14 @@ INLINE void arch_unmap_fpage (tcb_t * from, fpage_t fpage, bool flush) { }
  */
 
 
-INLINE fpage_t acceptor_t::get_arch_specific_rcvwindow(tcb_t *dest) 
-{  
+#if defined(__cplusplus)
+INLINE fpage_t acceptor_t::get_arch_specific_rcvwindow(tcb_t *dest)
+{
     fpage_t fp;
     fp.raw = 0;
     return fp;
 }
+#endif /* __cplusplus */
 
 
 

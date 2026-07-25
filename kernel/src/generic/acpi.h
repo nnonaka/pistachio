@@ -42,6 +42,7 @@ extern addr_t acpi_remap(addr_t addr);
 extern void acpi_unmap(addr_t addr);
 
 
+#if defined(__cplusplus)
 class acpi_gas_t {
 public:
     u8_t	id;
@@ -323,6 +324,7 @@ public:
 
     friend class kdb_t;
 } __attribute__((packed));
+#endif /* __cplusplus */
 
 
 #endif /* !__GENERIC__ACPI_H__ */

@@ -22,6 +22,7 @@
  *
  * @return start address of indicated copy area.
  */
+#if defined(__cplusplus)
 INLINE addr_t thread_resources_t::copy_area_address (word_t n)
 {
     ASSERT (n < COPY_AREA_COUNT);
@@ -207,4 +208,5 @@ INLINE void thread_resources_t::smp_xcpu_pagetable (tcb_t * tcb, cpuid_t cpu)
 #endif
 
 
+#endif /* __cplusplus */
 #endif /* !__GLUE__V4_X86__RESOURCE_FUNCTIONS_H__ */

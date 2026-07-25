@@ -51,6 +51,7 @@
 #define X86_AMDHWCR_START_FID      (63 << 19)  /* startup FID status */
 
 
+#if defined(__cplusplus)
 class x86_amdhwcr_t
 {
 
@@ -308,6 +309,7 @@ public:
     }
 
 };
+#endif /* __cplusplus */
 
 
 

@@ -50,6 +50,7 @@
  * - out_u8, in_u8
  */
 
+#if defined(__cplusplus)
 template <u16_t base> class rtc_t {
 public:
 
@@ -95,6 +96,6 @@ INLINE void wait_for_second_tick()
     // now wait until seconds change
     while (secstart == rtc.read(0));
 }
-
+#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__RTC_H__ */

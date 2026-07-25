@@ -34,6 +34,7 @@
 
 #include <debug.h>	// For UNIMPLEMENTED()	
 
+#if defined(__cplusplus)
 class generic_periodic_timer_t {
 
 public:
@@ -51,5 +52,6 @@ public:
     void init_cpulocal()			{ UNIMPLEMENTED(); };
     void setup()				{ UNIMPLEMENTED(); };
 };
+#endif /* __cplusplus */
 
 #endif /* !__TIMER_H__ */

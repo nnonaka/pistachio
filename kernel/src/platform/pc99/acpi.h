@@ -41,6 +41,7 @@
 #define ACPI20_PC99_RSDP_END	0x100000
 #define ACPI20_PC99_RSDP_SIZE   (ACPI20_PC99_RSDP_END - ACPI20_PC99_RSDP_START)
 
+#if defined(__cplusplus)
 INLINE acpi_rsdp_t* acpi_rsdp_t::locate(addr_t addr)
 {
     /** @todo checksum, check version */
@@ -62,5 +63,6 @@ INLINE acpi_rsdp_t* acpi_rsdp_t::locate(addr_t addr)
     /* not found */
     return NULL;
 };
+#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__ACPI_H__ */
