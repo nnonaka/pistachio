@@ -40,6 +40,7 @@
   - a porting helper, the real intctrl_t can be derived from it
 */
 
+#if defined(__cplusplus)
 class generic_intctrl_t {
  public:
     void mask(word_t irq)		 { UNIMPLEMENTED(); }
@@ -68,4 +69,5 @@ class generic_intctrl_t {
 /* callback function */
 void handle_interrupt(word_t irq);
 
+#endif /* __cplusplus */
 #endif /* !__GENERIC__INTCTRL_H__ */

@@ -45,15 +45,16 @@
 #define IOPERMBITMAP_SIZE		(X86_X64_IOPERMBITMAP_BITS / 8)
 
 
-class x86_x64_tss_t 
+struct x86_x64_tss_t
 {
+#if defined(__cplusplus)
 public:
     void setup(u16_t ss0=0);
     void set_rsp0(u64_t rsp0);
     u64_t get_rsp0();
     addr_t get_io_bitmap();
 
-private:
+#endif /* __cplusplus */
     u32_t	reserved0;
     u64_t	rsp[3] __attribute__((packed));	      
     u64_t	reserved1;
@@ -64,7 +65,9 @@ private:
     u8_t	io_bitmap[IOPERMBITMAP_SIZE] X86_X64_IOPERMBITMAP_ALIGNMENT;
     u8_t	stopper;
 } __attribute__((packed));
+typedef struct x86_x64_tss_t x86_x64_tss_t;
 
+#if defined(__cplusplus)
 INLINE void x86_x64_tss_t::setup(u16_t ss0)
 {
     iopbm_offset = (u16_t)((u64_t)io_bitmap - (u64_t)this);
@@ -86,6 +89,7 @@ INLINE addr_t x86_x64_tss_t::get_io_bitmap()
 {
     return (addr_t) io_bitmap;
 }
+#endif /* __cplusplus */
 
 
 extern x86_x64_tss_t tss;

@@ -34,6 +34,7 @@
 
 #include INC_ARCH(cpu.h)
 
+#if defined(__cplusplus)
 class x86_fpu_t
 {
 public:
@@ -84,5 +85,6 @@ public:
     }
 
 };
+#endif /* __cplusplus */
 
 #endif  /* __ARCH_X86_FPU_H__ */

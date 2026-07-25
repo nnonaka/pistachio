@@ -60,8 +60,8 @@ INLINE u64_t get_cpu_cycles()
 INLINE u64_t get_timestamp()
 {
     // We hope that all processors have synchronized cycle counters.
-    return get_cpu_cycles() / 
-        (get_kip()->processor_info.get_procdesc(0)->internal_freq / 1000);
+    return get_cpu_cycles() /
+        (processor_info_get_procdesc(&get_kip()->processor_info, 0)->internal_freq / 1000);
 }
 
 #endif /* !__GLUE__V4_X86__SCHEDULE_H__ */

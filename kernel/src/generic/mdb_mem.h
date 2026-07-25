@@ -35,6 +35,7 @@
 #include <mdb.h>
 #include INC_GLUE(mdb.h)
 
+#if defined(__cplusplus)
 class space_t;
 
 class mdb_mem_t : public mdb_t
@@ -94,4 +95,5 @@ INLINE word_t mdb_mem_misc (space_t * spc, word_t pgsz, word_t stat = 0)
 extern mdb_mem_t mdb_mem;
 extern mdb_node_t * sigma0_memnode;
 
+#endif /* __cplusplus */
 #endif /* !__MDB_MEM_H__ */

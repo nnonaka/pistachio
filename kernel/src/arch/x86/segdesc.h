@@ -19,10 +19,8 @@
 
 #include INC_ARCH_SA(segdesc.h)
 
-class  x86_descreg_t
+struct x86_descreg_t
 {
-public:
-    
     union 
     {
 	struct {
@@ -31,7 +29,8 @@ public:
 	} descriptor;
 	u16_t  selector;
     };
-	
+#if defined(__cplusplus)
+
     enum regtype_e
     {
 	gdtr = 0x1,
@@ -109,6 +108,8 @@ public:
 		break;
 	    }	
 	}
+#endif /* __cplusplus */
 };
+typedef struct x86_descreg_t x86_descreg_t;
 
 #endif /* !__ARCH__X86__SEGDESC_H__ */
