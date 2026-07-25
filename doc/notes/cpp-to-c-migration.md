@@ -719,3 +719,20 @@ files with constructors/global-ctors (cpu.cc, and later the scheduler/space/tcb 
 the ctor→init conversion.  Keep clearing header closures until a *constructor-free* .cc goes
 CLEAN — that's the next actually-trivial flip — while treating cpu.cc as the first
 "needs-ctor-work" flip when we choose to take it.
+
+
+## 23. queuestate.h + mmu.h → structs (2026-07-25, commit 7c97221)
+
+Two more header gates, dual-representation, byte-identical (362352), boots.
+- `api/v4/queuestate.h`: `queue_state_t` -> struct (`word_t state` visible; nested `state_e`
+  enum + methods + OOL defs guarded).
+- `arch/x86/mmu.h`: `x86_mmu_t` is static-methods-only with **no instances anywhere** — whole
+  class + OOL methods guarded out of C entirely (a C struct would be an empty size-0-vs-1
+  mismatch; nothing to represent).  New sub-pattern: *static-only "namespace" classes get
+  guarded wholesale, not turned into empty structs.*
+
+Frontier after this: still only `arch/x86/x64/cpu.cc` CLEAN (needs ctor→init).  Next gates:
+`api/v4/threadstate.h` (12), `arch/x86/pgent.h` (8).  Note `pgent.h` is the 86-method
+page-table-entry class deferred in §16 — the first genuinely *large* header conversion, and
+the wall between here and the mapping/space `.cc` cluster.  `threadstate.h` (12 files, likely
+small like queuestate) is the cheaper next step.
