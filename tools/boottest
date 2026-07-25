@@ -37,7 +37,7 @@ TOP=$(cd "$(dirname "$0")/.." && pwd)
 BUILDDIR="$TOP/build/x86-x64-p4-smp/kernel"
 USERDIR="$TOP/build/x86-x64-p4-smp/user"
 ROOTTASK="apps/l4test/l4test"
-PASS_RE='completed|all tests|SUCCESS|Sigma0'
+PASS_RE='test suite ready to go|Idle thread started'
 TIMEOUT=30
 
 while getopts "b:u:a:p:t:h" opt; do
