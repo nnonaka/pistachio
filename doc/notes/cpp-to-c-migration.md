@@ -389,3 +389,47 @@ So the destination resolves to t1 but the **send does not rendezvous** with t1's
 Root cause is in the local-ID rendezvous/matching semantics (or a subtle threadid
 interpretation), not destination resolution — needs two-thread state-level tracing to finish.
 Everything ELSE in the suite passes; this is one subtest in an otherwise working kernel.
+
+
+## 15. `kmem_t` allocator → C (Pass A + Pass B) — DONE (2026-07-25)
+
+Converted the kernel memory allocator, the first real subsystem after the scaffolding
+work, and took it all the way to a compiled-as-C translation unit.
+
+**Pass A** (`class kmem_t` → `struct kmem_t` + free functions, commit 41c464f):
+- Methods → free functions under `BEGIN_DECLS`: `kmem.alloc(g,sz)` → `kmem_alloc(&kmem,g,sz)`,
+  likewise `kmem_free` / `kmem_init` / `kmem_add`; the three internal routines become
+  `kmem_do_alloc` / `kmem_do_alloc_aligned` / `kmem_do_free`.  Group-aware wrappers stay
+  `INLINE` forwarders in the header.  Bodies take an explicit `kmem_t *self`.
+- Dropped `friend class kdb_t` (struct members are public; kdb reads them directly).
+- 73 call sites across 24 files (incl. out-of-scope powerpc/x32, kept consistent).
+
+**Pass B** (`kmemory.cc` → `kmemory.c`, commit 0d4842f) required a small header closure:
+- `spinlock_t` (arch/x86/sync.h): dual-representation, same as atomic.h — struct + free
+  functions (`spinlock_lock/unlock/init/is_locked`) with the C++ methods kept as
+  `#ifdef __cplusplus` one-line forwarders, so **every existing `x.lock()` call site is
+  unchanged**; only the flipped C file uses the free functions.  Blast radius = 1 file.
+- `generic/sync.h` (`lockstate_t`, non-SMP `spinlock_t`), `kdb/linker_set.h`
+  (`linker_set_t`, `linker_set_entry_t`), `kdb/tracepoints.h` (`tracepoint_t`,
+  `tracepoint_list_t`): classes → structs, methods/wrappers guarded under `__cplusplus`.
+  With `CONFIG_TRACEPOINTS` / `CONFIG_TRACEBUFFER` off these reduce to plain C
+  (`DECLARE_TRACEPOINT` = aggregate init, `TRACEPOINT` = nothing).  `tracebuffer.h` was
+  already C-safe (everything under `CONFIG_TRACEBUFFER`); `init.h` is trivial.
+- In-body C++-isms in kmemory: `self->spinlock.lock()` → `spinlock_lock(&self->spinlock)`;
+  the `max()` template (types.h, `__cplusplus`-only) → local `KMEM_MAX` macro (operands
+  side-effect free); one `void*`/`word_t*` comparison needed an explicit cast in C.
+
+Both passes boot-verified (kmem drives the whole boot: TCBs, spaces, sigma0/l4test load).
+Size drifted +8 bytes at Pass B (C vs C++ codegen) — expected; a non-leaf flip is not
+byte-identical the way lib.c was.
+
+**Technique confirmed for the rest of the migration:** dual-representation makes a widely
+used primitive (spinlock_t: 57 lock / 70 unlock sites) C-includable with a *one-file* blast
+radius, because C++ callers keep the forwarding methods.  Convert the primitive once, then
+flip consumer files one at a time.
+
+### Recommended next slices
+- More Pass-B flips of allocator-adjacent generic files that now have a C-clean closure
+  (e.g. `mapping_alloc.cc`) — each just needs its own includes checked + a boottest.
+- Value types next: `threadid_t` / `spaceid_t` (many consumers, but pure data + methods →
+  dual-representation keeps call sites intact), then work up toward `tcb_t` / `space_t`.
