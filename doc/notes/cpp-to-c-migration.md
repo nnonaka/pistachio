@@ -899,3 +899,23 @@ Frontier: x64/space.h done; 21-file cluster now at parent `glue/v4-x86/space.h`
 step (plan §4: base as first member), on top of a space_t class that itself has the mapctrl /
 mdb_t::ctrl_t methods.  The space chain: x86_space_t (done) -> space_t [glue] -> generic
 space_t [api] -- 2 headers left in the core.
+
+
+## 31. glue space_t (inheritance -> embedding) — DONE (2026-07-25, commit 84e0d01)
+
+Second link of the space chain.  `class space_t : public x86_space_t` -> dual: C++ keeps the
+inheritance; C gets `struct space_t { x86_space_t base; }`.  space_t adds **no data of its own**
+(pure methods), so single-inheritance -> base-as-first-member (plan §4) is trivial and
+byte-identical (362272), boots.  Everything else (methods, ~15 OOL inline bodies, the SMP
+`active_cpu_space_t` helper + extern, and reference-param/method-calling free functions) guarded
+wholesale.
+
+**Pattern -- single inheritance, no new data:** the whole class body splits with `#if/#else`
+(C++ inheritance vs C `{ base_t base; }`); nothing else to model since the derived class only
+adds behaviour.  When a derived class *does* add data, the C struct is `{ base_t base; <own
+fields>; }`.
+
+Frontier: 21-file cluster split onto `api/v4/space.h` (generic space_t, **14**) and
+`generic/linear_ptab.h` (**7**).  Space chain: x86_space_t -> glue space_t (both done) ->
+api/v4/space.h next (the generic/API space layer).  Down to ~2 core headers before the cluster
+finally goes CLEAN.
