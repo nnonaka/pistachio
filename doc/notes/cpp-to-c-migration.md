@@ -268,3 +268,43 @@ Out of scope for this config (unchanged, would need the same treatment if ever b
 Reusable lesson: `class`↔`struct` is free in C++ (no ABI change); the friction is nested
 class-scoped enums/`static const` members and default arguments — guard those, macro-ise any
 value C needs (e.g. array bounds).
+
+## 11. Boot-test harness + early-boot faults (2026-07-25)
+
+Built `tools/boottest` (serial capture under QEMU) to boot-verify conversion slices.
+Getting a boot to work uncovered several pre-existing, modern-toolchain bugs **unrelated
+to the C++→C conversion** (they live in files the conversion never touches):
+
+**kickstart free-memory search (FIXED, committed).** `kip_manager_t::is_mem_region_free()`
+only skipped the whole-space *shared* descriptor; QEMU's multiboot map also yields a
+whole-space *arch-specific* descriptor whose 64-bit base has stray high bits, so the loader
+found no free memory and panicked before launching the kernel. Fixed by skipping any
+descriptor covering the whole 32-bit space (compared in 32-bit terms). See commit
+"kickstart: ignore whole-address-space descriptors in free-memory search".
+
+**Kernel fault #1 — long-mode helper not inlined (FIXED, committed).** The 32-bit trampoline
+`init_paging()` runs at low physical with paging off, so every callee must be inlined. Modern
+gcc stopped inlining `x86_mmu_t::has_long_mode()`, emitting it at the kernel's high virtual
+address; the call from low-physical code triple-faulted. Fixed with `always_inline` on
+`has_long_mode` + `x86_x64_has_cpuid` + `x86_cpuid`. (If more `init.init32` callees are found
+non-inlined later, they need the same treatment.) Commit "Force-inline the long-mode
+detection helpers used by init_paging".
+
+**Kernel fault #2 — CR3 points at an empty top-level page table (ROOT-CAUSED, NOT fixed).**
+Once #1 is fixed, boot reaches `enable_paging()` and the very next instruction fetch
+`#PF`-not-present → `#DF` → triple fault. Traced with raw serial markers (COM1 is live from
+kickstart) + QEMU `-d int` + reading physical memory and CR3 from the trampoline:
+  - CR3 = `(u32_t)init_pml4` = `0xd1d000`; `&init_pml4`, the array access, and CR3 all agree.
+  - Physical `0xd1d000` (and the whole pml4) reads **all-zero** at runtime, so the walk fails.
+  - The `init32.o` stores populating the tables are **correct** (verified pre-link: pml4[0]
+    low→+0x0, high→+0x4; pml4[511]→0xff8/0xffc). PDP_IDX=PML4_IDX=511, PDIR_IDX=0.
+  - Ruled out: dead-store elimination (tried `volatile` — no change), store miscompilation,
+    address divergence, linker VMA/LMA mismatch (`.init` is identity-mapped: vaddr=paddr=
+    0xd19000 per the program headers; `AT(ADDR(.init))` in `glue/v4-x86/x64/linker.lds`).
+  - **Open:** why correct absolute writes to `0xd1d000` don't manifest in the physical memory
+    CR3 walks. Next step: live QEMU+gdb (`-s -S`) with a watchpoint on physical `0xd1d000`
+    to catch what writes/clears it during the trampoline.
+
+Net: the harness + serial path work and reach `Launching kernel ...`; a full boot to userland
+is blocked on fault #2. Per-slice verification meanwhile relies on the `objdump` byte-identity
+check and the clean C++ rebuild (binary size unchanged).
