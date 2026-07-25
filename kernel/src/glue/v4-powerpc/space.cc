@@ -71,7 +71,7 @@ void space_t::allocate_tcb(addr_t addr)
     if( pgent && pgent->is_valid(this, pgent_t::size_4k) )
 	kernel_space->flush_mapping( addr, pgent_t::size_4k, pgent );
 
-    addr_t page = kmem.alloc( kmem_tcb, POWERPC_PAGE_SIZE );
+    addr_t page = kmem_alloc(&kmem,  kmem_tcb, POWERPC_PAGE_SIZE );
     ASSERT(page);
 
     TRACE_SPACE( "new tcb, kmem virt %p, phys %p, tcb virt %p\n", page, 
@@ -168,14 +168,14 @@ pgent_t * space_t::page_lookup( addr_t vaddr )
 
 space_t * space_t::allocate_space() 
 {
-    space_t * space = (space_t*)kmem.alloc(kmem_space, sizeof(space_t));
+    space_t * space = (space_t*)kmem_alloc(&kmem, kmem_space, sizeof(space_t));
     ASSERT(space);
     return space;
 }
 
 void space_t::free_space(space_t *space) 
 {
-    kmem.free(kmem_space, (addr_t)space, sizeof(space_t));
+    kmem_free(&kmem, kmem_space, (addr_t)space, sizeof(space_t));
 }
 
 /**********************************************************************
@@ -263,7 +263,7 @@ void space_t::release_kernel_mapping (addr_t vaddr, paddr_t paddr,
 {
     // Free up memory used for UTCBs
     if (get_utcb_page_area ().is_addr_in_fpage (vaddr))
-	kmem.free (kmem_utcb, (addr_t) phys_to_virt (paddr), 1UL << log2size);
+	kmem_free(&kmem, kmem_utcb, (addr_t) phys_to_virt (paddr), 1UL << log2size);
 }
 
 utcb_t *space_t::allocate_utcb( tcb_t *tcb )
@@ -279,7 +279,7 @@ utcb_t *space_t::allocate_utcb( tcb_t *tcb )
     else
     {
 	// Allocate a new UTCB page.
-	page = kmem.alloc( kmem_utcb, POWERPC_PAGE_SIZE );
+	page = kmem_alloc(&kmem,  kmem_utcb, POWERPC_PAGE_SIZE );
 	if( page == NULL )
 	{
 	    WARNING( "out of memory!\n" );

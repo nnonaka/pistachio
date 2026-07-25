@@ -96,7 +96,7 @@ void space_t::init (fpage_t utcb_area, fpage_t kip_area)
 void space_t::allocate_tcb(addr_t addr)
 {
 #if !defined(CONFIG_STATIC_TCBS)
-    addr_t page = kmem.alloc(kmem_tcb, X86_PAGE_SIZE);
+    addr_t page = kmem_alloc(&kmem, kmem_tcb, X86_PAGE_SIZE);
     ASSERT(page);
     //TRACEF("tcb=%p, page=%p\n", addr, page);
 
@@ -144,7 +144,7 @@ utcb_t * space_t::allocate_utcb(tcb_t * tcb)
     else
     {
 	// allocate new UTCB page
-	addr_t page = kmem.alloc(kmem_utcb, X86_PAGE_SIZE);
+	addr_t page = kmem_alloc(&kmem, kmem_utcb, X86_PAGE_SIZE);
 	ASSERT(page);
 	add_mapping((addr_t)utcb, virt_to_phys(page), PGSIZE_UTCB, true, false, false);
 	result = (utcb_t *) addr_offset(page, (word_t) utcb & (~X86_PAGE_MASK));
@@ -159,7 +159,7 @@ utcb_t * space_t::allocate_utcb(tcb_t * tcb)
 
 space_t * space_t::allocate_space() 
 {
-    space_t * space = (space_t*)kmem.alloc(kmem_space, sizeof(space_t) + sizeof(top_pdir_t));
+    space_t * space = (space_t*)kmem_alloc(&kmem, kmem_space, sizeof(space_t) + sizeof(top_pdir_t));
     ASSERT(space);
     space->data.cpu_ptab[get_current_cpu()].top_pdir = (top_pdir_t*)addr_offset(addr_t(space), sizeof(space_t));
     // create backlink to space 
@@ -177,9 +177,9 @@ void space_t::free_space(space_t *space)
     for (cpuid_t cpuid = 0; cpuid < CONFIG_SMP_MAX_CPUS; cpuid++)
 	if (space->data.cpu_ptab[cpuid].top_pdir)
 	    space->free_cpu_top_pdir(cpuid);
-    kmem.free(kmem_space, (addr_t)space, sizeof(space_t));
+    kmem_free(&kmem, kmem_space, (addr_t)space, sizeof(space_t));
 #else
-    kmem.free(kmem_space, (addr_t)space, sizeof(space_t) + sizeof(top_pdir_t));
+    kmem_free(&kmem, kmem_space, (addr_t)space, sizeof(space_t) + sizeof(top_pdir_t));
 #endif    
 }
 
@@ -293,7 +293,7 @@ void space_t::release_kernel_mapping (addr_t vaddr, addr_t paddr,
 {
     // Free up memory used for UTCBs
     if (get_utcb_page_area().is_addr_in_fpage(vaddr))
-	kmem.free(kmem_utcb, phys_to_virt(paddr), 1UL << log2size);
+	kmem_free(&kmem, kmem_utcb, phys_to_virt(paddr), 1UL << log2size);
 }
 
 
@@ -462,7 +462,7 @@ addr_t space_t::install_io_bitmap(bool create)
     
     if (create)
     {
-	new_bitmap = (word_t*) kmem.alloc(kmem_iofp, IOPERMBITMAP_SIZE);
+	new_bitmap = (word_t*) kmem_alloc(&kmem, kmem_iofp, IOPERMBITMAP_SIZE);
 	if (!new_bitmap) 
 	    return NULL;
     }
@@ -488,11 +488,11 @@ addr_t space_t::install_io_bitmap(bool create)
 
     while (size > PGSIZE_KERNEL)
     {
-	pgent_t *new_subtree = (pgent_t *) kmem.alloc (kmem_iofp, X86_PAGE_SIZE);
+	pgent_t *new_subtree = (pgent_t *) kmem_alloc(&kmem, kmem_iofp, X86_PAGE_SIZE);
 	
 	if (new_subtree == NULL)
 	{
-	    kmem.free(kmem_iofp, new_bitmap, IOPERMBITMAP_SIZE);
+	    kmem_free(&kmem, kmem_iofp, new_bitmap, IOPERMBITMAP_SIZE);
 	    return NULL;
 	}
 
@@ -588,12 +588,12 @@ void space_t::free_io_bitmap()
 	
 	/*  Release the Pagetable  */
 	//TRACEF("Free subtree %x\n", subtree);
-	kmem.free(kmem_iofp, subtree, X86_PTAB_BYTES);
+	kmem_free(&kmem, kmem_iofp, subtree, X86_PTAB_BYTES);
 	
     }
    
     /* Release the IOPBM */
-    kmem.free(kmem_iofp, io_bitmap, IOPERMBITMAP_SIZE);
+    kmem_free(&kmem, kmem_iofp, io_bitmap, IOPERMBITMAP_SIZE);
 
 	
     /* Flush the corresponding TLB entries */
@@ -704,7 +704,7 @@ void SECTION(".init.memory") space_t::init_kernel_mappings()
      * page is user-writable and global
      */
     EXTERN_KMEM_GROUP(kmem_misc); 
-    utcb_page = kmem.alloc(kmem_misc, X86_PAGE_SIZE);
+    utcb_page = kmem_alloc(&kmem, kmem_misc, X86_PAGE_SIZE);
     ASSERT(utcb_page);
     add_mapping((addr_t)UTCB_MAPPING,  virt_to_phys(utcb_page), 
 	       pgent_t::size_4k, true,	false, true);
@@ -828,7 +828,7 @@ void SECTION (".init") space_t::init_cpu_mappings(cpuid_t cpu)
     for ( addr_t addr = reg.low; addr < reg.high;
 	  addr = addr_offset(addr, KERNEL_PAGE_SIZE) )
     {
-	addr_t page = kmem.alloc(kmem_pgtab, KERNEL_PAGE_SIZE);
+	addr_t page = kmem_alloc(&kmem, kmem_pgtab, KERNEL_PAGE_SIZE);
 	
 	ASSERT(page);
 	//TRACE_INIT("\tallocated %s cpu-local data at %x -> phys %x\n", 
@@ -870,11 +870,11 @@ void SECTION(".init.memory") space_t::init_kernel_space()
  
     ASSERT(!kernel_space);
     
-    kernel_space = (space_t *) kmem.alloc(kmem_space, sizeof(space_t));
+    kernel_space = (space_t *) kmem_alloc(&kmem, kmem_space, sizeof(space_t));
     ASSERT(kernel_space);
 
     kernel_space->data.cpu_ptab[0].top_pdir = 
-	(space_t::top_pdir_t*)kmem.alloc(kmem_space, sizeof(space_t::top_pdir_t));
+	(space_t::top_pdir_t*)kmem_alloc(&kmem, kmem_space, sizeof(space_t::top_pdir_t));
     
     kernel_space->data.cpu_ptab[0].top_pdir->space = kernel_space;
     kernel_space->init_kernel_mappings();
@@ -1089,7 +1089,7 @@ void space_t::alloc_cpu_top_pdir(cpuid_t cpu)
     //TRACEF("%x pdir %x cpu %d\n", this, data.cpu_ptab[cpu].top_pdir, cpu);
 
     /* Allocate PML4 */
-    data.cpu_ptab[cpu].top_pdir = (top_pdir_t*)kmem.alloc(kmem_space, sizeof(top_pdir_t));
+    data.cpu_ptab[cpu].top_pdir = (top_pdir_t*)kmem_alloc(&kmem, kmem_space, sizeof(top_pdir_t));
     ASSERT(data.cpu_ptab[cpu].top_pdir && data.cpu_ptab[data.reference_ptab].top_pdir);
     
     /*  use CPU0 as reference pdir and fix up cpulocal data afterwards */
@@ -1124,7 +1124,7 @@ void space_t::free_cpu_top_pdir(cpuid_t cpu)
     ASSERT(data.cpu_ptab[cpu].thread_count == 0);
     top_pdir_t* pdir = data.cpu_ptab[cpu].top_pdir;
     data.cpu_ptab[cpu].top_pdir = NULL; // mem ordering, for X86 no barrier needed
-    kmem.free(kmem_space, (addr_t)pdir, sizeof(top_pdir_t));
+    kmem_free(&kmem, kmem_space, (addr_t)pdir, sizeof(top_pdir_t));
 }
 
 

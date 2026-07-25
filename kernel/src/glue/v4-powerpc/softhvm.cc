@@ -655,7 +655,7 @@ DECLARE_KMEM_GROUP(kmem_hvm);
 void arch_ktcb_t::init_hvm(tcb_t *tcb)
 {
     const int allocsize = ((sizeof(ppc_softhvm_t) / KMEM_CHUNKSIZE) + 1) * KMEM_CHUNKSIZE;
-    vm = (ppc_softhvm_t*)kmem.alloc(kmem_hvm, allocsize);
+    vm = (ppc_softhvm_t*)kmem_alloc(&kmem, kmem_hvm, allocsize);
     tcb->resource_bits += SOFTHVM;
     vm->init();
 }

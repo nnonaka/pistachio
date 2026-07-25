@@ -152,7 +152,7 @@ void SECTION(".init.memory") space_t::init_cpu_mappings(cpuid_t cpu)
 	page = phys_to_virt(_cpu_phys);
     else
     {
-	page = kmem.alloc(kmem_pgtab, 1 << log2size);
+	page = kmem_alloc(&kmem, kmem_pgtab, 1 << log2size);
 	memcpy(page, phys_to_virt(_cpu_phys), 1 << log2size);
     }
 
@@ -472,7 +472,7 @@ tracebuffer_t * tracebuffer;
 EXTERN_KMEM_GROUP (kmem_misc);
 void setup_tracebuffer (void)
 {
-    tracebuffer = (tracebuffer_t *) kmem.alloc (kmem_misc, TRACEBUFFER_SIZE);
+    tracebuffer = (tracebuffer_t *) kmem_alloc(&kmem, kmem_misc, TRACEBUFFER_SIZE);
     if (!tracebuffer)
         return;
     

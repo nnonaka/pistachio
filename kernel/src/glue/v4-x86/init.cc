@@ -167,7 +167,7 @@ void SECTION(SEC_INIT) init_bootmem (void)
     for (addr_t p = start_bootmem; p < end_bootmem; p = addr_offset(p, sizeof(word_t)))
 	* (word_t *)p = 0;
 
-    kmem.init(start_bootmem, end_bootmem);
+    kmem_init(&kmem, start_bootmem, end_bootmem);
     /* now do reservations */
 
     // Mark the kernel code as reserved
@@ -240,7 +240,7 @@ void SECTION(SEC_INIT) add_more_kmem (void)
 		    allocsize, true, true, true);
 
 		// Add it to allocator
-		kmem.add(phys_to_virt(alloc.low), allocsize);
+		kmem_add(&kmem, phys_to_virt(alloc.low), allocsize);
 		
 		alloc.low = addr_offset(alloc.low, allocsize);
 	    }
@@ -254,7 +254,7 @@ void SECTION(SEC_INIT) add_more_kmem (void)
     {
         if (!get_kip()->reserved_mem1.is_empty())
         {
-            kmem.add(phys_to_virt(get_kip()->reserved_mem1.low), 
+            kmem_add(&kmem, phys_to_virt(get_kip()->reserved_mem1.low), 
                      get_kip()->reserved_mem1.get_size());
         }
     }
@@ -266,7 +266,7 @@ tracebuffer_t * tracebuffer;
 EXTERN_KMEM_GROUP (kmem_misc);
 void setup_tracebuffer (void)
 {
-    tracebuffer = (tracebuffer_t *) kmem.alloc (kmem_misc, TRACEBUFFER_SIZE);
+    tracebuffer = (tracebuffer_t *) kmem_alloc(&kmem, kmem_misc, TRACEBUFFER_SIZE);
     if (!tracebuffer)
         return;
     for (word_t p = 0; p < TRACEBUFFER_SIZE; p += KERNEL_PAGE_SIZE)

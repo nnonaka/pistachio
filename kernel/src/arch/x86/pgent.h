@@ -86,7 +86,7 @@ public:
 	{
 	    ASSERT(kernel); // cpu-local subtrees are _always_ kernel
 	    pgent.set_ptab_entry
-		(virt_to_phys(kmem.alloc (kmem_pgtab, X86_PTAB_BYTES)), X86_PAGE_USER | X86_PAGE_WRITABLE);
+		(virt_to_phys(kmem_alloc(&kmem, kmem_pgtab, X86_PTAB_BYTES)), X86_PAGE_USER | X86_PAGE_WRITABLE);
 
 	}
 
@@ -221,7 +221,7 @@ public:
 	    
 	    pgent.set_ptab_entry
 		(virt_to_phys
-		 (kmem.alloc (kmem_pgtab, size)), X86_PAGE_USER | X86_PAGE_WRITABLE);
+		 (kmem_alloc(&kmem, kmem_pgtab, size)), X86_PAGE_USER | X86_PAGE_WRITABLE);
 
 	    sync(s, pgsize);
 	}
@@ -237,7 +237,7 @@ public:
 		(!kernel && (pgsize == size_4k || pgsize == size_superpage)) 
 		? 2 * X86_PTAB_BYTES : X86_PTAB_BYTES;
 
-	    kmem.free (kmem_pgtab, phys_to_virt (ptab), size);
+	    kmem_free(&kmem, kmem_pgtab, phys_to_virt (ptab), size);
 
 #if defined(CONFIG_X86_SMALL_SPACES)
 	    if (is_smallspace (s))

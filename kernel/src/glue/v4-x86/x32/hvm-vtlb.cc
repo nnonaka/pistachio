@@ -48,7 +48,7 @@ bool x86_hvm_vtlb_t::alloc (space_t *space)
 {
 
     /* Allocate a single host pdir for paged mode */
-    hpdir_paged = (pgent_t *) kmem.alloc (kmem_vtlb, X86_PAGE_SIZE);;
+    hpdir_paged = (pgent_t *) kmem_alloc(&kmem, kmem_vtlb, X86_PAGE_SIZE);;
     if (!hpdir_paged)
 	return false;
 
@@ -57,7 +57,7 @@ bool x86_hvm_vtlb_t::alloc (space_t *space)
     
 
     /* Allocate a single host pdir for unpaged mode */
-    hpdir_nonpaged = (pgent_t *) kmem.alloc (kmem_vtlb, X86_PAGE_SIZE);;
+    hpdir_nonpaged = (pgent_t *) kmem_alloc(&kmem, kmem_vtlb, X86_PAGE_SIZE);;
     if (!hpdir_nonpaged)
 	return false;
 
@@ -76,10 +76,10 @@ bool x86_hvm_vtlb_t::alloc (space_t *space)
 void x86_hvm_vtlb_t::free()
 {
     if (hpdir_paged)
-	kmem.free (kmem_vtlb, hpdir_paged, X86_PAGE_SIZE);
+	kmem_free(&kmem, kmem_vtlb, hpdir_paged, X86_PAGE_SIZE);
     
     if (hpdir_nonpaged)
-	kmem.free (kmem_vtlb, hpdir_nonpaged, X86_PAGE_SIZE);
+	kmem_free(&kmem, kmem_vtlb, hpdir_nonpaged, X86_PAGE_SIZE);
 
     this->space = NULL;
 }
@@ -111,7 +111,7 @@ void x86_hvm_vtlb_t::flush_hpdir(pgent_t *pdir)
 		    hptab[j].pgent.clear();
 	    }
 	    if (!ptab_global || !flags.pg)
-		kmem.free (kmem_vtlb, hptab, X86_PAGE_SIZE);
+		kmem_free(&kmem, kmem_vtlb, hptab, X86_PAGE_SIZE);
 	    else
 		pdir_global = true;
 	}
@@ -368,7 +368,7 @@ void x86_hvm_vtlb_t::set_hphys_entry (addr_t gvaddr, addr_t hpaddr, pgent_t::pgs
 	    pgent_t *pt = (pgent_t *) hppgent->subtree(space, pgent_t::size_4m);
 	    //printf( "VTLB (%x:%x) gv %08x -> hp %08x sz %d flush subtree %x",
 	    //       gpdir, hpdir, gvaddr, hpaddr, page_size(hppgsz), pt);
-	    kmem.free (kmem_vtlb, pt, X86_PAGE_SIZE);
+	    kmem_free(&kmem, kmem_vtlb, pt, X86_PAGE_SIZE);
 	}
     }
     else
@@ -377,7 +377,7 @@ void x86_hvm_vtlb_t::set_hphys_entry (addr_t gvaddr, addr_t hpaddr, pgent_t::pgs
 	if (!hppgent->is_valid (space, hppgsz+1) || !hppgent->is_subtree(space, hppgsz+1))
 	{
 	    /* Allocate memory. */
-	    pgent_t *pt = (pgent_t *) kmem.alloc (kmem_vtlb, X86_PAGE_SIZE);
+	    pgent_t *pt = (pgent_t *) kmem_alloc(&kmem, kmem_vtlb, X86_PAGE_SIZE);
 	    if (!pt)
 	    {
 		printf("VTLB (%x:%x) not enough memory, flush", gpdir, hpdir);

@@ -99,7 +99,7 @@ vmcs_t *vmcs_t::alloc_vmcs ()
 
     // Allocate VMCS Region, must be aligned to page boundary
     word_t sz = X86_PAGE_SIZE;
-    addr_t vmcs = kmem.alloc(kmem_vmcs, sz);
+    addr_t vmcs = kmem_alloc(&kmem, kmem_vmcs, sz);
     if (!vmcs)
 	return NULL;
 
@@ -116,7 +116,7 @@ vmcs_t *vmcs_t::alloc_vmcs ()
 
 void vmcs_t::free_vmcs (vmcs_t *vmcs)
 {
-    kmem.free(kmem_vmcs, phys_to_virt(vmcs), get_vmcs_sz());
+    kmem_free(&kmem, kmem_vmcs, phys_to_virt(vmcs), get_vmcs_sz());
 }
 
 

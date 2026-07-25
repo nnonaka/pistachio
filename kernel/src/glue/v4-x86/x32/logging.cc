@@ -247,7 +247,7 @@ void init_logging_cpu(cpuid_t cpu)
         
         /* Remove old cpulocal mappings */
         if (cpu != 0)
-            kmem.free(kmem_pgtab, 
+            kmem_free(&kmem, kmem_pgtab, 
                       addr_offset(phys_to_virt(pgent->address(kspace, pgsize)), addr_mask(kaddr, page_mask (pgsize))), 
                       KERNEL_PAGE_SIZE);
                   

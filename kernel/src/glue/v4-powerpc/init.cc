@@ -149,7 +149,7 @@ SECTION(SEC_INIT) void dtree_remap( kernel_interface_page_t *kip )
 #endif
 
 #if defined(CONFIG_PLAT_PPC44X)
-    dtree = (dtree_t*)kmem.alloc(kmem_misc, dtree_size);
+    dtree = (dtree_t*)kmem_alloc(&kmem, kmem_misc, dtree_size);
     memcpy(dtree, dtreemapping, dtree_size);
     // XXX: unmap FDT
 #endif
@@ -284,7 +284,7 @@ SECTION(SEC_INIT) static void reclaim_cpu_kmem()
 	word_t end = cpu_phys_area(cpu+1);
 	word_t size = end - start;
 	if( size )
-	    kmem.add( phys_to_virt((addr_t)start), size );
+	    kmem_add(&kmem,  phys_to_virt((addr_t)start), size );
 	tot += size;
     }
 
@@ -306,20 +306,20 @@ SECTION(SEC_INIT) static word_t init_bootmem()
 #else
     bootmem_high = bootmem_low + KB(512);
 #endif
-    kmem.init( (addr_t)bootmem_low, (addr_t)bootmem_high );
+    kmem_init(&kmem,  (addr_t)bootmem_low, (addr_t)bootmem_high );
     tot = bootmem_high - bootmem_low;
 
     // Claim the memory used by the exception vector code.
     size = (word_t)memcfg_start_kernel() - phys_to_virt(PHYS_START_AVAIL);
     if( size )
-	kmem.add( (addr_t)phys_to_virt(PHYS_START_AVAIL), size );
+	kmem_add(&kmem,  (addr_t)phys_to_virt(PHYS_START_AVAIL), size );
     tot += size;
 
     // Claim the memory between the end of the kernel data section and
     // the start of the cpu data page.
     size = cpu_phys_area(0) - (word_t)memcfg_end_data_phys();
     if( size )
-	kmem.add( phys_to_virt(memcfg_end_data_phys()), size );
+	kmem_add(&kmem,  phys_to_virt(memcfg_end_data_phys()), size );
     tot += size;
 
     return virt_to_phys(bootmem_high);
@@ -341,7 +341,7 @@ SECTION(SEC_INIT) static word_t init_bootmem()
     bootmem_low = phys_to_virt( memcfg_end_cpu_phys() );
     bootmem_high = addr_offset(bootmem_low, KB(3584));
 
-    kmem.init( bootmem_low, bootmem_high );
+    kmem_init(&kmem,  bootmem_low, bootmem_high );
     tot = (word_t)bootmem_high - (word_t)bootmem_low;
 
     return virt_to_phys((word_t)bootmem_high);

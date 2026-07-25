@@ -55,18 +55,18 @@ kmem_t kmem;
 #define KMEM_CHECK						\
 {								\
     word_t num = 0;						\
-    word_t * ptr = kmem_free_list;				\
+    word_t * ptr = self->kmem_free_list;				\
     while(ptr)							\
     {								\
 	ptr = (word_t*)(*ptr);					\
 	num++;							\
     }								\
-    if (num != free_chunks)					\
+    if (num != self->free_chunks)					\
     {								\
-	TRACEF("inconsistent kmem list: %d != %d (free_chunks)"	\
+	TRACEF("inconsistent kmem list: %d != %d (self->free_chunks)"	\
 	       "\ncaller=%p\n",					\
-	    num, free_chunks, __builtin_return_address(0));	\
-	ptr = kmem_free_list;					\
+	    num, self->free_chunks, __builtin_return_address(0));	\
+	ptr = self->kmem_free_list;					\
 	while(ptr) {						\
 	    printf("%p -> ", ptr);				\
 	    ptr = (word_t*)*ptr;				\
@@ -78,7 +78,7 @@ kmem_t kmem;
 #define KMEM_CHECK
 #endif
 
-SECTION(SEC_INIT) void kmem_t::init(void * start, void * end)
+SECTION(SEC_INIT) void kmem_init(kmem_t *self, void * start, void * end)
 {
 #define ISIZE ((word_t) end - (word_t) start)
     TRACE_INIT ("Initializing kernel memory (%p-%p) [%d%c]\n", start, end,
@@ -87,11 +87,11 @@ SECTION(SEC_INIT) void kmem_t::init(void * start, void * end)
 		ISIZE >= GB (1) ? 'G' : ISIZE >= MB (1) ? 'M' : 'K');
 
     /* initialize members */
-    kmem_free_list = NULL;
-    free_chunks = 0;
+    self->kmem_free_list = NULL;
+    self->free_chunks = 0;
     
     /* do the real work */
-    free(start, (word_t)end - (word_t)start);
+    kmem_do_free(self, start, (word_t)end - (word_t)start);
 #if 0
     kernel_info_page.reserved_mem0_low  = (word_t) text_paddr;
     kernel_info_page.reserved_mem0_high = (word_t) _end_text_p;
@@ -101,7 +101,7 @@ SECTION(SEC_INIT) void kmem_t::init(void * start, void * end)
 }
 
 /* the stupid version */
-void kmem_t::free(void * address, word_t size)
+void kmem_do_free(kmem_t *self, void * address, word_t size)
 {
     word_t* p;
     word_t* prev, *curr;
@@ -115,7 +115,7 @@ void kmem_t::free(void * address, word_t size)
 		size >= GB (1) ? 'G' : size >= MB (1) ? 'M' : 'K',
 		__builtin_return_address (0));
 
-    spinlock.lock();
+    self->spinlock.lock();
 
     KMEM_CHECK;
 
@@ -128,7 +128,7 @@ void kmem_t::free(void * address, word_t size)
 	*p = (word_t) p + KMEM_CHUNKSIZE; /* write next pointer */
     
     /* find the place to insert */
-    for (prev = (word_t*) (void *) &kmem_free_list, curr = kmem_free_list;
+    for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
 	 curr && (address > curr);
 	 prev = curr, curr = (word_t*) *curr);
     /* and insert there */
@@ -136,25 +136,25 @@ void kmem_t::free(void * address, word_t size)
     *prev = (word_t) address; *p = (word_t) curr;
 
     /* update counter */
-    free_chunks += (size/KMEM_CHUNKSIZE);
-    FREE_TRACE("kmem: free chunks=%x\n", free_chunks);
+    self->free_chunks += (size/KMEM_CHUNKSIZE);
+    FREE_TRACE("kmem: free chunks=%x\n", self->free_chunks);
     KMEM_CHECK;
 
-    spinlock.unlock();
+    self->spinlock.unlock();
 }
 
 
 /* the stupid version */
-void * kmem_t::alloc(word_t size)
+void * kmem_do_alloc(kmem_t *self, word_t size)
 {
     word_t*	prev;
     word_t*	curr;
     word_t*	tmp;
     word_t	i;
 
-    spinlock.lock();
+    self->spinlock.lock();
     
-    ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, kmem_free_list);
+    ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, self->kmem_free_list);
     TRACEPOINT (KMEM_ALLOC, "kmem_alloc (%d [%d%c]), ip: %p\n",
 		size, size >= GB (1) ? size >> 30 :
 		size >= MB (1) ? size >> 20 : size >> 10,
@@ -165,7 +165,7 @@ void * kmem_t::alloc(word_t size)
     size = max(size, KMEM_CHUNKSIZE);
     ASSERT((size % KMEM_CHUNKSIZE) == 0);
 
-    for (prev = (word_t*) (void *) &kmem_free_list, curr = kmem_free_list;
+    for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
 	 curr;
 	 prev = curr, curr = (word_t*) *curr)
     {
@@ -200,11 +200,11 @@ void * kmem_t::alloc(word_t size)
 		    curr[i] = 0;
 
 		/* update counter */
-		free_chunks -= (size/KMEM_CHUNKSIZE);
+		self->free_chunks -= (size/KMEM_CHUNKSIZE);
 
 		/* successful return */
 		ALLOC_TRACE("kmalloc: %x->%p (%d), kfl: %p, caller: %p\n", 
-			    size, curr, free_chunks, kmem_free_list, __builtin_return_address(0));
+			    size, curr, self->free_chunks, self->kmem_free_list, __builtin_return_address(0));
 		KMEM_CHECK;
 
 #if 0
@@ -222,14 +222,14 @@ void * kmem_t::alloc(word_t size)
 
 #endif
 
-		spinlock.unlock();
+		self->spinlock.unlock();
 
 		return curr;
 	    }
 	}
     }
 #if 0
-    word_t * tmp1 = kmem_free_list;
+    word_t * tmp1 = self->kmem_free_list;
     while(tmp1) {
 	printf("%p -> ", tmp1);
 	tmp1 = (word_t*)*tmp1;
@@ -237,14 +237,14 @@ void * kmem_t::alloc(word_t size)
 #endif
     enter_kdebug("kmem_alloc: out of kernel memory");
 
-    spinlock.unlock();
+    self->spinlock.unlock();
     return NULL;
 }
 
 #define ALIGN(x)    (x & mask)
 
 /* the stupid aligned version */
-void * kmem_t::alloc_aligned(word_t size, word_t alignment, word_t mask)
+void * kmem_do_alloc_aligned(kmem_t *self, word_t size, word_t alignment, word_t mask)
 {
     word_t*	prev;
     word_t*	curr;
@@ -253,16 +253,16 @@ void * kmem_t::alloc_aligned(word_t size, word_t alignment, word_t mask)
 
     word_t	align = ALIGN(alignment);
 
-    spinlock.lock();
+    self->spinlock.lock();
     
-    ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, kmem_free_list);
+    ALLOC_TRACE("%s(%d) kfl: %p\n", __FUNCTION__, size, self->kmem_free_list);
     TRACEPOINT (KMEM_ALLOC, "kmem_alloc (%d), ip: %p\n", size, __builtin_return_address (0));
     KMEM_CHECK;
     
     size = max(size, KMEM_CHUNKSIZE);
     ASSERT((size % KMEM_CHUNKSIZE) == 0);
 
-    for (prev = (word_t*) (void *) &kmem_free_list, curr = kmem_free_list;
+    for (prev = (word_t*) (void *) &self->kmem_free_list, curr = self->kmem_free_list;
 	 curr;
 	 prev = curr, curr = (word_t*) *curr)
     {
@@ -297,11 +297,11 @@ void * kmem_t::alloc_aligned(word_t size, word_t alignment, word_t mask)
 		    curr[i] = 0;
 
 		/* update counter */
-		free_chunks -= (size/KMEM_CHUNKSIZE);
+		self->free_chunks -= (size/KMEM_CHUNKSIZE);
 
 		/* successful return */
 		ALLOC_TRACE("kmalloc: %x->%p (%d), kfl: %p, caller: %p\n", 
-			    size, curr, free_chunks, kmem_free_list, __builtin_return_address(0));
+			    size, curr, self->free_chunks, self->kmem_free_list, __builtin_return_address(0));
 		KMEM_CHECK;
 
 #if 0
@@ -311,13 +311,13 @@ void * kmem_t::alloc_aligned(word_t size, word_t alignment, word_t mask)
 					    curr));
 #endif
 
-		spinlock.unlock();
+		self->spinlock.unlock();
 		return curr;
 	    }
 	}
     }
 #if 0
-    word_t * tmp1 = kmem_free_list;
+    word_t * tmp1 = self->kmem_free_list;
     while(tmp1) {
 	printf("%p -> ", tmp1);
 	tmp1 = (word_t*)*tmp1;
@@ -325,6 +325,6 @@ void * kmem_t::alloc_aligned(word_t size, word_t alignment, word_t mask)
 #endif
     enter_kdebug("kmem_alloc: out of kernel memory");
 
-    spinlock.unlock();
+    self->spinlock.unlock();
     return NULL;
 }

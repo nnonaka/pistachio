@@ -279,7 +279,7 @@ bool thread_control_interrupt(threadid_t irq_tid, threadid_t handler_tid)
     {
 
 	if (irq_utcb_count++ % (KMEM_CHUNKSIZE / sizeof(utcb_t)) == 0)
-	    irq_utcb = (utcb_t *) kmem.alloc(kmem_utcb, KMEM_CHUNKSIZE);
+	    irq_utcb = (utcb_t *) kmem_alloc(&kmem, kmem_utcb, KMEM_CHUNKSIZE);
 	else 
 	    irq_utcb++;
 

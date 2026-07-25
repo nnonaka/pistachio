@@ -41,7 +41,7 @@ DECLARE_KMEM_GROUP (kmem_stab);
 void ppc64_stab_t::init()
 {
     word_t _stab;
-    addr_t page = kmem.alloc( kmem_stab, POWERPC64_STAB_SIZE );
+    addr_t page = kmem_alloc(&kmem,  kmem_stab, POWERPC64_STAB_SIZE );
     //TRACEF( "created segement table at %p\n", page );
 
     base.raw = (word_t)virt_to_phys( page );
@@ -79,6 +79,6 @@ void ppc64_stab_t::init()
 void ppc64_stab_t::free()
 {
     addr_t page = (addr_t)get_stab();
-    kmem.free( kmem_stab, page, POWERPC64_STAB_SIZE );
+    kmem_free(&kmem,  kmem_stab, page, POWERPC64_STAB_SIZE );
 }
 

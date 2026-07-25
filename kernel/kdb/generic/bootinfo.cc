@@ -237,7 +237,7 @@ CMD (cmd_dump_bootinfo, cg)
 
 	EXTERN_KMEM_GROUP (kmem_misc);
 	bootinfo_copy = (bootinfo_t *) 
-	    kmem.alloc (kmem_misc, (1UL << alloc_size));
+	    kmem_alloc(&kmem, kmem_misc, (1UL << alloc_size));
 
 	space_t * s = kdb.kdb_current->get_space ();
 	word_t * src = (word_t *) bi;

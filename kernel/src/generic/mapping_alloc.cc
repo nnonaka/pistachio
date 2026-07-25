@@ -235,7 +235,7 @@ addr_t mdb_alloc_buffer (word_t size)
      * Forward large buffer requests directly to the kmem allocator.
      */
     if (size >= KMEM_CHUNKSIZE)
-	return kmem.alloc (kmem_mdb, size);
+	return kmem_alloc(&kmem, kmem_mdb, size);
 
     disable_interrupts ();
 
@@ -252,7 +252,7 @@ addr_t mdb_alloc_buffer (word_t size)
 	/*
 	 * First slot of page is dedicated to management strucures.
 	 */
-	mng = (mdb_mng_t *) kmem.alloc (kmem_mdb, MDB_ALLOC_CHUNKSZ);
+	mng = (mdb_mng_t *) kmem_alloc(&kmem, kmem_mdb, MDB_ALLOC_CHUNKSZ);
 	mng->freelist		= (mdb_link_t *)
 	    ((word_t) mng + MDB_ALLOC_CHUNKSZ - bl->max_free*size);
 	mng->num_free		= bl->max_free;
@@ -334,7 +334,7 @@ void mdb_free_buffer (addr_t addr, word_t size)
      */
     if (size >= KMEM_CHUNKSIZE)
     {
-	kmem.free (kmem_mdb, addr, size);
+	kmem_free(&kmem, kmem_mdb, addr, size);
 	return;
     }
 
@@ -379,7 +379,7 @@ void mdb_free_buffer (addr_t addr, word_t size)
 	else if (mng->prev_freelist)
 	    mng->prev_freelist->next_freelist = mng->next_freelist;
 
-	kmem.free (kmem_mdb, (addr_t) mng, MDB_ALLOC_CHUNKSZ);
+	kmem_free(&kmem, kmem_mdb, (addr_t) mng, MDB_ALLOC_CHUNKSZ);
     }
 
     ASSERT_BL (bl);

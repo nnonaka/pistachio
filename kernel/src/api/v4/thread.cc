@@ -69,7 +69,7 @@ tcb_t* tcb_t::allocate(threadid_t dest)
     word_t idx = dest.get_threadno();
     ASSERT(idx < TOTAL_KTCBS);
     if (tcb_array[idx] == get_dummy_tcb())
-	tcb_array[idx] = (tcb_t*) kmem.alloc(kmem_tcb, KTCB_SIZE);
+	tcb_array[idx] = (tcb_t*) kmem_alloc(&kmem, kmem_tcb, KTCB_SIZE);
     return tcb_array[idx];
 }
 
@@ -79,7 +79,7 @@ void tcb_t::deallocate(threadid_t dest)
     ASSERT(idx < TOTAL_KTCBS);
     tcb_t *tcb = tcb_array[idx];
     tcb_array[idx] = get_dummy_tcb();
-    kmem.free(kmem_tcb, (addr_t)tcb, KTCB_SIZE);
+    kmem_free(&kmem, kmem_tcb, (addr_t)tcb, KTCB_SIZE);
 }
 void tcb_t::init_tcbs()
 {

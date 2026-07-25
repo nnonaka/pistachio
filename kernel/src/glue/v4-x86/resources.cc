@@ -145,7 +145,7 @@ void thread_resources_t::free(tcb_t * tcb)
     ASSERT(tcb);
     if (fpu_state)
     {
-	kmem.free(kmem_resources, fpu_state, x86_fpu_t::get_state_size());
+	kmem_free(&kmem, kmem_resources, fpu_state, x86_fpu_t::get_state_size());
 	fpu_state = NULL;
 
 	if (fpu_owner == tcb)
@@ -179,7 +179,7 @@ void thread_resources_t::x86_no_math_exception(tcb_t * tcb)
 
 	if (fpu_state == NULL)
 	{
-	    fpu_state = kmem.alloc(kmem_resources, x86_fpu_t::get_state_size());
+	    fpu_state = kmem_alloc(&kmem, kmem_resources, x86_fpu_t::get_state_size());
 	    x86_fpu_t::init();
 	}
 	else

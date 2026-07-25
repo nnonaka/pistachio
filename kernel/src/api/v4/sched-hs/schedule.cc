@@ -45,7 +45,7 @@ prio_queue_t * prio_queue_t::add_prio_domain(schedule_ctrl_t prio_control)
     ASSERT( get_depth() < sizeof(word_t) );
     
     // Allocate dummy tcbs for the scheduling domain.
-    whole_tcb_t *domain_tcbs = (whole_tcb_t *)kmem.alloc( kmem_sched, sizeof(whole_tcb_t) * num_cpus );
+    whole_tcb_t *domain_tcbs = (whole_tcb_t *)kmem_alloc(&kmem,  kmem_sched, sizeof(whole_tcb_t) * num_cpus );
     
     if( domain_tcbs == NULL )
         return NULL;

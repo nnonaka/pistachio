@@ -187,7 +187,7 @@ inline void pgent_t::clear( space_t * s, pgsize_e pgsize, bool kernel,
 
 inline void pgent_t::make_subtree( space_t * s, pgsize_e pgsize, bool kernel )
 {
-    addr_t page = kmem.alloc( kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
+    addr_t page = kmem_alloc(&kmem,  kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 
     this->raw = (word_t)virt_to_phys( page );
     if( this->raw )
@@ -199,7 +199,7 @@ inline void pgent_t::remove_subtree( space_t * s, pgsize_e pgsize, bool kernel )
     addr_t ptab = this->address( s, pgsize );
     this->raw = 0;
 
-    kmem.free( kmem_pgtab, phys_to_virt(ptab), 
+    kmem_free(&kmem,  kmem_pgtab, phys_to_virt(ptab), 
 	    POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 }
 

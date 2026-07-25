@@ -169,7 +169,7 @@ SECTION(".init") static void do_kmem_init()
     word_t bootmem_start = phys_to_virt(find_memory_area( bootmem_size ));
     word_t bootmem_end = bootmem_start + bootmem_size;
 
-    kmem.init( (addr_t)bootmem_start, (addr_t)bootmem_end );
+    kmem_init(&kmem,  (addr_t)bootmem_start, (addr_t)bootmem_end );
 
     // Define the area reserved for the exception vectors.
     get_kip()->memory_info.insert( memdesc_t::reserved, false, 
@@ -206,7 +206,7 @@ static SECTION(".init") void cpulocal_init( cpuid_t cpu )
 {
     extern char _start_cpu_[];
     extern char _end_cpu_[];
-    addr_t cpu_area = kmem.alloc( kmem_cpu, (word_t)
+    addr_t cpu_area = kmem_alloc(&kmem,  kmem_cpu, (word_t)
 		    addr_align_up( (addr_t)(_end_cpu_ - _start_cpu_), POWERPC64_PAGE_SIZE ) );
 
     pgent_t pg;

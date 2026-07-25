@@ -154,7 +154,7 @@ inline void pgent_t::clear( space_t * s, pgsize_e pgsize, bool kernel,
 
 inline void pgent_t::make_subtree( space_t * s, pgsize_e pgsize, bool kernel )
 {
-    this->raw = (word_t)kmem.alloc( kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
+    this->raw = (word_t)kmem_alloc(&kmem,  kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 
     /* the following is a no-op */
     this->tree.is_subtree = cache_subtree;
@@ -168,7 +168,7 @@ inline void pgent_t::remove_subtree( space_t * s, pgsize_e pgsize, bool kernel )
     addr_t ptab = (addr_t) this->address( s, pgsize );
     this->raw = 0;
 
-    kmem.free( kmem_pgtab, ptab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
+    kmem_free(&kmem,  kmem_pgtab, ptab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 }
 
 inline void pgent_t::set_entry( space_t * s, pgsize_e pgsize, paddr_t paddr,

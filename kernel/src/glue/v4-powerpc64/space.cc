@@ -199,7 +199,7 @@ void space_t::add_mapping( addr_t vaddr, addr_t paddr,
 void SECTION(".init.memory") init_kernel_space()
 {
     ASSERT(!dummy_tcb);
-    dummy_tcb = (tcb_t*)kmem.alloc( kmem_tcb, POWERPC64_PAGE_SIZE );
+    dummy_tcb = (tcb_t*)kmem_alloc(&kmem,  kmem_tcb, POWERPC64_PAGE_SIZE );
     ASSERT(dummy_tcb);
     dummy_tcb = virt_to_phys(dummy_tcb);
 
@@ -304,7 +304,7 @@ void space_t::allocate_tcb(addr_t addr)
 
     ASSERT(this == kernel_space);
 
-    addr_t page = kmem.alloc (kmem_tcb, POWERPC64_PAGE_SIZE);
+    addr_t page = kmem_alloc(&kmem, kmem_tcb, POWERPC64_PAGE_SIZE);
 
     // Check if mapping exist in page table (dummy page)
     if ( this->lookup_mapping ( addr, &pg, &pgsize) )
@@ -321,7 +321,7 @@ void space_t::release_kernel_mapping (addr_t vaddr, addr_t paddr,
 {
     /* Free up memory used for UTCBs */
     if (get_utcb_page_area ().is_addr_in_fpage (vaddr))
-	kmem.free (kmem_utcb, phys_to_virt (paddr), 1UL << log2size);
+	kmem_free(&kmem, kmem_utcb, phys_to_virt (paddr), 1UL << log2size);
 }
 
 utcb_t *space_t::allocate_utcb( tcb_t *tcb )
@@ -340,7 +340,7 @@ utcb_t *space_t::allocate_utcb( tcb_t *tcb )
             ( addr_offset( kaddr, (word_t) utcb & page_mask( pgsize )) );
     }
 
-    addr_t page = kmem.alloc( kmem_utcb, page_size( pgent_t::size_4k ) );
+    addr_t page = kmem_alloc(&kmem,  kmem_utcb, page_size( pgent_t::size_4k ) );
 
     this->add_4k_mapping((addr_t) utcb, virt_to_phys(page), 
 		 true, false);

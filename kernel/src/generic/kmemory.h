@@ -74,71 +74,72 @@ typedef word_t kmem_group_t;
 
 #define KMEM_CHUNKSIZE	(word_t) (1024U)
 
-class kmem_t
+struct kmem_t
 {
     word_t *kmem_free_list;
     word_t free_chunks;
     spinlock_t spinlock;
-
-    void free (void * address, word_t size);
-    void * alloc (word_t size);
-    void * alloc_aligned (word_t size, word_t alignement, word_t mask);
-
-public:
-    void init (void * start, void * end);
-    void free (kmem_group_t * group, void * address, word_t size);
-    void * alloc (kmem_group_t * group, word_t size);
-    void * alloc_aligned (kmem_group_t * group, word_t size, word_t alignment,
-		    word_t mask);
-
-    void add (void * address, word_t size)
-	{ free (address, size); }
-
-    friend class kdb_t;
 };
+typedef struct kmem_t kmem_t;
+
+BEGIN_DECLS
+void  kmem_init (kmem_t *self, void * start, void * end);
+void  kmem_do_free (kmem_t *self, void * address, word_t size);
+void *kmem_do_alloc (kmem_t *self, word_t size);
+void *kmem_do_alloc_aligned (kmem_t *self, word_t size, word_t alignment,
+			     word_t mask);
+END_DECLS
 
 
 #if defined(CONFIG_KMEM_TRACE)
 
-INLINE void * kmem_t::alloc (kmem_group_t * group, word_t size)
+INLINE void * kmem_alloc (kmem_t *self, kmem_group_t * group, word_t size)
 {
     group->mem += size;
-    return alloc (size);
+    return kmem_do_alloc (self, size);
 }
 
-INLINE void * kmem_t::alloc_aligned (kmem_group_t * group, word_t size,
+INLINE void * kmem_alloc_aligned (kmem_t *self, kmem_group_t * group, word_t size,
 		word_t alignment, word_t mask)
 {
     group->mem += size;
-    return alloc_aligned (size, alignment, mask);
+    return kmem_do_alloc_aligned (self, size, alignment, mask);
 }
 
-INLINE void kmem_t::free (kmem_group_t * group, void * address, word_t size)
+INLINE void kmem_free (kmem_t *self, kmem_group_t * group, void * address, word_t size)
 {
     ASSERT (group->mem >= size);
     group->mem -= size;
-    free (address, size);
+    kmem_do_free (self, address, size);
 }
 
 #else /* !CONFIG_KMEM_TRACE */
 
-INLINE void * kmem_t::alloc (kmem_group_t * group, word_t size)
+INLINE void * kmem_alloc (kmem_t *self, kmem_group_t * group, word_t size)
 {
-    return alloc (size);
+    (void) group;
+    return kmem_do_alloc (self, size);
 }
 
-INLINE void * kmem_t::alloc_aligned (kmem_group_t * group, word_t size,
+INLINE void * kmem_alloc_aligned (kmem_t *self, kmem_group_t * group, word_t size,
 		word_t alignment, word_t mask)
 {
-    return alloc_aligned (size, alignment, mask);
+    (void) group;
+    return kmem_do_alloc_aligned (self, size, alignment, mask);
 }
 
-INLINE void kmem_t::free (kmem_group_t * group, void * address, word_t size)
+INLINE void kmem_free (kmem_t *self, kmem_group_t * group, void * address, word_t size)
 {
-    free (address, size);
+    (void) group;
+    kmem_do_free (self, address, size);
 }
 
 #endif
+
+INLINE void kmem_add (kmem_t *self, void * address, word_t size)
+{
+    kmem_do_free (self, address, size);
+}
 
 
 /* THE kernel memory allocator */

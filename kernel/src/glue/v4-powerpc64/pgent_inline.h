@@ -196,7 +196,7 @@ inline void pgent_t::clear( space_t * s, pgsize_e pgsize, bool kernel,
 inline void pgent_t::make_subtree( space_t * s, pgsize_e pgsize, bool kernel )
 {
     /* Presently, large pages are only supported for kernel */
-    addr_t page = kmem.alloc( kmem_pgtab,
+    addr_t page = kmem_alloc(&kmem,  kmem_pgtab,
 		    ( subtree_size(pgsize) * sizeof(word_t) ) *
 		    ( ( (pgsize-1) == size_4k ) ? ( kernel ? 1 : 2 ) : 1 ) );
 
@@ -210,7 +210,7 @@ inline void pgent_t::remove_subtree( space_t * s, pgsize_e pgsize, bool kernel )
     addr_t ptab = this->subtree( s, pgsize );
     this->raw = 0;
 
-    kmem.free( kmem_pgtab, ptab, 
+    kmem_free(&kmem,  kmem_pgtab, ptab, 
 		    ( subtree_size(pgsize) * sizeof(word_t) ) *
 		    ( ( (pgsize-1) == size_4k ) ? ( kernel ? 1 : 2 ) : 1 ) );
 
