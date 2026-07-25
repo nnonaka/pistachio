@@ -850,3 +850,27 @@ touching it:
   resolve in both C and C++ (typedef / macro bridge).
 This is a design call (nested-type hoist + a virtual class guarded wholesale), not a
 copy-the-pattern job -- worth deciding deliberately rather than barreling in.
+
+
+## 29. mdb.h C-includable (hoist ctrl_t/range_t, guard virtual mdb_t) — DONE (2026-07-25, commit e537b70)
+
+The first *hard* header (virtual mdb_t) and the first *design* conversion rather than
+copy-a-pattern.  mdb_t (18 virtuals) is never instantiated here (NEW_MDB off, 0 vtables), and
+the mapping/space layer needs only the nested value type `mdb_t::ctrl_t`.
+
+**New pattern -- nested-value-type hoist:** move a nested type out to a top-level dual-rep
+struct (`mdb_t::ctrl_t` -> `mdb_ctrl_t`), then re-alias it inside the guarded parent with
+`typedef mdb_ctrl_t ctrl_t;`.  C sees the top-level struct; C++ keeps `mdb_t::ctrl_t` working
+via the typedef, so the ~18 call sites don't change and the C++ side is behaviourally
+unchanged.  The whole virtual parent is then guarded wholesale (nothing in C needs its layout).
+Cost: -8 bytes (the hoisted type's static methods/ctors mangle differently -- string table,
+not codegen).  This is how the virtual/never-instantiated classes get handled generally.
+
+Frontier: 21-file cluster moved mdb.h -> `glue/v4-x86/x64/space.h` (space_t + its own
+`mdb_t::ctrl_t` use).  space.h is next; the bridge is now easy -- `mdb_t::ctrl_t` -> `mdb_ctrl_t`
+where a C path needs it (space.h and the ~18 call sites, when those files flip).  Minor
+independent gates unchanged: segdesc.h (4), x64/syscalls.h (3), user.h (2), acpi.h (1).
+
+Header conversions this campaign (13): KIP closure, cpu-family+types, hwspace, queuestate, mmu,
+threadstate, generic-archfpage, fpage, pgent+x86_pgent, mdb.  Plus 2 .cc flips (cpu, ctors).
+The mapping/space core is now one header deep (space.h) from the big cluster flip.
