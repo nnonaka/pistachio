@@ -40,10 +40,11 @@
 
 #define IS_CONSISTENT (true)
 
-class queue_state_t
+struct queue_state_t
 {
-public:
-    enum state_e 
+    word_t state;
+#if defined(__cplusplus)
+    enum state_e
     {
 	ready		= 1,
 	wakeup		= 2,
@@ -56,11 +57,11 @@ public:
     void clear(state_e state);
     void set(state_e state);
     bool is_set(state_e state);
-
-private:
-    word_t state;
+#endif /* __cplusplus */
 };
+typedef struct queue_state_t queue_state_t;
 
+#if defined(__cplusplus)
 INLINE void queue_state_t::init()
 {
     state = 0;
@@ -83,6 +84,7 @@ INLINE bool queue_state_t::is_set(state_e state)
     /* generates better code when checking for the value */
     return (this->state & (word_t)state) == (word_t)state;
 }
+#endif /* __cplusplus */
 
 #endif /* !__API__V4__QUEUESTATE_H__ */
 

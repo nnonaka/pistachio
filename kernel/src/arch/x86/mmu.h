@@ -34,6 +34,14 @@
 
 #include INC_ARCH(cpu.h)
 
+/*
+ * x86_mmu_t is a static-methods-only holder (no data members, no instances
+ * anywhere -- only x86_mmu_t::flush_tlb() etc.).  There is nothing to
+ * represent as a C struct, so the whole class and its out-of-line inline
+ * methods are simply guarded out of the C path; a C consumer would use
+ * free-function equivalents instead.
+ */
+#if defined(__cplusplus)
 class x86_mmu_t
 {
 public:
@@ -243,8 +251,9 @@ INLINE word_t x86_mmu_t::get_pagefault_address(void)
 
     __asm__ ("mov   %%cr2, %0   \n"
             :"=r" (tmp));
-    
+
     return tmp;
 }
+#endif /* __cplusplus */
 
 #endif /* !__ARCH__X86__MMU_H__ */
