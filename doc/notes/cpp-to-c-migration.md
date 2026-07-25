@@ -736,3 +736,36 @@ Frontier after this: still only `arch/x86/x64/cpu.cc` CLEAN (needs ctor→init).
 page-table-entry class deferred in §16 — the first genuinely *large* header conversion, and
 the wall between here and the mapping/space `.cc` cluster.  `threadstate.h` (12 files, likely
 small like queuestate) is the cheaper next step.
+
+
+## 24. `arch/x86/x64/cpu.cc` → C via ctor→init — DONE (2026-07-25, commit 5493ad1)
+
+The campaign's **first .cc unblocked and flipped**, and the first constructor conversion —
+establishes the reusable mechanic for the core-object layer (scheduler/space/tcb next).
+
+**The ctor→init mechanic (staged form):**
+1. Ctor body → a C free function `T_init(T *self)` in the flipped .c; every `this->`/implicit
+   member ref becomes `self->`.  (dump_features() → `T_dump(self)` the same way.)
+2. In the header, keep the C++ ctor + method as **thin forwarders** guarded under
+   `__cplusplus`: `T::T() { T_init(this); }`.  This means the CTORPRIO/`__ctors_*__`
+   global-construction machinery and all `.method()` call sites keep working with **zero**
+   changes to init.cc — the compiler-emitted global ctor just inlines the forwarder.
+3. `SEC_INIT` moves from the ctor onto the free init function (an inline forwarding ctor
+   can't carry a `section` alias — GCC: "section of alias must match section of its target").
+4. Actually deleting the C++ ctor machinery (CTORPRIO globals → explicit init calls) is a
+   Pass-C global sweep, not per-file.  Forwarding keeps Pass B green and low-risk.
+
+**Two verification lessons:**
+- *A clean C compile proves the member sweep is complete.* With no shadowing locals, any
+  member missed by the `\bmember\b -> self->member` sed is an undeclared identifier and fails
+  to compile. `apm_features` (missing from my member list) was caught exactly this way — so
+  once it builds, every member ref is provably rewritten.  No need to eyeball 100+ refs.
+- *sed rewrites member names inside string literals too.* Three labels at the start of printf
+  formats (`"family` → `"self->family`) got clobbered — invisible to the compiler (still
+  valid strings), caught only by reading the runtime dump.  Fix: `s/"self->/"/`.  **Lesson:
+  for value-carrying flips, run the code and read the output, not just the build log.**
+  (Verified: probe prints AuthenticAMD / "QEMU Virtual CPU" / family 15 / sse2 / lm, correct
+  labels.)
+
+Not byte-identical (362352 → 362280) — expected for a .cc→.c flip.  6 C files now: lib,
+kmemory, mapping_alloc, ctors, hwspace(hdr), cpu.
