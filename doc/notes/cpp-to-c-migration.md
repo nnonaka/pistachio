@@ -367,3 +367,25 @@ in userland doesn't #GP.
 test (l4test eip ~0x1000295). Local-thread-ID IPC addressing; next thing to chase if a green
 test run is wanted. Note the kernel build currently has CONFIG_KDB_CONS_COM and
 CONFIG_VERBOSE_INIT enabled in the (gitignored) build config for testing.
+
+## 14. "Local destination Id" subtest — investigation (2026-07-25, unresolved)
+
+The one failing l4test subtest is "Local destination Id" in Simple IPC's *local* variant
+(setup_ipc_threads(..., true, true) — SAME address space, so intra-space local-ID IPC).
+Two threads: t2 (0x3d00000001) does `L4_Send(L4_LocalId(ipc_t1))` then `L4_Receive(ipc_t1)`;
+t1 (0x3e00000001) does `L4_Receive(ipc_t2, 5s)` — which times out → FAILED → drops to kdb.
+
+Traced (kernel printf on the send/exregs paths, reverted afterwards):
+- The send reaches sys_ipc with `to=0x3e00000001` (t1's global id), `is_local=0`, resolves to
+  a valid tcb, no error — so the *destination* is correct (kernel handles local IDs via
+  `#define HANDLE_LOCAL_IDS`, converting before `get_tcb`; receive-side matching at
+  ipc.cc:556/714 uses `get_local_id()`).
+- L4_LocalId(ipc_t1) never calls ExchangeRegisters (0 exreg traces before the fail), i.e.
+  userland `L4_IsGlobalId(ipc_t1)` returned false — surprising, since 0x3e00000001 has its low
+  bit set and the L4_ThreadId_t bitfield/endian macros (types.h) look correctly configured for
+  amd64 (L4_64BIT + L4_LITTLE_ENDIAN).
+
+So the destination resolves to t1 but the **send does not rendezvous** with t1's receive.
+Root cause is in the local-ID rendezvous/matching semantics (or a subtle threadid
+interpretation), not destination resolution — needs two-thread state-level tracing to finish.
+Everything ELSE in the suite passes; this is one subtest in an otherwise working kernel.
