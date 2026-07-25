@@ -59,10 +59,11 @@ INLINE bool is_roottask_space(space_t * space)
 INLINE bool is_privileged_space(space_t * space)
 {
     return (is_roottask_space(space) ||
-	    is_sigma0_space(space) || 
+	    is_sigma0_space(space) ||
 	    is_sigma1_space(space));
 }
 
+#if defined(__cplusplus)
 INLINE bool space_t::is_mappable(addr_t addr)
 {
     return (is_user_area(addr) && 
@@ -135,5 +136,6 @@ INLINE fpage_t space_t::unmap_fpage (fpage_t fpage, bool flush, bool all)
     fpage.set_rwx (~fpage.get_rwx ());
     return mapctrl (fpage, ctrl, 0, all);
 }
+#endif /* __cplusplus */
 
 #endif /* !__API__V4__SPACE_H__ */
