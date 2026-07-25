@@ -32,6 +32,7 @@
 #ifndef __API__V4__GENERIC_UTCB_H__
 #define __API__V4__GENERIC_UTCB_H__
 
+#if defined(__cplusplus)
 
 INLINE void utcb_t::set_my_global_id(threadid_t tid)
 {
@@ -113,5 +114,6 @@ INLINE threadid_t utcb_t::get_intended_receiver()
     return this->intended_receiver;
 }
 
+#endif /* __cplusplus */
 
 #endif /* !__API__V4__GENERIC_UTCB_H__ */

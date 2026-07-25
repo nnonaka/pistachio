@@ -39,9 +39,8 @@
 namespace x64 {
 #endif
 
-class utcb_t
+struct utcb_t
 {
-public:
     /* do not delete this TCB_START_MARKER */
 
     word_t              compatibility_mode;     /* -256         */
@@ -66,6 +65,7 @@ public:
     
     /* do not delete this TCB_END_MARKER */
 
+#if defined(__cplusplus)
 public:
     void set_my_global_id(threadid_t tid);
     word_t get_user_defined_handle();
@@ -83,8 +83,10 @@ public:
     threadid_t get_intended_receiver();
     threadid_t get_virtual_sender();
     void set_virtual_sender(threadid_t tid);
+#endif /* __cplusplus */
 
 } __attribute__((packed));
+typedef struct utcb_t utcb_t;
 
 #include INC_API(generic-utcb.h)
 
