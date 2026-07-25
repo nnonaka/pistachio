@@ -805,3 +805,20 @@ including header (generic-archfpage.h -> fpage.h, like queuestate->threadstate->
 Two medium/large headers -- `fpage.h` (15) and `pgent.h` (8) -- now stand between here and the
 first big wave of mapping/space/api flips.  `fpage.h` is the next step; both were the classes
 guarded-off in the mapping.h work (§16), now coming due.
+
+
+## 27. fpage.h → structs; pgent.h is now THE gate (2026-07-25, commit 7b7a85b)
+
+`mempage_t` + `fpage_t` -> structs (unions C-visible; ~30 methods, static factories, and the
+free `base_mask`/`address` helpers guarded).  Byte-identical (362280), boots.
+
+**Frontier consolidation:** clearing fpage.h pushed its 15 files onto `arch/x86/pgent.h`, which
+jumped **8 -> 21** and is now the single dominant gate over the ~31 remaining compiled `.cc`.
+Everything else is a rounding error (segdesc.h 4, x64/syscalls.h 3, user.h 2, acpi.h 1).
+
+So the header-clearing campaign has done its job: it funneled the whole remaining frontier onto
+**one wall -- `pgent.h`**, the 86-method page-table-entry class deferred in §16.  This is the
+next real job and a big one; converting it should cascade the mapping/space/glue cluster to
+CLEAN in one shot.  Headers cleared to get here: KIP closure, cpu-family+types, hwspace,
+queuestate, mmu, threadstate, generic-archfpage, fpage.  Value-type/dual-rep muscle is well
+warmed up; pgent.h is where it pays off.
