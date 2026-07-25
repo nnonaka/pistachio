@@ -166,4 +166,18 @@ public:
 
 #endif /* defined(__cplusplus) */
 
+/*
+ * Concrete instantiation of ringlist_t<T> used as a struct member
+ * (ringlist_t<tcb_t> in tcb_t / rr_sched_ktcb_t).  In C++ it aliases the
+ * template above; in C it is the plain two-pointer struct.
+ */
+#if defined(__cplusplus)
+class tcb_t;
+typedef ringlist_t<tcb_t> ringlist_tcb_t;
+#else
+struct tcb_t;
+struct ringlist_tcb_t { struct tcb_t *next; struct tcb_t *prev; };
+typedef struct ringlist_tcb_t ringlist_tcb_t;
+#endif
+
 #endif /* !__TYPES_H__ */

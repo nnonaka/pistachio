@@ -321,15 +321,15 @@ public:
     queue_state_t	queue_state;
 
     /* queues and scheduling state */
-    ringlist_t<tcb_t>	present_list;
-    ringlist_t<tcb_t>	send_list;
+    ringlist_tcb_t	present_list;
+    ringlist_tcb_t	send_list;
     tcb_t *		send_head;
     sched_ktcb_t	sched_state;
 
     spinlock_t		tcb_lock;
 
 #if defined(CONFIG_SMP)
-    ringlist_t<tcb_t>	xcpu_list;
+    ringlist_tcb_t	xcpu_list;
     cpuid_t		xcpu;
     word_t		xcpu_status;
     lockstate_t		lock_state;

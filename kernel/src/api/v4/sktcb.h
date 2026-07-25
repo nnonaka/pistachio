@@ -32,6 +32,7 @@ typedef u8_t prio_t;
 
 #include INC_API_SCHED(ktcb.h)
 
+#if defined(__cplusplus)
 class sched_ktcb_t : public policy_sched_ktcb_t
 {
 public:
@@ -125,5 +126,18 @@ public:
     /* TCB_END_MARKER */
 
 };
+#else
+struct sched_ktcb_t {
+    policy_sched_ktcb_t	base;	/* single inheritance -> base as first member */
+    /* do not delete this TCB_START_MARKER */
+
+    threadid_t		scheduler;
+#if defined(CONFIG_X_EVT_LOGGING)
+    word_t              logid;
+#endif
+    /* TCB_END_MARKER */
+};
+#endif /* __cplusplus */
+typedef struct sched_ktcb_t sched_ktcb_t;
 
 #endif /* !__API__V4__SKTCB_H__ */

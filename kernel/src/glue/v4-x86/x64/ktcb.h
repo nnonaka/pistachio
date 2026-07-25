@@ -30,5 +30,12 @@
  *                
  ********************************************************************/
 
-class arch_ktcb_t {
+struct arch_ktcb_t {
+#if !defined(__cplusplus)
+    /* x64 has no arch-specific ktcb state; an empty C++ class is 1 byte, so
+       give C an explicit byte to keep tcb_t's by-value `arch` member the
+       same size. */
+    char __empty;
+#endif
 };
+typedef struct arch_ktcb_t arch_ktcb_t;

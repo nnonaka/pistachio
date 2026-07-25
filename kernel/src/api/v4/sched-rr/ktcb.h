@@ -28,8 +28,9 @@
 typedef u8_t prio_t;
 typedef void (*requeue_callback_t)(tcb_t* tcb);
 
-class rr_sched_ktcb_t
+struct rr_sched_ktcb_t
 {
+#if defined(__cplusplus)
 public:
 
     /**
@@ -195,6 +196,7 @@ public:
      * @return true if preemption was delayed, otherwise false
      */
     bool delay_preemption ( tcb_t * tcb );
+#endif /* __cplusplus */
   
     
 #if defined(CONFIG_SMP)
@@ -203,11 +205,13 @@ public:
 #endif
 
     /* scheduling lists  */
-    ringlist_t<tcb_t>	ready_list;
-    ringlist_t<tcb_t>	wait_list;
+    ringlist_tcb_t	ready_list;
+    ringlist_tcb_t	wait_list;
     
 
+#if defined(__cplusplus)
 protected:
+#endif
    
     u64_t		total_quantum;
     u64_t		timeslice_length;
@@ -220,11 +224,14 @@ protected:
     u16_t		current_max_delay;
     u16_t		max_delay;
     
+#if defined(__cplusplus)
     friend class prio_queue_t;
+#endif
     
    
    
 };
+typedef struct rr_sched_ktcb_t rr_sched_ktcb_t;
 
 typedef rr_sched_ktcb_t policy_sched_ktcb_t;
 
