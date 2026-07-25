@@ -37,8 +37,9 @@
 /**
  * Code or Data Segment Descriptor for long/compatibility mode
  */
-class x86_segdesc_t 
+struct x86_segdesc_t
 {
+#if defined(__cplusplus)
 public:
     enum segtype_e
     {
@@ -115,7 +116,7 @@ public:
 	}
 
 
-private:
+#endif /* __cplusplus */
     union {
 	u64_t raw;
 	struct {
@@ -133,8 +134,11 @@ private:
 	    u64_t base_high	:  8;
 	} d;
     } x;
+#if defined(__cplusplus)
     friend class kdb_t;
+#endif
 };
+typedef struct x86_segdesc_t x86_segdesc_t;
 
 /* 
  * Limits are ignored for code/data segments in 64bit mode, 
@@ -146,12 +150,13 @@ private:
 /**
  * TSS Descriptor for long/compatibility mode
  */
-class x86_tssdesc_t 
+struct x86_tssdesc_t
 {
+#if defined(__cplusplus)
 public:
     void set_seg(u64_t base, u32_t limit);
 
-private:
+#endif /* __cplusplus */
     union {
 	u64_t raw[2];
 	struct {
@@ -173,14 +178,18 @@ private:
 	    
 	} d;
     } x;
+#if defined(__cplusplus)
     friend class kdb_t;
+#endif
 };
+typedef struct x86_tssdesc_t x86_tssdesc_t;
 
 /* 
  * Limits are checked 64bit mode, 
  * Addresses are ignored unless segment is for selected 
  * by FS or GS
  */   
+#if defined(__cplusplus)
 INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
 {
     x.d.base_low  = base & 0xFFFFFF;
@@ -210,6 +219,7 @@ INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
     x.d.mbz = 0;
     x.d.res0 = 0;
 }
+#endif /* __cplusplus */
 
 
 /**
@@ -217,9 +227,9 @@ INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
  * Note: Would look different for compatibility mode
  */
 
-class x86_idtdesc_t 
+struct x86_idtdesc_t
 {
-   
+#if defined(__cplusplus)
 public:
     enum segtype_e
     {
@@ -245,7 +255,7 @@ public:
 	    x.d.res0 = x.d.res1 = 0;
 	}
 
-private:
+#endif /* __cplusplus */
     union {
 	u64_t raw[2];
 	struct {
@@ -261,8 +271,11 @@ private:
 	    u64_t res1		: 32;
 	} d;
     } x;
+#if defined(__cplusplus)
     friend class kdb_t;
+#endif
 };
+typedef struct x86_idtdesc_t x86_idtdesc_t;
 
 
 #endif /* !X64_32BIT_CODE */
