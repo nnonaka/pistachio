@@ -49,6 +49,7 @@ enum resource_type_e {
 };
 
 
+#if defined(__cplusplus)
 class thread_resources_t : public generic_thread_resources_t
 {
 public:
@@ -65,17 +66,26 @@ public:
     void enable_copy_area (tcb_t * tcb, addr_t * saddr,
 			   tcb_t * partner, addr_t * daddr);
     void release_copy_area (tcb_t * tcb, bool disable_copyarea);
-    
+
     addr_t copy_area_address (word_t n);
     addr_t copy_area_real_address (word_t n);
     word_t copy_area_pdir_idx (word_t n, word_t p);
-   
+
 private:
     addr_t fpu_state;
     word_t last_copy_area;
 
     word_t pdir_idx[COPY_AREA_COUNT][COPY_AREA_PDIRS];
 };
+#else
+struct thread_resources_t {
+    /* generic_thread_resources_t base is empty (EBO) -> not embedded in C */
+    addr_t fpu_state;
+    word_t last_copy_area;
+    word_t pdir_idx[COPY_AREA_COUNT][COPY_AREA_PDIRS];
+};
+#endif
+typedef struct thread_resources_t thread_resources_t;
 
 
 

@@ -35,8 +35,16 @@
 #include <bitmask.h>
 
 
+#if defined(__cplusplus)
 class tcb_t;
+#else
+struct tcb_t;
+typedef struct tcb_t tcb_t;
+#endif
 
+/* Empty base (no data); EBO makes it 0 bytes in the derived, so C omits it
+   entirely (the derived thread_resources_t just carries its own fields). */
+#if defined(__cplusplus)
 class generic_thread_resources_t
 {
 public:
@@ -47,6 +55,7 @@ public:
     void init(tcb_t * tcb) { }
     void free(tcb_t * tcb) { }
 };
+#endif
 
 #include INC_GLUE(resources.h)
 
@@ -59,10 +68,11 @@ typedef word_t	resource_bits_t;
 /**
  * Abstract class for handling resource bit settings.
  */
-class resource_bits_t
+struct resource_bits_t
 {
     bitmask_word_t	resource_bits;
 
+#if defined(__cplusplus)
 public:
 
     /**
@@ -126,7 +136,9 @@ public:
 	{
 	    return (word_t) resource_bits;
 	}
+#endif /* __cplusplus */
 };
+typedef struct resource_bits_t resource_bits_t;
 
 #endif
 
