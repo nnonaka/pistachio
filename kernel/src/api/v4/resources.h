@@ -61,7 +61,7 @@ typedef word_t	resource_bits_t;
  */
 class resource_bits_t
 {
-    bitmask_t<word_t>	resource_bits;
+    bitmask_word_t	resource_bits;
 
 public:
 

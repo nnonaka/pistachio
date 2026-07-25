@@ -344,7 +344,7 @@ private:
 #endif
 
 public:
-    bitmask_t<word_t>	flags;
+    bitmask_word_t	flags;
     arch_ktcb_t		arch;
 
 public:

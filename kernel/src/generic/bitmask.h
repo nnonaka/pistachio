@@ -33,6 +33,7 @@
 #define __BITMASK_H__
 
 
+#if defined(__cplusplus)
 /**
  * Generic bitmask manipulation.
  */
@@ -115,8 +116,28 @@ public:
 		s[masksize-i] = is_set(i) ? d[i%16] : '~';
 	    return s;
 	}
-#endif    
+#endif
 };
+#endif /* __cplusplus */
+
+/*
+ * Concrete instantiations of bitmask_t<T> used as struct members
+ * (bitmask_t<word_t> in tcb_t / resources_t).  In C++ they alias the
+ * template above -- identical layout, full operator set.  In C they are the
+ * plain backing struct (a single T maskvalue).
+ */
+#if defined(__cplusplus)
+typedef bitmask_t<word_t> bitmask_word_t;
+typedef bitmask_t<u32_t>  bitmask_u32_t;
+typedef bitmask_t<u16_t>  bitmask_u16_t;
+#else
+struct bitmask_word_t { word_t maskvalue; };
+typedef struct bitmask_word_t bitmask_word_t;
+struct bitmask_u32_t  { u32_t  maskvalue; };
+typedef struct bitmask_u32_t bitmask_u32_t;
+struct bitmask_u16_t  { u16_t  maskvalue; };
+typedef struct bitmask_u16_t bitmask_u16_t;
+#endif
 
 
 
