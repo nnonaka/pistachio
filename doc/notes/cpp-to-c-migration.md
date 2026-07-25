@@ -689,3 +689,33 @@ hits (the ex-hwspace files surfaced it as their next gate).  Updated ranking:
 family as a unit** (`arch/x86/x64/cpu.h` + `api/v4/cpu.h` + `arch/x86/cpu.h`) plus
 `api/v4/types.h`.  That cluster gates ~22 of the 32 compiled `.cc` and is the thing standing
 between here and the first wave of actual `.cc` flips.
+
+
+## 22. cpu.h family + `api/v4/types.h` → structs (2026-07-25, commit f547360)
+
+Converted the dominant blocker cluster (dual-representation, byte-identical 362352, boots):
+`api/v4/types.h` (`time_t`, `timeout_t`), `api/v4/cpu.h` (`cpu_t`), `arch/x86/x64/cpu.h`
+(`x86_x64_cpu_features_t`).  `arch/x86/cpu.h` needed nothing (all INLINE asm, 0 classes).
+
+**New wrinkle: two classes carry real C++ constructors** — `cpu_t::cpu_t()` and the
+SEC_INIT `x86_x64_cpu_features_t::x86_x64_cpu_features_t()` (the order-critical CPUID prober).
+For *dual-representation* they guard fine (`#if __cplusplus`), and the C++ build stays
+byte-identical.  But it means: **a clean closure is necessary, not sufficient, for a flip.**
+`cpu.cc` is now closure-clean, yet its body defines that constructor + the `boot_cpu_ft`
+global, so flipping it needs the plan-§4 "ctor → explicit `*_init(self)` + wire into the init
+order" work, not just a rename.  Same will hold for cpu_t's `descriptors[]`/`count` statics.
+
+Re-scan after this cluster:
+
+| | |
+|---|---|
+| **newly CLEAN closure** | `arch/x86/x64/cpu.cc` (needs ctor→init to actually flip) |
+| next gates | `api/v4/queuestate.h` (11), `arch/x86/mmu.h` (9), `x64/segdesc.h` (3), `generic-archfpage.h` (3), `user.h` (2) |
+
+**Refined mental model of the frontier:** the remaining work splits into (a) *header*
+dual-representation (cheap, byte-identical, unblocks closures) — `queuestate.h`, `mmu.h`,
+`segdesc.h`, `generic-archfpage.h`, `user.h` are the next batch; and (b) *body* flips, where
+files with constructors/global-ctors (cpu.cc, and later the scheduler/space/tcb layer) need
+the ctor→init conversion.  Keep clearing header closures until a *constructor-free* .cc goes
+CLEAN — that's the next actually-trivial flip — while treating cpu.cc as the first
+"needs-ctor-work" flip when we choose to take it.
