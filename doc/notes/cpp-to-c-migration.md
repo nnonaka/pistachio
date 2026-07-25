@@ -962,3 +962,20 @@ Frontier: bitmask.h done; 14 files now at `api/v4/resources.h` (resources_t), pl
 `generic/linear_ptab.h` (7, the linear-ptab walker template) and the minor gates (segdesc 4,
 syscalls 3, user 2, acpi 1).  Two template walls left in the core path: resources.h is a plain
 class; linear_ptab.h is the second template.
+
+
+## 34. resources.h (empty-base EBO) — DONE (2026-07-25, commit 71f6ee9)
+
+resources_t layer, byte-identical (362272), boots.  generic_thread_resources_t (empty, methods
+only) guarded wholesale; thread_resources_t (`: public generic_thread_resources_t` + data)
+dual: C++ inheritance, C `struct { <fields> }` with the empty base dropped.  resource_bits_t
+dual-rep (bitmask_word_t member C-visible).
+
+**New sub-pattern -- empty base:** an empty base (no data) is 0 bytes by EBO, so the C struct
+must *omit* it (not embed it as a first member -- an empty C struct would add padding and break
+layout).  Contrast §31 (non-empty base -> first member).  Rule: non-empty base -> `{ base_t
+base; ... }`; empty base -> just the derived's own fields, base guarded away.
+
+Frontier: 14-file cluster (the tcb.h include chain) advances resources.h -> `api/v4/preempt.h`;
+`generic/linear_ptab.h` (7) unchanged.  The cluster is walking down tcb.h's includes one class
+per slice (bitmask -> resources -> preempt -> ...); tcb_t itself is the eventual big one.
