@@ -60,7 +60,7 @@ DECLARE_CMD_GROUP (statistics);
 
 
 /* Wrapper to call KDB's entry method */
-void SECTION(SEC_KDEBUG) kdebug_entry (void * param) { kdb.entry(param); }
+extern "C" void SECTION(SEC_KDEBUG) kdebug_entry (void * param) { kdb.entry(param); }
 
 
 /**

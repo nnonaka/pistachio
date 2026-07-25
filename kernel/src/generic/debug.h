@@ -122,7 +122,9 @@ do {								\
 # define TID(x)		((x).get_raw())
 
 /* From kdb/generic/entry.cc */
+BEGIN_DECLS
 void kdebug_entry (void *);
+END_DECLS
 
 #else /* !CONFIG_DEBUG */
 

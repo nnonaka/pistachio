@@ -52,7 +52,7 @@ DECLARE_SET (kdb_initfuncs);
 
 
 /* Wrapper to call KDB's init method */
-void SECTION (".init") kdebug_init (void) { kdb.init(); };
+extern "C" void SECTION (".init") kdebug_init (void) { kdb.init(); };
 
 /**
  * kdebug_init: Invoke all kernel debugger init functions.

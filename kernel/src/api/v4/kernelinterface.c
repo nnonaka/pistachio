@@ -62,7 +62,7 @@ extern void kdebug_entry(void *);
 // Put kernel description after processor descriptors
 #define KIP_DESCRIPTION_PTR (sizeof (kernel_interface_page_t) + sizeof(procdesc_t) * CONFIG_SMP_MAX_CPUS)
 
-extern "C" {
+BEGIN_DECLS
 
 // Memory info is calculated by linker script
 #if !defined(KIP_MEMDESCS_SIZE)
@@ -130,7 +130,7 @@ kernel_interface_page_t KIP UNIT(KIP_SECTION) =
     0, 0, 0, 0			// architecture specific syscalls
 };
 
-}
+END_DECLS
 
 extern const kernel_descriptor_t kdesc UNIT(KIP_SECTION ".kdesc") =
 {
@@ -161,8 +161,9 @@ __asm__ (".section .data." KIP_SECTION ".features.end, \"aw\", %progbits	\n"
  */
 procdesc_t processor_descriptors[CONFIG_SMP_MAX_CPUS] UNIT (KIP_SECTION ".pdesc");
 
-procdesc_t * processor_info_t::get_procdesc (word_t num)
+procdesc_t * processor_info_get_procdesc (processor_info_t *self, word_t num)
 {
+    (void) self;
     return num < CONFIG_SMP_MAX_CPUS ? &processor_descriptors[num] : NULL;
 }
 
@@ -177,9 +178,9 @@ procdesc_t * processor_info_t::get_procdesc (word_t num)
 # define KIP_MEMDESCS memory_descriptors
 #endif
 
-extern "C" {
+BEGIN_DECLS
     memdesc_t KIP_MEMDESCS[KIP_MIN_MEMDESCS] UNIT (KIP_SECTION ".mdesc");
-}
+END_DECLS
 
 /**
  * Grab memory descriptor from kernel interface page.
@@ -188,9 +189,9 @@ extern "C" {
  *
  * @return pointer to memory descriptor, or NULL if NUM is out of range
  */
-memdesc_t * memory_info_t::get_memdesc (word_t num)
+memdesc_t * memory_info_get_memdesc (memory_info_t *self, word_t num)
 {
-    if (num >= n)
+    if (num >= self->n)
 	return NULL;
     return &KIP_MEMDESCS[num];
 }
@@ -207,28 +208,37 @@ memdesc_t * memory_info_t::get_memdesc (word_t num)
  *
  * @return true if insertion was successful, false otherwise
  */
-bool memory_info_t::insert (memdesc_t::type_e type, word_t subtype,
-			    bool virt, addr_t low, addr_t high)
+bool memory_info_insert (memory_info_t *self, word_t type, word_t subtype,
+			 bool virt, addr_t low, addr_t high)
 {
     const word_t max_desc = (addr_word_t) &KIP_MEMDESCS_SIZE;
 
-    if (n >= max_desc)
+    if (self->n >= max_desc)
     {
-	printf ("Memory descriptor overflow (max=%d, n=%d)\n", max_desc, n);
+	printf ("Memory descriptor overflow (max=%d, n=%d)\n", max_desc, self->n);
 	enter_kdebug ("memdesc overflow");
 	return false;
     }
 
-    memdesc_t * md = get_memdesc (n++);
-    md->set (type, subtype, virt, low, (addr_t) ((word_t) high - 1));
+    memdesc_t * md = memory_info_get_memdesc (self, self->n++);
+    /* inlined memdesc_t::set (type, subtype, virt, low, high - 1) */
+    {
+	word_t l = ((word_t) low) >> 10;
+	word_t h = ((word_t) high - 1) >> 10;
+	md->_type = type & 0xf;
+	md->_t    = subtype & 0xf;
+	md->_v    = virt;
+	md->_low  = l & (~0UL >> 10);
+	md->_high = h & (~0UL >> 10);
+    }
 
     return true;
 }
 
 
-extern "C" {
+BEGIN_DECLS
     extern char kernel_version_string[] UNUSED;
-}
+END_DECLS
 
 /**
  * Print kernel version string.
@@ -255,11 +265,11 @@ void SECTION(".init") init_hello (void)
 #define ARCH_SYSCALL3 	0
 #endif
 
-void SECTION(".init") kernel_interface_page_t::init()
+void SECTION(".init") kernel_interface_page_init (kernel_interface_page_t *self)
 {
 #if defined(KIP_SYSCALL)
 #define SET_KIP_SYSCALL(x) \
-    this->x##_syscall = KIP_SYSCALL(user_##x)
+    self->x##_syscall = KIP_SYSCALL(user_##x)
 
     SET_KIP_SYSCALL(space_control);
     SET_KIP_SYSCALL(thread_control);
@@ -275,7 +285,7 @@ void SECTION(".init") kernel_interface_page_t::init()
 #endif
 
 #define SET_KIP_ARCH_SYSCALL(n) \
-    this->arch_syscall##n = ARCH_SYSCALL##n
+    self->arch_syscall##n = ARCH_SYSCALL##n
 
     SET_KIP_ARCH_SYSCALL (0);
     SET_KIP_ARCH_SYSCALL (1);

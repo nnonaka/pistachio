@@ -469,8 +469,33 @@ struct kernel_descriptor_t
 typedef struct kernel_descriptor_t kernel_descriptor_t;
 
 
+/*
+ * These four were out-of-line kernelinterface.cc methods; they are now C
+ * free functions (kernelinterface.c), with the C++ methods kept as thin
+ * forwarders so the .method() call sites across the tree are unchanged.
+ */
+BEGIN_DECLS
+procdesc_t * processor_info_get_procdesc (processor_info_t *self, word_t num);
+memdesc_t *  memory_info_get_memdesc (memory_info_t *self, word_t num);
+bool         memory_info_insert (memory_info_t *self, word_t type, word_t subtype,
+				 bool virt, addr_t low, addr_t high);
+void         kernel_interface_page_init (kernel_interface_page_t *self);
+
 /* From api/v4/init.cc */
 void init_hello (void);
+END_DECLS
+
+#if defined(__cplusplus)
+INLINE procdesc_t * processor_info_t::get_procdesc (word_t num)
+	{ return processor_info_get_procdesc (this, num); }
+INLINE memdesc_t * memory_info_t::get_memdesc (word_t num)
+	{ return memory_info_get_memdesc (this, num); }
+INLINE bool memory_info_t::insert (memdesc_t::type_e type, word_t subtype,
+				   bool virt, addr_t low, addr_t high)
+	{ return memory_info_insert (this, (word_t) type, subtype, virt, low, high); }
+INLINE void kernel_interface_page_t::init ()
+	{ kernel_interface_page_init (this); }
+#endif
 
 
 #endif /* !__API__V4__KERNELINTERFACE_H__ */
