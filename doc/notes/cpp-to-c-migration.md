@@ -1097,3 +1097,24 @@ Milestone: the entire value-type / KIP / space / tcb layer is now C-includable. 
 converted + 4 .cc flipped.  The remaining gates are small and mostly independent (smp.h,
 schedule.h, segdesc.h, intctrl.h, acpi.h, ...) -- the hard structural work is behind us; what's
 left is a longer tail of routine header dual-reps and then the bulk of the .cc flips.
+
+
+## 40. Gate-clearing after tcb.h (2026-07-25, commits a4801d7, and idt.h)
+
+Post-keystone gate-clearing, all byte-identical (362168), boots.  Cleared: glue schedule.h
+(method-call -> free-fn, no guard), fpu.h (static-only -> wholesale), intctrl.h (methods-only ->
+wholesale), mdb_mem.h (NEW_MDB-off -> wholesale), tss.h + arch segdesc.h + idt.h (dual-rep;
+data C-visible for their `extern` globals).
+
+**.cc CLEAN count: 9** (init32, linear_ptab_walker, mapping, asmsyms, glue thread, x64
+exception/syscalls/user, + more).  The tcb.h keystone plus this gate batch has the cluster
+cascading steadily.
+
+Bug caught: a perl close-guard that captured `};\n\n#endif` and re-emitted it duplicated the
+class `}` (fpu.h) -- C++ build error, not a C-scan error.  Lesson: for wholesale guards, anchor
+the closing `#endif` on the *include-guard* line and insert before it, rather than matching and
+re-emitting the class close.
+
+Remaining gates (larger, multi-class/template): api/v4/smp.h (cpu_mb_t/entry/sync + get_on_cpu<T>
+template), api/v4/schedule.h (schedule_req_t + scheduler_t : policy_scheduler_t), pc99/82093.h
+(IO-APIC classes), acpi.h.  Then the bulk of the .cc flips.
