@@ -168,6 +168,23 @@ INLINE msg_tag_t msgtag (word_t rawtag)
     t.raw = rawtag;
     return t;
 }
+#else /* !__cplusplus */
+/* C forms of the msg_tag_t methods (the raw/x union is C-visible); mirror the
+   like-named C++ methods for api/v4/thread.c. */
+INLINE word_t msg_tag_get_untyped (const msg_tag_t *self)	{ return self->x.untyped; }
+INLINE bool   msg_tag_is_error (const msg_tag_t *self)		{ return self->x.error; }
+INLINE void   msg_tag_set_error (msg_tag_t *self)		{ self->x.error = 1; }
+INLINE void   msg_tag_set (msg_tag_t *self, word_t typed, word_t untyped, word_t label)
+{
+    self->raw = 0;
+    self->x.typed = typed & 0x3f;
+    self->x.untyped = untyped & 0x3f;
+    self->x.label = label & (~0UL >> 16);
+}
+INLINE msg_tag_t msg_tag_error_tag (void)
+{ msg_tag_t t; t.raw = 0; t.x.error = 1; return t; }
+INLINE msg_tag_t msg_tag_preemption_tag (void)
+{ msg_tag_t t; msg_tag_set (&t, 0, 2, (-3UL << 4)); return t; }
 #endif /* __cplusplus */
 
 struct msg_item_t

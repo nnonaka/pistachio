@@ -164,6 +164,10 @@ public:
 };
 typedef struct timeout_t timeout_t;
 
+#if !defined(__cplusplus)
+INLINE timeout_t timeout_never (void) { timeout_t t; t.raw = 0; return t; }
+#endif
+
 
 typedef u16_t cpuid_t;
 
