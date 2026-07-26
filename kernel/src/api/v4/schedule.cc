@@ -465,4 +465,6 @@ void sched_remote_schedule (tcb_t *tcb)
 { get_current_scheduler ()->remote_schedule (tcb); }
 void sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags)
 { get_current_scheduler ()->schedule (dest1, dest2, (sched_flags_t) flags); }
+bool sched_idle_hlt (void)
+{ return get_current_scheduler ()->idle_hlt (); }
 END_DECLS

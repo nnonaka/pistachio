@@ -46,9 +46,16 @@ public:
     static const word_t mr(word_t num) { return x86_exc_reg_mr2reg[num][0]; };
     static const word_t reg(word_t num) { return x86_exc_reg_mr2reg[num][1]; };
 };
-
-bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception);
+#else /* !__cplusplus: C forms of the x86_exc_reg_t static accessors. */
+INLINE word_t x86_exc_reg_mr (word_t num)  { return x86_exc_reg_mr2reg[num][0]; }
+INLINE word_t x86_exc_reg_reg (word_t num) { return x86_exc_reg_mr2reg[num][1]; }
 #endif /* __cplusplus */
+
+/* send_exception_ipc is defined in glue/v4-x86/exception.c (C); keep C linkage
+   so it is callable from both languages. */
+BEGIN_DECLS
+bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception);
+END_DECLS
 
 
 
