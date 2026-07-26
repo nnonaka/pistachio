@@ -1254,3 +1254,23 @@ count.
   (get_kdebug_tcb's symbol demangles).
 
 Result non-byte-identical (361608 -> 361816). Boots, AP startup exercised. 24 .cc remain.
+
+## 45. x64/exception.cc -> exception.c: static-member arrays + enum hoist (2026-07-26, commit dfbc440)
+
+A static-data file (exception-frame register tables + one asm trap stub). Two reusable patterns:
+
+- **Class-scoped enum needed in both C and C++** (again -- cf. threadstate/queuestate §42): hoist
+  each enumerator to a namespaced macro (X86_EXC_*), C++ enum aliases them. Watch case-collisions:
+  reg_e had Dreg/dreg and Breg/breg (differ only by case) -- macros are case-sensitive but the
+  confusion is real, so those pairs use register-name macros (X86_EXC_RDIREG vs X86_EXC_RDXREG)
+  instead of case tricks.
+- **Static class-member array defined in the .cc**: a C file can't define a C++ `Class::member`.
+  Convert it to a plain file-scope global (`x86_exc_reg_mr2reg`, `x86_exceptionframe_{name,dbgreg}`),
+  declare it `extern const ...` in the header (the `extern` also gives it external linkage in C++,
+  which a bare file-scope `const` would NOT have), and repoint the consuming C++ inline methods
+  (mr()/reg(), dump()) at the global. The .c then defines the global. Callers of the methods are
+  unchanged.
+
+Non-byte-identical (table symbols change): 361816 -> 361808. Boots; the CONFIG_DEBUG dump() path
+(kdb) links against the new globals. Also mirrored the definition-header changes into the unbuilt
+x32/exception.cc for consistency. 23 .cc remain.
