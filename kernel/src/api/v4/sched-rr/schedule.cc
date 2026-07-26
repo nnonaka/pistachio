@@ -491,3 +491,26 @@ void scheduler_t::handle_timer_interrupt()
     schedule();
 }
 
+
+
+/* C wrappers for the current scheduler's public policy methods, used by the
+   (C) api/v4/schedule.c.  This file stays C++ and hosts them permanently. */
+BEGIN_DECLS
+bool sched_is_scheduler (tcb_t *tcb, tcb_t *dest)
+{ return get_current_scheduler ()->is_scheduler (tcb, dest); }
+
+word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
+{ return get_current_scheduler ()->check_schedule_parameters (scheduler, *req); }
+
+word_t sched_return_schedule_parameter (word_t num, schedule_req_t *req)
+{ return get_current_scheduler ()->return_schedule_parameter (num, *req); }
+
+void sched_commit_schedule_parameters (schedule_req_t *req)
+{ get_current_scheduler ()->commit_schedule_parameters (*req); }
+
+bool sched_schedule_requests_pending (cpuid_t cpu)
+{ return get_current_scheduler ()->schedule_requests_pending (cpu); }
+
+void sched_idle (void)
+{ get_current_scheduler ()->idle (); }
+END_DECLS

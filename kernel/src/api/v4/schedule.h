@@ -89,6 +89,9 @@ void  sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags);
 bool  sched_idle_hlt (void);
 void  sched_init (bool bootcpu);
 void  sched_start (cpuid_t cpu);
+void  sched_idle (void);
+bool  sched_schedule_requests_pending (cpuid_t cpu);
+bool  sched_is_scheduler (tcb_t *tcb, tcb_t *dest);
 END_DECLS
 
 /* schedule_req_t / schedule_request_queue_t are dual-repped: api/v4/schedule.c
@@ -165,6 +168,15 @@ struct schedule_request_queue_t
 
 };
 typedef struct schedule_request_queue_t schedule_request_queue_t;
+
+/* current-scheduler wrappers taking schedule_req_t (defined above) by pointer;
+   for the SYS_SCHEDULE path in api/v4/schedule.c.  Defined in
+   api/v4/sched-rr/schedule.cc. */
+BEGIN_DECLS
+word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req);
+word_t sched_return_schedule_parameter (word_t num, schedule_req_t *req);
+void   sched_commit_schedule_parameters (schedule_req_t *req);
+END_DECLS
 
 /* The RR policy scheduler types are dual-repped, so this is C-includable now. */
 #include INC_API_SCHED(schedule.h)
@@ -342,22 +354,22 @@ public:
      */
     word_t check_schedule_parameters(tcb_t *scheduler, schedule_req_t &req);
 
+    /**
+     * commit schedule parameters of a request
+     * @param req	  the schedule request
+     *
+     * (public so the C wrapper sched_commit_schedule_parameters can reach it.)
+     */
+    void commit_schedule_parameters(schedule_req_t &req);
+
 private:
     /**
      * searches the for the next runnable thread
      * @param p    policy specific param
-     * 
+     *
      * @return next thread to be scheduled
      */
     tcb_t * find_next_thread(policy_sched_next_thread_t *p=NULL);
-    
-    
-    /**
-     * commit schedule parameters of a request 
-     * @param req	  the schedule request
-     * 
-     */
-    void commit_schedule_parameters(schedule_req_t &req);
 
     static schedule_request_queue_t schedule_request_queue[CONFIG_SMP_MAX_CPUS];
 };
