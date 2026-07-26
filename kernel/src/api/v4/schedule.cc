@@ -439,3 +439,14 @@ void sched_deschedule (tcb_t *tcb)		{ get_current_scheduler ()->deschedule (tcb)
 tcb_t * sched_get_accounted_tcb (void)		{ return get_current_scheduler ()->get_accounted_tcb (); }
 void sched_set_accounted_tcb (tcb_t *tcb)	{ get_current_scheduler ()->set_accounted_tcb (tcb); }
 END_DECLS
+
+
+/* C wrappers for sched_ktcb_t methods (declared in api/v4/sktcb.h). */
+BEGIN_DECLS
+void sched_ktcb_init (sched_ktcb_t *self, sktcb_type_e type)	{ self->init (type); }
+void sched_ktcb_set_scheduler (sched_ktcb_t *self, threadid_t tid) { self->set_scheduler (tid); }
+void sched_ktcb_delete_tcb (sched_ktcb_t *self)			{ self->delete_tcb (); }
+void sched_ktcb_cancel_timeout (sched_ktcb_t *self)		{ self->cancel_timeout (); }
+void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue)
+							{ self->set_timeout (absolute_time, enqueue); }
+END_DECLS

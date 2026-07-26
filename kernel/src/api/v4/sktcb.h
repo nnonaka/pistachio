@@ -27,6 +27,9 @@ enum sktcb_type_e {
     sktcb_root	= 3,
     sktcb_irq	= 4,
 };
+/* C has no implicit type name for an enum tag; make `sktcb_type_e' usable
+   bare (as C++ already does) for the C decls below and api/v4/thread.c. */
+typedef enum sktcb_type_e sktcb_type_e;
 
 typedef u8_t prio_t;
 
@@ -139,5 +142,15 @@ struct sched_ktcb_t {
 };
 #endif /* __cplusplus */
 typedef struct sched_ktcb_t sched_ktcb_t;
+
+/* C wrappers for the sched_ktcb_t methods api/v4/thread.c drives (defined in
+   schedule.cc). set_timeout(time_t) is tcb_sched_set_timeout in tcb.h. */
+BEGIN_DECLS
+void sched_ktcb_init (sched_ktcb_t *self, sktcb_type_e type);
+void sched_ktcb_set_scheduler (sched_ktcb_t *self, threadid_t tid);
+void sched_ktcb_delete_tcb (sched_ktcb_t *self);
+void sched_ktcb_cancel_timeout (sched_ktcb_t *self);
+void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue);
+END_DECLS
 
 #endif /* !__API__V4__SKTCB_H__ */

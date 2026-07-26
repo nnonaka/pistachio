@@ -93,6 +93,13 @@ INLINE bool queue_state_t::is_set(state_e state)
     /* generates better code when checking for the value */
     return (this->state & (word_t)state) == (word_t)state;
 }
+#else /* !__cplusplus */
+/* C forms (state is a plain word here); mirror the C++ methods. The bit is a
+   QUEUE_STATE_* value. */
+INLINE void queue_state_init (queue_state_t *self)		{ self->state = 0; }
+INLINE void queue_state_clear (queue_state_t *self, word_t st)	{ self->state &= ~st; }
+INLINE void queue_state_set (queue_state_t *self, word_t st)	{ self->state |= st; }
+INLINE bool queue_state_is_set (const queue_state_t *self, word_t st) { return (self->state & st) == st; }
 #endif /* __cplusplus */
 
 #endif /* !__API__V4__QUEUESTATE_H__ */
