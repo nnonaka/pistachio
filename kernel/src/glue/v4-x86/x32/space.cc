@@ -165,7 +165,7 @@ void pgent_t::smp_sync(space_t * space, pgsize_e pgsize)
 {
     if (pgsize != size_4m) return;
     
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
         if (cpu != space->data.reference_ptab && space->data.cpu_ptab[cpu].top_pdir)
         {
             //TRACEF("smp sync %d / %x -> %d / %x\n",
@@ -181,7 +181,7 @@ word_t pgent_t::smp_reference_bits(space_t * space, pgsize_e pgsize, addr_t vadd
     
     word_t rwx = 0;
     
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
         if (space->data.cpu_ptab[cpu].top_pdir)
         {
             //TRACEF("smp refbits %d / %x\n",  cpu, space->pgent(idx(), cpu)->raw);

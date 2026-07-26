@@ -995,7 +995,7 @@ static void do_xcpu_flush_tlb(cpu_mb_entry_t * entry)
 
 static void flush_tlb_remote()
 {
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
 	if (cpu_remote_flush & (1 << cpu))
 	    sync_xcpu_request(cpu, do_xcpu_flush_tlb, NULL,
 			      cpu_remote_flush_global & (1 << cpu));
@@ -1005,7 +1005,7 @@ static void flush_tlb_remote()
 
 INLINE void tag_flush_remote (space_t * curspace, bool force=false)
 {
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
     {
 	if (cpu == get_current_cpu())
 	    continue;

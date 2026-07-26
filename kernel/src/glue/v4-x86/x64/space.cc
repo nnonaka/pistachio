@@ -71,7 +71,7 @@ void pgent_t::smp_sync(space_t * space, pgsize_e pgsize)
     switch (pgsize)
     {
     case size_512g: 
-	for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+	for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
 	    if (cpu != space->data.reference_ptab && space->get_top_pdir(cpu))
 
 	    {
@@ -88,7 +88,7 @@ void pgent_t::smp_sync(space_t * space, pgsize_e pgsize)
 	{
 	    ASSERT(space->get_top_pdir((cpuid_t) space->data.reference_ptab)->get_kernel_pdp());
 	    
-	    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+	    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
 		if (cpu != space->data.reference_ptab && space->get_top_pdir(cpu) &&
 		    space->get_top_pdir(cpu)->get_kernel_pdp_pgent())
 		{

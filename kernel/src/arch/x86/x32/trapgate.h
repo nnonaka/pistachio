@@ -150,7 +150,7 @@ public:
  * Usage: X86_EXCWITH_ERRORCODE(exc_gp)
  */
 #define X86_EXCWITH_ERRORCODE(name, reason)			\
-extern "C" void name (void);					\
+EXTERN_C void name (void);					\
 static void name##handler(x86_exceptionframe_t * frame);	\
 void name##_wrapper()						\
 {								\
@@ -183,7 +183,7 @@ static void name##handler(x86_exceptionframe_t * frame)
 
 
 #define X86_EXCNO_ERRORCODE(name, reason)			\
-extern "C" void name (void);					\
+EXTERN_C void name (void);					\
 static void name##handler(x86_exceptionframe_t * frame);	\
 void name##_wrapper()						\
 {								\

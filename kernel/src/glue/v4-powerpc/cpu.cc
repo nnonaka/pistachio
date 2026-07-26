@@ -34,8 +34,8 @@
 #include INC_GLUE(intctrl.h)
 #include INC_API(cpu.h)
 
-cpu_t cpu_t::descriptors[CONFIG_SMP_MAX_CPUS];
-word_t cpu_t::count;
+cpu_t cpu_descriptors[CONFIG_SMP_MAX_CPUS];
+word_t cpu_count;
 
 #if defined(CONFIG_SMP)
 

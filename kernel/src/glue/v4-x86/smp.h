@@ -60,6 +60,8 @@ INLINE void sync_entry_ack(sync_entry_t *self, cpuid_t cpu)
 /**
  * initializes XCPU handling
  */
+BEGIN_DECLS
 void init_xcpu_handling();
+END_DECLS
 
 #endif /* !__GLUE__V4_X86__SMP_H__ */

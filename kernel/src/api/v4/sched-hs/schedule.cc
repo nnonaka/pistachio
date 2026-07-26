@@ -39,7 +39,7 @@ volatile u64_t hs_scheduler_t::current_time = 0;
 	
 prio_queue_t * prio_queue_t::add_prio_domain(schedule_ctrl_t prio_control)
 {
-    word_t num_cpus = cpu_t::count;
+    word_t num_cpus = cpu_count;
     
     ASSERT( (sizeof(tcb_t) + sizeof(prio_queue_t)) < sizeof(whole_tcb_t) );
     ASSERT( get_depth() < sizeof(word_t) );
@@ -279,7 +279,7 @@ void hs_scheduler_t::policy_scheduler_init()
     root_prio_queue.init(get_on_cpu(cpu, get_idle_tcb()));
 #if defined(CONFIG_SMP)
     root_prio_queue.cpu_head = get_on_cpu(0, get_current_scheduler())->get_prio_queue();
-    root_prio_queue.cpu_link = get_on_cpu((cpuid_t) ((cpu+1) % cpu_t::count), get_current_scheduler())->get_prio_queue();
+    root_prio_queue.cpu_link = get_on_cpu((cpuid_t) ((cpu+1) % cpu_count), get_current_scheduler())->get_prio_queue();
 #endif
     
 }

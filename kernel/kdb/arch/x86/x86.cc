@@ -204,7 +204,7 @@ DECLARE_CMD (cmd_send_nmi, arch, 'N', "send_nmi", "send NMI to CPU");
 CMD(cmd_send_nmi, cg)
 {
     word_t cpuid = get_dec("CPU id", 0, NULL);
-    // cpu_t::get() is an unchecked index into cpu_t::descriptors[], so the
+    // cpu_t::get() is an unchecked index into cpu_descriptors[], so the
     // user supplied id has to be validated first -- same guard as
     // cmd_switch_cpus below.
     if (cpuid >= CONFIG_SMP_MAX_CPUS ||

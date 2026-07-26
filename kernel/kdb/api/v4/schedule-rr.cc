@@ -49,7 +49,7 @@ static void show_sched_queue(bool empty)
     int abort = 1000000;
     present_list_lock.lock();
 
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
     {
 	bool print_cpu_header = false;
         scheduler_t *scheduler = get_on_cpu(cpu, get_current_scheduler());

@@ -490,4 +490,31 @@ INLINE void local_apic_t<base>::broadcast_nmi(bool self)
 }
 
 #endif /* __cplusplus */
+
+/*
+ * Minimal C API for the local APIC at the fixed kernel mapping, mirroring the
+ * local_apic_t<APIC_MAPPINGS_START> template methods that C code (cpu.c) uses.
+ * Register offsets and bit layout match the template's regno_t/command_reg_t.
+ */
+#if !defined(__cplusplus)
+#define X86_LAPIC_EOI		0x0B0
+#define X86_LAPIC_INTR_CMD1	0x300
+#define X86_LAPIC_INTR_CMD2	0x310
+
+INLINE void local_apic_eoi (void)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_EOI) = 0;
+}
+
+INLINE void local_apic_send_ipi (u8_t apic_id, u8_t vector)
+{
+    volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD1);
+    volatile u32_t *cmd2 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD2);
+    if (*cmd1 & (1u << 12))		/* command_reg_t::delivery_status */
+	return;
+    *cmd2 = (u32_t) apic_id << 24;	/* destination in high dword bits 56:56 */
+    *cmd1 = vector;			/* raw = 0 with vector in low 8 bits */
+}
+#endif /* !__cplusplus */
+
 #endif /* !__ARCH__X86__APIC_H__ */

@@ -352,7 +352,7 @@ SYS_SCHEDULE (threadid_t dest_tid, word_t time_control,
     scheduler->process_schedule_requests();
 
 #if defined(CONFIG_SMP)
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
     {
 	if (scheduler->schedule_requests_pending(cpu))
 	    xcpu_request(cpu, do_xcpu_schedule);

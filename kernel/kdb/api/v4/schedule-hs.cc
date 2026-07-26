@@ -127,7 +127,7 @@ CMD(cmd_show_sched, cg)
     present_list_lock.lock();
     printf("\n");
     
-    for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
     {
         scheduler_t *scheduler = get_on_cpu(cpu, get_current_scheduler());
         printf("\n\nCPU %d:  scheduled tcb %t, scheduled queue %p max_prio %d\n", 

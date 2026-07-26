@@ -259,9 +259,9 @@ void intctrl_t::init_arch()
 	TRACE_INIT("  Found %d active CPUs, boot CPU is %x\n",
 		   total_cpus, local_apic.id());
 
-	if (total_cpus > cpu_t::count)
+	if (total_cpus > cpu_count)
 	    printf("  WARNING: system has %d CPUs, but kernel supports %d\n",
-		   total_cpus, cpu_t::count);
+		   total_cpus, cpu_count);
 #ifndef CONFIG_SMP
 	/* make sure the boot CPU is the first */
 	cpu_t::get(0)->set_id(local_apic.id());

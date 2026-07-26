@@ -73,7 +73,7 @@ bool kdebug_check_interrupt()
 	    last_second_tick = scheduler->get_current_time();
 	    
 	    if (get_current_cpu() == 0)
-		for (cpuid_t cpu = 0; cpu < cpu_t::count; cpu++)
+		for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
 		{
 		    // Energy timer in the last 1.1 seconds
 		    tbuf_dump(2, 0, __tracepoint_ENERGY_TIMER.id, (1 << cpu));

@@ -301,7 +301,7 @@ cpuid_t SECTION(".init.cpu") init_cpu (void)
     
 #if defined(CONFIG_SMP)
     word_t id = get_apic_id();
-    for (cpuid = 0; cpuid < cpu_t::count; cpuid++)
+    for (cpuid = 0; cpuid < cpu_count; cpuid++)
 	if (cpu_t::get(cpuid)->get_id() == id)
 	    break;
     if (cpuid > CONFIG_SMP_MAX_CPUS)
@@ -507,7 +507,7 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
     /* start APs on an SMP + rendezvous */
     {
 	TRACE_INIT("Starting %d application processors (%p->%p)\n",
-		   cpu_t::count, _start_ap, SMP_STARTUP_ADDRESS);
+		   cpu_count, _start_ap, SMP_STARTUP_ADDRESS);
 	
 	// aqcuire commence lock before starting any processor
 	smp_commence_lock.init (1);
@@ -530,7 +530,7 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 
 	word_t id = get_apic_id();
 
-	for (cpuid_t cpuid = 0; cpuid < cpu_t::count; cpuid++) 
+	for (cpuid_t cpuid = 0; cpuid < cpu_count; cpuid++) 
         {
 	    cpu_t* cpu = cpu_t::get(cpuid);
 

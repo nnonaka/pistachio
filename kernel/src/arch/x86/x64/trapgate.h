@@ -132,7 +132,7 @@ typedef struct x86_exceptionregs_t x86_exceptionregs_t;
  */
 
 #define X86_EXCWITH_ERRORCODE(name, reason)			\
-extern "C" void name##handler(x86_exceptionframe_t *frame);	\
+EXTERN_C void name##handler(x86_exceptionframe_t *frame);	\
 void name##_wrapper()						\
 {								\
     __asm__ (							\
@@ -184,8 +184,8 @@ void name##handler(x86_exceptionframe_t *frame)
 
 /* JS: TODO use RIP relative addressing !!!*/
 #define X86_EXCNO_ERRORCODE(name, reason)		\
-extern "C" void name (void);					\
-extern "C" void name##handler(x86_exceptionframe_t *frame);	\
+EXTERN_C void name (void);					\
+EXTERN_C void name##handler(x86_exceptionframe_t *frame);	\
 void name##_wrapper()						\
 {								\
     __asm__ (							\

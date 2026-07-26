@@ -71,9 +71,11 @@
 #if defined(__cplusplus)
 #define BEGIN_DECLS	extern "C" {
 #define END_DECLS	}
+#define EXTERN_C	extern "C"	/* single-declaration form, usable inside macros */
 #else
 #define BEGIN_DECLS
 #define END_DECLS
+#define EXTERN_C
 #endif
 
 /* use this to place code/data in a certain section */

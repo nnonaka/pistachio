@@ -52,21 +52,34 @@ struct cpu_t {
     word_t get_id()
 	{ return id; }
 
-    static cpu_t descriptors[CONFIG_SMP_MAX_CPUS];
-    static word_t count;
-    static cpu_t * get(cpuid_t cpuid) {
-	return &descriptors[cpuid];
-    }
-
-    static bool add_cpu(word_t id) {
-	if (count >= CONFIG_SMP_MAX_CPUS)
-	    return false;
-	descriptors[count++].id = id;
-	return true;
-    }
+    static cpu_t * get(cpuid_t cpuid);
+    static bool add_cpu(word_t id);
 #endif /* __cplusplus */
 };
 typedef struct cpu_t cpu_t;
+
+/* The former cpu_t static data members, now plain globals so C can define and
+   use them (defined in cpu.c). cpu_descriptors is initialised to invalid ids,
+   matching the C++ cpu_t() constructor. */
+extern cpu_t  cpu_descriptors[CONFIG_SMP_MAX_CPUS];
+extern word_t cpu_count;
+
+/* C free-function accessors; the C++ methods above stay for C++ callers. */
+INLINE cpu_t * cpu_get (cpuid_t cpuid)		{ return &cpu_descriptors[cpuid]; }
+INLINE word_t  cpu_get_id (cpu_t *self)		{ return self->id; }
+INLINE void    cpu_set_id (cpu_t *self, word_t id) { self->id = id; }
+INLINE bool    cpu_is_valid (cpu_t *self)	{ return self->id < ~0UL; }
+
+#if defined(__cplusplus)
+INLINE cpu_t * cpu_t::get (cpuid_t cpuid)	{ return cpu_get(cpuid); }
+INLINE bool cpu_t::add_cpu (word_t id)
+{
+    if (cpu_count >= CONFIG_SMP_MAX_CPUS)
+	return false;
+    cpu_descriptors[cpu_count++].id = id;
+    return true;
+}
+#endif /* __cplusplus */
 
 INLINE cpuid_t get_current_cpu()
 {
