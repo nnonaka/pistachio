@@ -37,6 +37,7 @@
 #include INC_API(interrupt.h)
 #include INC_API(schedule.h)
 #include INC_API(space.h)
+#include INC_API(generic-archmap.h)
 #include INC_API(kernelinterface.h)
 #include INC_GLUE(syscalls.h)
 #include INC_API(syscalls.h)
@@ -1638,4 +1639,20 @@ void   tcb_send_pagefault_ipc (tcb_t *self, addr_t addr, addr_t ip, int access)
 addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)	{ return self->copy_area_real_address (addr); }
 void   tcb_set_error_code (tcb_t *self, word_t err)		{ self->set_error_code (err); }
 bool   tcb_is_local_cpu (tcb_t *self)				{ return self->is_local_cpu (); }
+END_DECLS
+
+
+/* time_t / xfer-timeout / misc free-function wrappers for api/v4/space.c
+   (declared in api/v4/tcb.h and api/v4/fpage.h). */
+BEGIN_DECLS
+time_t tcb_get_xfer_timeout_snd (tcb_t *self)	{ return self->get_xfer_timeout_snd (); }
+time_t tcb_get_xfer_timeout_rcv (tcb_t *self)	{ return self->get_xfer_timeout_rcv (); }
+void   tcb_sched_set_timeout (tcb_t *self, time_t t) { self->sched_state.set_timeout (t); }
+u64_t  time_get_microseconds (time_t *self)	{ return self->get_microseconds (); }
+bool   time_lt (time_t a, time_t b)		{ return a < b; }
+tcb_t * get_idle_tcb_c (void)			{ return get_idle_tcb (); }
+void   handle_ipc_timeout_c (word_t state)	{ handle_ipc_timeout (state); }
+bool   is_privileged_space_c (space_t *space)	{ return is_privileged_space (space); }
+void   spin_forever_c (int pos)			{ spin_forever (pos); }
+void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush) { arch_unmap_fpage (from, fpage, flush); }
 END_DECLS

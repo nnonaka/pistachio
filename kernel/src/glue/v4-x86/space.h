@@ -492,6 +492,19 @@ void      space_flush_tlb (space_t *self, space_t *curspace);
 void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, word_t log2size);
 bool      space_is_sigma0 (space_t *space);
 space_t * get_current_space_c (void);
+/* space_t methods driven by api/v4/space.c (handle_pagefault/free/syscalls). */
+void      space_map_sigma0 (space_t *self, addr_t addr);
+bool      space_sync_kernel_space (space_t *self, addr_t addr);
+bool      space_is_initialized (space_t *self);
+void      space_allocate_tcb (space_t *self, addr_t addr);
+void      space_map_dummy_tcb (space_t *self, addr_t addr);
+word_t    space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redir);
+void      space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
+void      space_arch_free (space_t *self);
+fpage_t   space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all);
+bool      space_is_tcb_area (addr_t addr);
+bool      space_is_copy_area (addr_t addr);
+bool      space_is_user_area_fpage (fpage_t fpage);
 /* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
    C symbol would corrupt the many external callers). This wrapper bridges it for
    linear_ptab_walker.c's readmem, writing the page size as a word_t. */

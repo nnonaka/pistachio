@@ -318,6 +318,12 @@ void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write
 word_t fpage_base_mask (fpage_t fp, word_t size);
 addr_t fpage_address (fpage_t fp, word_t size);
 bool   fpage_is_rwx (fpage_t *self);
+bool   fpage_is_mempage (fpage_t *self);
+bool   fpage_is_archpage (fpage_t *self);
+bool   fpage_is_overlapping (fpage_t *self, fpage_t other);
+word_t fpage_get_size (fpage_t *self);
+fpage_t fpage_complete_mem (void);
+void   arch_unmap_fpage_c (struct tcb_t *from, fpage_t fpage, bool flush);
 END_DECLS
 
 

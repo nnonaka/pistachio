@@ -309,6 +309,8 @@ void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
 void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
 		       tcb_t * tcb, word_t param0, word_t param1, word_t param2);
 #endif
+/* C wrapper for xcpu_request's first overload (defined in schedule.cc). */
+void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t param0);
 END_DECLS
 
 #endif /* CONFIG_SMP_SYNC_REQUEST */

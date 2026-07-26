@@ -853,6 +853,17 @@ void   tcb_send_pagefault_ipc (tcb_t *self, addr_t addr, addr_t ip, int access);
 addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr);
 void   tcb_set_error_code (tcb_t *self, word_t err);
 bool   tcb_is_local_cpu (tcb_t *self);
+time_t tcb_get_xfer_timeout_snd (tcb_t *self);
+time_t tcb_get_xfer_timeout_rcv (tcb_t *self);
+void   tcb_sched_set_timeout (tcb_t *self, time_t t);
+/* time_t helpers wrapped in C++ (get_microseconds/operator<), plus a few free
+   functions that are C++-only inlines; all defined in thread.cc. */
+u64_t  time_get_microseconds (time_t *self);
+bool   time_lt (time_t a, time_t b);
+tcb_t * get_idle_tcb_c (void);
+void   handle_ipc_timeout_c (word_t state);
+bool   is_privileged_space_c (space_t *space);
+void   spin_forever_c (int pos);
 END_DECLS
 
 #if defined(__cplusplus)

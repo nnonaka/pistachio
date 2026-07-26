@@ -422,3 +422,12 @@ u64_t sched_get_current_time (void)
     return get_current_scheduler ()->get_current_time ();
 }
 END_DECLS
+
+
+/* C wrapper for xcpu_request (first overload); declared in api/v4/smp.h. */
+BEGIN_DECLS
+void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t *tcb, word_t param0)
+{
+    xcpu_request (dstcpu, handler, tcb, param0);
+}
+END_DECLS

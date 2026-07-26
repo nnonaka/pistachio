@@ -1247,6 +1247,11 @@ void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write
 word_t fpage_base_mask (fpage_t fp, word_t size)		{ return base_mask (fp, size); }
 addr_t fpage_address (fpage_t fp, word_t size)			{ return address (fp, size); }
 bool   fpage_is_rwx (fpage_t *self)				{ return self->is_rwx (); }
+bool   fpage_is_mempage (fpage_t *self)				{ return self->is_mempage (); }
+bool   fpage_is_archpage (fpage_t *self)			{ return self->is_archpage (); }
+bool   fpage_is_overlapping (fpage_t *self, fpage_t other)	{ return self->is_overlapping (other); }
+word_t fpage_get_size (fpage_t *self)				{ return self->get_size (); }
+fpage_t fpage_complete_mem (void)				{ return fpage_t::complete_mem (); }
 
 /* space_t */
 pgent_t * space_pgent (space_t *self, word_t num)		{ return self->pgent (num); }
@@ -1328,4 +1333,23 @@ bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t
 	*r_size = (word_t) sz;
     return r;
 }
+END_DECLS
+
+
+/* space_t method wrappers for api/v4/space.c (declared in glue/v4-x86/space.h). */
+BEGIN_DECLS
+void space_map_sigma0 (space_t *self, addr_t addr)		{ self->map_sigma0 (addr); }
+bool space_sync_kernel_space (space_t *self, addr_t addr)	{ return self->sync_kernel_space (addr); }
+bool space_is_initialized (space_t *self)			{ return self->is_initialized (); }
+void space_allocate_tcb (space_t *self, addr_t addr)		{ self->allocate_tcb (addr); }
+void space_map_dummy_tcb (space_t *self, addr_t addr)		{ self->map_dummy_tcb (addr); }
+word_t space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redir)
+					{ return self->space_control (ctrl, kip_area, utcb_area, redir); }
+void space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area)	{ self->init (utcb_area, kip_area); }
+void space_arch_free (space_t *self)				{ self->arch_free (); }
+fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all)
+					{ return self->unmap_fpage (fpage, flush, unmap_all); }
+bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
+bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
+bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }
 END_DECLS

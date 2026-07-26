@@ -106,6 +106,22 @@ public:
 } __attribute__((packed));
 typedef struct time_t time_t;
 
+#if !defined(__cplusplus)
+/* C forms of the time_t predicates (raw/bitfields are C-visible); mirrors the
+   C++ is_never/is_zero.  get_microseconds and operator< are wrapped in C++
+   (time_get_microseconds/time_lt, declared in api/v4/tcb.h). */
+INLINE bool time_is_never (const time_t *self) { return self->raw == 0; }
+INLINE bool time_is_zero (const time_t *self)
+{
+    time_t z;
+    z.raw = 0;
+    z.time.mantissa = 0;
+    z.time.exponent = 1;
+    z.time.type = 0;
+    return z.raw == self->raw;
+}
+#endif /* !__cplusplus */
+
 #if defined(__cplusplus)
 INLINE u64_t time_t::get_microseconds()
 {
