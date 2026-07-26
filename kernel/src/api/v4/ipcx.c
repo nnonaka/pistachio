@@ -1,10 +1,10 @@
 /*********************************************************************
- *                
+ *
  * Copyright (C) 2002, 2004-2005, 2007-2008,  Karlsruhe University
- *                
- * File path:     api/v4/ipcx.cc
+ *
+ * File path:     api/v4/ipcx.c
  * Description:   Extended transfer of IPC
- *                
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -25,9 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *                
+ *
  * $Id: ipcx.cc,v 1.26 2006/10/19 22:57:38 ud3 Exp $
- *                
+ *
  ********************************************************************/
 #include <debug.h>
 #include <kdb/tracepoints.h>
@@ -35,7 +35,6 @@
 #include INC_API(ipc.h)
 #include INC_API(fpage.h)
 #include INC_API(schedule.h)
-#include INC_GLUE(map.h)
 
 #define CHECK_BR_IDX(idx) if (idx > IPC_NUM_BR) goto message_overflow
 /* "total" is a count of message registers, so the highest index that may be
@@ -55,7 +54,7 @@ DECLARE_TRACEPOINT_DETAIL(IPC_CTRLXFER_ITEM_DETAILS);
 #endif
 
 #if !defined(IPC_STRING_COPY)
-extern "C" void * memcpy (void * dst, const void * src, word_t len);
+void * memcpy (void * dst, const void * src, word_t len);
 #define IPC_STRING_COPY memcpy
 #endif
 
@@ -65,12 +64,12 @@ word_t ipc_copy (tcb_t * src, addr_t src_addr,
     TRACEPOINT (IPC_STRING_COPY, "IPC string copy: %t @ %p -> %t @ %p, len=0x%x\n",
 		src, src_addr, dst, dst_addr, len);
 
-    space_t * src_space = src->get_space ();
-    space_t * dst_space = dst->get_space ();
+    space_t * src_space = tcb_get_space (src);
+    space_t * dst_space = tcb_get_space (dst);
 
     // Check limits of source and destination string.
-    word_t src_len = src_space->get_copy_limit (src_addr, len);
-    word_t dst_len = dst_space->get_copy_limit (dst_addr, len);
+    word_t src_len = space_get_copy_limit (src_space, src_addr, len);
+    word_t dst_len = space_get_copy_limit (dst_space, dst_addr, len);
 
     // String might need to be clipped.
     if (src_len < len) len = src_len;
@@ -78,26 +77,26 @@ word_t ipc_copy (tcb_t * src, addr_t src_addr,
 
     // For inter-space string copy we need to use a copy area.
     if (src_space != dst_space)
-	src->adjust_for_copy_area (dst, &src_addr, &dst_addr);
+	tcb_adjust_for_copy_area (src, dst, &src_addr, &dst_addr);
 
     src->misc.ipc_copy.copy_start_src =
 	src->misc.ipc_copy.copy_fault = src_addr;
     src->misc.ipc_copy.copy_start_dst = dst_addr;
 
     // we may cause a nested pagefault ipc, therefore unlock the receiver tcb
-    dst->unlock();
+    tcb_unlock (dst);
     IPC_STRING_COPY (dst_addr, src_addr, len);
-    dst->lock();
-    
+    tcb_lock (dst);
+
     src->misc.ipc_copy.copy_length += len;
 
     return len;
 }
 
-static void copy_mr(tcb_t * dst, tcb_t * src, int index)
+static void copy_mr(tcb_t * dst, tcb_t * src, word_t index)
 {
     ASSERT(index < IPC_NUM_MR);
-    dst->set_mr(index, src->get_mr(index));
+    tcb_set_mr (dst, index, tcb_get_mr (src, index));
 }
 
 msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
@@ -105,113 +104,107 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
     msg_item_t src_item;
     acceptor_t acceptor;
     word_t br_idx = 1;
-    word_t total_mrs = msgtag.get_untyped() + msgtag.get_typed() + 1;
+    word_t total_mrs = msg_tag_get_untyped (&msgtag) + msg_tag_get_typed (&msgtag) + 1;
     word_t total_len = 0;
 #if defined(CONFIG_X_CTRLXFER_MSG)
     word_t total_cxfer_mrs = 0;
 #endif
     bool accept_strings;
-    
+
 //    ENABLE_TRACEPOINT (IPC_STRING_COPY, ~0, 0);
 //    ENABLE_TRACEPOINT (IPC_STRING_ITEM, ~0, 0);
 //    ENABLE_TRACEPOINT (IPC_MESSAGE_OVERFLOW, ~0, 0);
 #undef TRACEF
 #define TRACEF(args...)
-    
+
     if (total_mrs > IPC_NUM_MR)
     {
-	printf("message exceeds MR's (untyped=%d, typed=%d)\n", 
-	       msgtag.get_untyped(), msgtag.get_typed());
+	printf("message exceeds MR's (untyped=%d, typed=%d)\n",
+	       msg_tag_get_untyped (&msgtag), msg_tag_get_typed (&msgtag));
 	enter_kdebug("message exceeds MR's");
 	goto message_overflow;
     }
 
-    src->set_state (thread_state_t::locked_running);
-    dst->set_state (thread_state_t::locked_waiting);
+    tcb_set_state (src, THREAD_STATE_LOCKED_RUNNING);
+    tcb_set_state (dst, THREAD_STATE_LOCKED_WAITING);
 
-    src->set_partner (dst->get_global_id ());
+    tcb_set_partner (src, tcb_get_global_id (dst));
     src->misc.ipc_copy.copy_length = 0;
 
-    acceptor = dst->get_br(0);
-    
+    acceptor.raw = tcb_get_br (dst, 0);
+
     /* does the receiver (still) accepts strings? */
-    accept_strings = acceptor.accept_strings();
+    accept_strings = acceptor_accept_strings (&acceptor);
 
-    TRACEPOINT(IPC_EXT_TRANSFER, "tag=%p, untyped: %d, typed: %d, acceptor: %x\n", 
-	       msgtag.raw, msgtag.get_untyped(), msgtag.get_typed(), acceptor.raw);
+    TRACEPOINT(IPC_EXT_TRANSFER, "tag=%p, untyped: %d, typed: %d, acceptor: %x\n",
+	       msgtag.raw, msg_tag_get_untyped (&msgtag), msg_tag_get_typed (&msgtag), acceptor.raw);
 
-    for (word_t src_idx = msgtag.get_untyped() + 1; src_idx < total_mrs; )
+    for (word_t src_idx = msg_tag_get_untyped (&msgtag) + 1; src_idx < total_mrs; )
     {
-	src_item = src->get_mr(src_idx);
+	src_item.raw = tcb_get_mr (src, src_idx);
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-	if (src_item.is_ctrlxfer_item()) 
+	if (src_item.is_ctrlxfer_item())
 	{
 	    bool src_mr = !src->flags.is_set(tcb_t::kernel_ctrlxfer_msg);
 	    bool dst_mr = !acceptor.accept_ctrlxfer();
 	    word_t cxfer_regs;
-	    
+
 	    TRACEPOINT(IPC_CTRLXFER_ITEM,
 		       "ctrlxfer item: ipc %t->%t id=%d, mask=%x %c->%c",
 		       src, dst, src_item.get_ctrlxfer_id(), src_item.get_ctrlxfer_mask(),
-		       src_mr ? 'm' : 'f', dst_mr ? 'm' : 'f');	    
-	    
-	    cxfer_regs = src->ctrlxfer(dst, src_item, src_idx, msgtag.x.untyped+1+total_cxfer_mrs, src_mr, dst_mr); 
-	    
+		       src_mr ? 'm' : 'f', dst_mr ? 'm' : 'f');
+
+	    cxfer_regs = src->ctrlxfer(dst, src_item, src_idx, msgtag.x.untyped+1+total_cxfer_mrs, src_mr, dst_mr);
+
 	    src_idx += src_mr ? cxfer_regs : 1;
 	    msgtag.x.typed += src_mr ? 0 : cxfer_regs - 1;
 	    total_cxfer_mrs += dst_mr ? 0 : cxfer_regs;
-    
+
 	}
 	else
 #endif
-	if (src_item.is_map_item() || src_item.is_grant_item())
+	if (msg_item_is_map_item (&src_item) || msg_item_is_grant_item (&src_item))
 	{
 	    /* is the descriptor beyond the valid range? */
 	    CHECK_MR_IDX(src_idx + 1, total_mrs);
-	    
-	    fpage_t snd_fpage, rcv_fpage;
-	    snd_fpage.raw = src->get_mr(src_idx + 1);
 
-	    if (snd_fpage.is_mempage ())
-		rcv_fpage.raw = acceptor.get_rcv_window();
-	    else if (snd_fpage.is_archpage ())
-		rcv_fpage = acceptor.get_arch_specific_rcvwindow (dst);
+	    fpage_t snd_fpage, rcv_fpage;
+	    snd_fpage.raw = tcb_get_mr (src, src_idx + 1);
+
+	    if (fpage_is_mempage (&snd_fpage))
+		rcv_fpage.raw = acceptor_get_rcv_window (&acceptor);
+	    else if (fpage_is_archpage (&snd_fpage))
+		rcv_fpage = acceptor_get_arch_specific_rcvwindow (&acceptor, dst);
 	    else
 		// Unknown fpage type
 		goto message_overflow;
 
 
 	    TRACEPOINT(IPC_MAPGRANT_ITEM, "%s item: snd_base=%p, fpage=%p\n",
-		       src_item.is_map_item() ? "map" : "grant", 
+		       src_item.is_map_item() ? "map" : "grant",
 		       src_item.get_snd_base(), snd_fpage.raw);
-	    
+
 	    /* does the receiver accept mappings */
-	    if (EXPECT_FALSE( rcv_fpage.is_nil_fpage() ))
+	    if (EXPECT_FALSE( fpage_is_nil_fpage (&rcv_fpage) ))
 		goto message_overflow;
 
-	    copy_mr(dst, src, (int) src_idx++);
-	    copy_mr(dst, src, (int) src_idx++);
+	    copy_mr(dst, src, src_idx++);
+	    copy_mr(dst, src, src_idx++);
 
-	    if (snd_fpage.is_mempage ())
+	    if (fpage_is_mempage (&snd_fpage))
 	    {
-		src->get_space()->map_fpage
-		    (snd_fpage, src_item.get_snd_base(), 
-		     dst->get_space(), rcv_fpage, src_item.is_grant_item());
-#if 0 && defined(CONFIG_X_X86_HVM)
-		if (dst->get_space()->is_hvm_space())
-		    src->get_space()->map_fpage
-			(snd_fpage, src_item.get_snd_base(),
-			 dst->get_space()->get_hvm_space()->get_gpas(), rcv_fpage, src_item.is_grant_item());
-#endif
+		space_map_fpage
+		    (tcb_get_space (src), snd_fpage, msg_item_get_snd_base (&src_item),
+		     tcb_get_space (dst), rcv_fpage, msg_item_is_grant_item (&src_item));
 	    }
-	    else if (snd_fpage.is_archpage ())
-		arch_map_fpage(src, snd_fpage, src_item.get_snd_base (),
-			       dst, rcv_fpage, src_item.is_grant_item ());
+	    else if (fpage_is_archpage (&snd_fpage))
+		arch_map_fpage_c (src, snd_fpage, msg_item_get_snd_base (&src_item),
+			       dst, rcv_fpage, msg_item_is_grant_item (&src_item));
 
-	    if (EXPECT_FALSE (src_item.is_grant_item () &&
-			      snd_fpage.get_size_log2 () >
-			      rcv_fpage.get_size_log2 ()))
+	    if (EXPECT_FALSE (msg_item_is_grant_item (&src_item) &&
+			      fpage_get_size_log2 (&snd_fpage) >
+			      fpage_get_size_log2 (&rcv_fpage)))
 	    {
 		/*
 		 * We are granting an fpage that is larger than
@@ -220,51 +213,51 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 		 * the map function itself to avoid deep function
 		 * recursion.
 		 */
-		if (snd_fpage.is_mempage ())
-		    src->get_space ()->unmap_fpage (snd_fpage, true, false);
-		else if (snd_fpage.is_archpage ())
-		    arch_unmap_fpage (src, snd_fpage, true);
+		if (fpage_is_mempage (&snd_fpage))
+		    space_unmap_fpage (tcb_get_space (src), snd_fpage, true, false);
+		else if (fpage_is_archpage (&snd_fpage))
+		    arch_unmap_fpage_c (src, snd_fpage, true);
 	    }
 	}
-	else if (src_item.is_string_item())
+	else if (msg_item_is_string_item (&src_item))
 	{
-	    /* 
+	    /*
 	     * Copy the MR at the very beginning to make sure the
 	     * receiver can deal with cut message situations.
 	     */
-	    copy_mr (dst, src, (int) src_idx);
-	
+	    copy_mr (dst, src, src_idx);
+
 	    if (! accept_strings)
 		goto message_overflow;
 
 	    // We might have overflow on MRs
-	    CHECK_MR_IDX (src_idx + src_item.get_string_ptr_count (),
+	    CHECK_MR_IDX (src_idx + msg_item_get_string_ptr_count (&src_item),
 			  total_mrs);
 
 	    msg_item_t dst_item;
 	    word_t src_addr, src_len, src_ptridx;
 	    word_t dst_addr, dst_len, dst_ptridx;
 
-	    src_addr = src->get_mr (src_idx + 1);
-	    src_len  = src_item.get_string_length ();
+	    src_addr = tcb_get_mr (src, src_idx + 1);
+	    src_len  = msg_item_get_string_length (&src_item);
 	    src_ptridx = 1;
 
 	    // Check for overflow on BRs.  br_idx is always guaranteed
 	    // to be in range.
-	    dst_item = dst->get_br (br_idx);
-	    CHECK_BR_IDX (br_idx + dst_item.get_string_ptr_count ());
+	    dst_item.raw = tcb_get_br (dst, br_idx);
+	    CHECK_BR_IDX (br_idx + msg_item_get_string_ptr_count (&dst_item));
 
-	    dst_addr = dst->get_br (br_idx + 1);
-	    dst_len  = dst_item.get_string_length ();
+	    dst_addr = tcb_get_br (dst, br_idx + 1);
+	    dst_len  = msg_item_get_string_length (&dst_item);
 	    dst_ptridx = 1;
 
-	    TRACEPOINT (IPC_STRING_ITEM, 
+	    TRACEPOINT (IPC_STRING_ITEM,
 			"IPC string item: src:%p (sub=%d idx=%d len=%p %s)"
 			"dst:%p (sub=%d idx=%d len=%p %s)",
-			src_item.raw, 
+			src_item.raw,
 			src_item.get_string_ptr_count (),
 			src_ptridx, src_len,
-			src_item.is_string_compound () ?	
+			src_item.is_string_compound () ?
 			"c" : "",
 			dst_item.raw,
 			dst_item.get_string_ptr_count (),
@@ -273,23 +266,23 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 			"c" : "");
 
 	    // Sanity checking
-	    if (! dst_item.is_string_item ())
+	    if (! msg_item_is_string_item (&dst_item))
 		goto message_overflow;
 
 	    // Check if there are more receive buffers after this one
-	    accept_strings = dst_item.more_strings ();
+	    accept_strings = msg_item_more_strings (&dst_item);
 
 	    bool end_of_send_string = false;
 
 	    while (! end_of_send_string)
 	    {
-		TRACEPOINT (IPC_STRING_ITEM, 
+		TRACEPOINT (IPC_STRING_ITEM,
 			    "  src: addr=%p len=%p (idx=%d)\n"
 			    "  dst: addr=%p len=%p (idx=%d)\n",
 			    src_addr, src_len, src_ptridx,
 			    dst_addr, dst_len, dst_ptridx);
 
-		copy_mr (dst, src, (int) (src_idx + src_ptridx));
+		copy_mr (dst, src, src_idx + src_ptridx);
 
 		word_t copy_length = dst_len < src_len ? dst_len : src_len;
 		word_t cpy_len = ipc_copy (src, (addr_t) src_addr,
@@ -313,26 +306,26 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 		    // if there are more substrings or compund strings
 		    // in the current send string.
 
-		    if (src_ptridx < src_item.get_string_ptr_count ())
+		    if (src_ptridx < msg_item_get_string_ptr_count (&src_item))
 		    {
 			// More substrings to send
 			src_ptridx++;
-			src_addr = src->get_mr (src_idx + src_ptridx);
-			src_len  = src_item.get_string_length ();
+			src_addr = tcb_get_mr (src, src_idx + src_ptridx);
+			src_len  = msg_item_get_string_length (&src_item);
 		    }
-		    else if (src_item.is_string_compound ())
+		    else if (msg_item_is_string_compound (&src_item))
 		    {
 			// Send string is compund
 			src_idx += src_ptridx + 1;
 			src_ptridx = 1;
 			CHECK_MR_IDX (src_idx + 1, total_mrs);
 
-			src_item = src->get_mr (src_idx);
-			src_addr = src->get_mr (src_idx + src_ptridx);
-			src_len  = src_item.get_string_length ();
+			src_item.raw = tcb_get_mr (src, src_idx);
+			src_addr = tcb_get_mr (src, src_idx + src_ptridx);
+			src_len  = msg_item_get_string_length (&src_item);
 
 			CHECK_MR_IDX (src_idx +
-				      src_item.get_string_ptr_count (),
+				      msg_item_get_string_ptr_count (&src_item),
 				      total_mrs);
 
 			TRACEPOINT (IPC_STRING_ITEM,
@@ -358,13 +351,13 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 		    TRACEF ("Skip receive buffer\n");
 		    bool compound;
 		    do {
-			compound = dst_item.is_string_compound ();
+			compound = msg_item_is_string_compound (&dst_item);
 			TRACEF ("compund=%d  more=%d\n",
 				dst_item.is_string_compound (),
 				dst_item.more_strings ());
 
 			// Calculate position of next string item
-			br_idx += dst_item.get_string_ptr_count () + 1;
+			br_idx += msg_item_get_string_ptr_count (&dst_item) + 1;
 
 			if (br_idx >= IPC_NUM_BR)
 			{
@@ -374,7 +367,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 			    break;
 			}
 
-			dst_item.raw = dst->get_br (br_idx);
+			dst_item.raw = tcb_get_br (dst, br_idx);
 		    } while (compound);
 		}
 		else
@@ -384,26 +377,26 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 
 		    if (dst_len == 0)
 		    {
-			if (dst_ptridx < dst_item.get_string_ptr_count ())
+			if (dst_ptridx < msg_item_get_string_ptr_count (&dst_item))
 			{
 			    // More substrings in receive buffer
 			    dst_ptridx++;
-			    dst_addr = dst->get_br (br_idx + dst_ptridx);
-			    dst_len  = dst_item.get_string_length ();
+			    dst_addr = tcb_get_br (dst, br_idx + dst_ptridx);
+			    dst_len  = msg_item_get_string_length (&dst_item);
 			}
-			else if (dst_item.is_string_compound ())
+			else if (msg_item_is_string_compound (&dst_item))
 			{
 			    // Receive buffer is compund
 			    br_idx += dst_ptridx + 1;
 			    dst_ptridx = 1;
 			    CHECK_BR_IDX (br_idx + 1);
 
-			    dst_item = dst->get_br (br_idx);
-			    dst_addr = dst->get_br (br_idx + dst_ptridx);
-			    dst_len  = dst_item.get_string_length ();
+			    dst_item.raw = tcb_get_br (dst, br_idx);
+			    dst_addr = tcb_get_br (dst, br_idx + dst_ptridx);
+			    dst_len  = msg_item_get_string_length (&dst_item);
 
 			    CHECK_BR_IDX (br_idx +
-					  dst_item.get_string_ptr_count ());
+					  msg_item_get_string_ptr_count (&dst_item));
 
 			    TRACEPOINT (
 				IPC_STRING_ITEM,
@@ -425,7 +418,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 
 	    } // while (! end_of_send_string)
 	}
-       	else 
+       	else
 	{
 	    TRACEF("unknown item type\n");
 	    goto message_overflow;
@@ -433,27 +426,27 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
     }
 
     // Release copy area
-    src->release_copy_area ();
+    tcb_release_copy_area (src);
 
     // Cancel any pending XFER timeouts.
-    src->sched_state.cancel_timeout ();
-    src->flags -= tcb_t::has_xfer_timeout;
+    sched_ktcb_cancel_timeout (&src->sched_state);
+    tcb_flags_remove (src, TCB_FLAG_HAS_XFER_TIMEOUT);
     return msgtag;
 
 message_overflow:
 
     // Release copy area
-    src->release_copy_area ();
+    tcb_release_copy_area (src);
 
     // Cancel any pending XFER timeouts.
-    src->sched_state.cancel_timeout ();
+    sched_ktcb_cancel_timeout (&src->sched_state);
 
     TRACEPOINT (IPC_MESSAGE_OVERFLOW, "IPC message overflow (%t->%t), len=0x%x\n",
 		src, dst, total_len);
 
     // Report message overflow error
-    dst->set_error_code (IPC_RCV_ERROR (ERR_IPC_MSG_OVERFLOW (total_len)));
-    src->set_error_code (IPC_SND_ERROR (ERR_IPC_MSG_OVERFLOW (total_len)));
-    msgtag.set_error();
+    tcb_set_error_code (dst, IPC_RCV_ERROR (ERR_IPC_MSG_OVERFLOW (total_len)));
+    tcb_set_error_code (src, IPC_SND_ERROR (ERR_IPC_MSG_OVERFLOW (total_len)));
+    msg_tag_set_error (&msgtag);
     return msgtag;
 }

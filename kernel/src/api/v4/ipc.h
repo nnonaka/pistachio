@@ -398,6 +398,9 @@ public:
  *
  * @returns the message tag
  */
+/* api/v4/ipcx.c is C; keep C linkage so the C++ caller (ipc.cc) agrees. */
+BEGIN_DECLS
 msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag);
+END_DECLS
 
 #endif /* !__API__V4__IPC_H__ */
