@@ -178,6 +178,32 @@ INLINE bool thread_state_t::is_runnable()
     /* invers logic - lowestmost bit no set means runnable */
     return !((word_t)this->state & 1);
 }
+#else /* !__cplusplus */
+/* C predicates on thread_state_t (state is a plain word here); mirror the
+   like-named C++ methods for api/v4/thread.c and friends. */
+INLINE bool thread_state_is_runnable (const thread_state_t *self)
+    { return !(self->state & 1); }
+INLINE bool thread_state_is_sending (const thread_state_t *self)
+    { return self->state == THREAD_STATE_POLLING || self->state == THREAD_STATE_LOCKED_RUNNING; }
+INLINE bool thread_state_is_receiving (const thread_state_t *self)
+    { return self->state == THREAD_STATE_WAITING_FOREVER || self->state == THREAD_STATE_WAITING_TIMEOUT ||
+	     self->state == THREAD_STATE_LOCKED_WAITING; }
+INLINE bool thread_state_is_halted (const thread_state_t *self)
+    { return self->state == THREAD_STATE_HALTED; }
+INLINE bool thread_state_is_aborted (const thread_state_t *self)
+    { return self->state == THREAD_STATE_ABORTED; }
+INLINE bool thread_state_is_running (const thread_state_t *self)
+    { return self->state == THREAD_STATE_RUNNING; }
+INLINE bool thread_state_is_waiting (const thread_state_t *self)
+    { return self->state == THREAD_STATE_WAITING_FOREVER || self->state == THREAD_STATE_WAITING_TIMEOUT; }
+INLINE bool thread_state_is_polling (const thread_state_t *self)
+    { return self->state == THREAD_STATE_POLLING; }
+INLINE bool thread_state_is_locked_running (const thread_state_t *self)
+    { return self->state == THREAD_STATE_LOCKED_RUNNING; }
+INLINE bool thread_state_is_locked_waiting (const thread_state_t *self)
+    { return self->state == THREAD_STATE_LOCKED_WAITING; }
+INLINE bool thread_state_is_xcpu_waiting (const thread_state_t *self)
+    { return self->state == THREAD_STATE_XCPU_WAITING_DELTCB || self->state == THREAD_STATE_XCPU_WAITING_EXREGS; }
 #endif /* __cplusplus */
 
 #endif /* __API__V4__THREADSTATE_H__ */
