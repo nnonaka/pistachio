@@ -91,5 +91,14 @@ INLINE void mem_region_t::set(addr_t low, addr_t high)
 }
 #endif /* __cplusplus */
 
+#if !defined(__cplusplus)
+/* C forms of the mem_region_t methods (low/high are C-visible; mem_region_is_empty
+   already lives as a wrapper in glue space.cc). */
+INLINE word_t mem_region_get_size (const mem_region_t *self)
+{ return self->high == 0 ? 0 : (word_t)self->high - (word_t)self->low; }
+INLINE void mem_region_set (mem_region_t *self, addr_t low, addr_t high)
+{ self->low = low; self->high = high; }
+#endif /* !__cplusplus */
+
 
 #endif /* !__GENERIC__MEMREGION_H__ */

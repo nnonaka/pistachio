@@ -134,6 +134,26 @@ struct memdesc_t
 };
 typedef struct memdesc_t memdesc_t;
 
+/* Memory-descriptor type values, named as macros so C can reference them; the
+   C++ type_e enum above aliases these. */
+#define MEMDESC_UNDEFINED	0x0
+#define MEMDESC_CONVENTIONAL	0x1
+#define MEMDESC_RESERVED	0x2
+#define MEMDESC_DEDICATED	0x3
+#define MEMDESC_SHARED		0x4
+#define MEMDESC_BOOT_SPECIFIC	0xe
+#define MEMDESC_ARCH_SPECIFIC	0xf
+
+#if !defined(__cplusplus)
+/* C forms of the memdesc_t methods (the bitfields are C-visible). */
+INLINE word_t memdesc_type (const memdesc_t *self)	{ return self->_type; }
+INLINE word_t memdesc_subtype (const memdesc_t *self)	{ return self->_t; }
+INLINE bool   memdesc_is_virtual (const memdesc_t *self)	{ return self->_v; }
+INLINE addr_t memdesc_low (const memdesc_t *self)	{ return (addr_t) (self->_low << 10); }
+INLINE addr_t memdesc_high (const memdesc_t *self)	{ return (addr_t) ((self->_high << 10) + 0x3ff); }
+INLINE word_t memdesc_size (const memdesc_t *self)	{ return ((self->_high - self->_low + 1) << 10); }
+#endif /* !__cplusplus */
+
 
 
 #endif /* !__API__V4__MEMDESC_H__ */
