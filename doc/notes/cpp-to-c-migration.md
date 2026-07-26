@@ -1668,3 +1668,44 @@ Two gotchas worth keeping:
       nil, ...);`. Same for the result word: pass threadid_get_raw(&local).
 
 Verified: builds 363128, boots, l4test region byte-identical. 14 .cc remain.
+
+## 55. api/v4/ipcx.cc -> C: extended IPC transfer, staged A/B (2026-07-26, commits 250266e 00efced)
+
+ipcx.cc (459 lines): the non-untyped IPC transfer path -- string items (with
+compound/substring copy loops) and map/grant items. Mostly free functions
+(ipc_copy, copy_mr, extended_transfer). CONFIG_X_CTRLXFER_MSG off -> the
+ctrlxfer branches are dead-#if'd. Broadest foundation so far because IPC touches
+mapping + copy-areas; each new form is a one-liner though.
+
+Step A (250266e): msg_item_t/acceptor_t already dual-rep structs, so just C
+accessors over their unions (msg_item_is_*/get_*; acceptor_accept_strings/
+get_rcv_window) + msg_tag_get_typed. Wrappers: space_get_copy_limit,
+tcb_adjust_for_copy_area, arch_map_fpage_c, acceptor_get_arch_specific_
+rcvwindow. space_t::map_fpage is already asm-named space_map_fpage (C prototype,
+no wrapper).
+
+Two points worth keeping:
+
+  (a) Which arch-map definitions are active. ipcx pulls arch_map_fpage /
+      get_arch_specific_rcvwindow via INC_GLUE(map.h) -> io_space.h. With
+      CONFIG_X86_IO_FLEXPAGES OFF, io_space.h just #includes generic-archmap.h
+      -- the nil/empty INLINE versions. glue thread.cc (the arch-wrapper home)
+      also includes generic-archmap.h, so hosting the wrappers there resolves
+      the SAME definitions => behavior-identical. Always confirm which of two
+      competing definitions the target's include chain actually selects before
+      picking a wrapper home.
+
+  (b) goto across C block-scope declarations. extended_transfer's overflow
+      handling is `goto message_overflow` from deep in nested blocks. This is
+      valid C: the label is at function (outermost) scope, so every goto jumps
+      OUTWARD, exiting the inner scopes -- C only forbids jumping INTO a scope
+      past a VLA, which never happens here. No restructuring needed.
+
+Also fixed a latent bug this surfaced: interrupt.c (committed earlier) called
+two asm-named tcb methods with no C prototype -> implicit declarations that
+linked only by SysV-AMD64 luck. The earlier flip's warning grep hadn't included
+"implicit declaration"; added the prototypes (commit a5d0c0a) and widened the
+warning check.
+
+Verified: builds 359168 (warning-clean), boots, l4test region byte-identical.
+13 .cc remain.
