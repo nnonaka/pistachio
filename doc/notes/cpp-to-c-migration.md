@@ -1631,3 +1631,40 @@ Three reusable gotchas:
 Verified: builds 363400, boots (interrupt threads init, KIP system_base set),
 l4test All-tests region byte-identical to the pre-flip reference (diff clean;
 only the pre-existing "Local destination Id" FAILED). 15 .cc remain.
+
+## 54. api/v4/exregs.cc -> C: ExchangeRegisters(), staged A/B (2026-07-26, commits ba08e80 9fbe95e)
+
+exregs.cc (455 lines; ~70 dead behind CONFIG_X_CTRLXFER_MSG=off). SMP xcpu
+request/reply/remote handlers + perform_exregs + the SYS_EXCHANGE_REGISTERS
+syscall. Reused the tcb/scheduler/threadid/thread_state C-API.
+
+Step A (ba08e80): exregs_ctrl_t class -> dual-rep struct (EXREGS_CTRL_*_FLAG
+macros; union C-visible; methods under __cplusplus; exregs_ctrl_is_set/set C
+inlines). 4 new tcb wrappers (get/set_user_flags, get/set_user_handle).
+xcpu_request7 (7-param C wrapper -- the exregs handlers pass up to 7 mailbox
+params, past xcpu_request_many's 4).
+
+Step B (9fbe95e): mechanical translation. misc.exregs.* accessed directly
+(C-visible union member). exregs_ctrl_t(word_t) ctor -> `c.raw = r;`.
+
+Two gotchas worth keeping:
+
+  (a) Restructuring a class that shared an outer `#if __cplusplus` block.
+      exregs_ctrl_t opened a `#if __cplusplus` that ALSO wrapped the following
+      schedule_ctrl_t etc. (one guard, matching #endif far below). Dropping the
+      opening `#if` to expose exregs_ctrl_t to C silently un-guarded everything
+      after it. Fix: re-open `#if __cplusplus` right after the exregs_ctrl_t C
+      block so the trailing types stay C++-only and the distant #endif still
+      pairs. When you split a shared guard, always re-close/re-open around the
+      one type you're exposing.
+
+  (b) A return-path macro with C++-isms, taking the address of its arg. The
+      return_exchange_registers macro (x64/syscalls.h) is expanded ONLY in
+      exregs, so it was made language-neutral (pager.get_raw() ->
+      threadid_get_raw(&(pager)); current->get_user_*() -> tcb_get_user_*()).
+      Because it now does &(pager), the pager arg must be an LVALUE -- the
+      error path passed threadid_t::nilthread() (an rvalue), so spill it:
+      `threadid_t nil = threadid_nilthread(); return_exchange_registers(...,
+      nil, ...);`. Same for the result word: pass threadid_get_raw(&local).
+
+Verified: builds 363128, boots, l4test region byte-identical. 14 .cc remain.
