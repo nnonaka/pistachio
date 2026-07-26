@@ -44,8 +44,20 @@
 #define MDB_PGSHIFTS            { 12, 21, 30, 39, 48 }
 #define MDB_NUM_PGSIZES         (4)
 
-#define X86_PGSIZES		{ size_4k = 0, size_2m = 1, size_1g = 2, size_512g = 3, \
-				  size_sync = size_1g, size_superpage = size_2m, size_max = size_512g }
+/* Page-size indices hoisted to macros so C (linear_ptab_walker.c and the
+   pgent_t C API) can name them; the pgsize_e enum below aliases these. */
+#define X86_PGSIZE_4K		0
+#define X86_PGSIZE_2M		1
+#define X86_PGSIZE_1G		2
+#define X86_PGSIZE_512G		3
+#define X86_PGSIZE_SYNC		X86_PGSIZE_1G
+#define X86_PGSIZE_SUPERPAGE	X86_PGSIZE_2M
+#define X86_PGSIZE_MAX		X86_PGSIZE_512G
+
+#define X86_PGSIZES		{ size_4k = X86_PGSIZE_4K, size_2m = X86_PGSIZE_2M,	\
+				  size_1g = X86_PGSIZE_1G, size_512g = X86_PGSIZE_512G,	\
+				  size_sync = X86_PGSIZE_SYNC, size_superpage = X86_PGSIZE_SUPERPAGE, \
+				  size_max = X86_PGSIZE_MAX }
 
 struct x86_pgent_t
 {

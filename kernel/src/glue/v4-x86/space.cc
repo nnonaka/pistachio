@@ -1151,3 +1151,57 @@ void space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu)
 bool space_has_cpu_top_pdir (space_t *self, cpuid_t cpu)
 { return self->has_cpu_top_pdir (cpu); }
 END_DECLS
+
+
+/* C wrappers for the pgent_t methods (declared in arch/x86/pgent.h), driving
+   the page tables from generic/linear_ptab_walker.c. Each casts the word_t
+   pgsize back to pgent_t::pgsize_e and delegates to the C++ method. */
+BEGIN_DECLS
+bool pgent_is_valid (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_valid (s, (pgent_t::pgsize_e) pgsize); }
+
+bool pgent_is_writable (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_writable (s, (pgent_t::pgsize_e) pgsize); }
+
+bool pgent_is_readable (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_readable (s, (pgent_t::pgsize_e) pgsize); }
+
+bool pgent_is_executable (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_executable (s, (pgent_t::pgsize_e) pgsize); }
+
+bool pgent_is_subtree (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_subtree (s, (pgent_t::pgsize_e) pgsize); }
+
+addr_t pgent_address (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->address (s, (pgent_t::pgsize_e) pgsize); }
+
+word_t pgent_attributes (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->attributes (s, (pgent_t::pgsize_e) pgsize); }
+
+pgent_t * pgent_subtree (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->subtree (s, (pgent_t::pgsize_e) pgsize); }
+
+pgent_t * pgent_next (pgent_t *self, struct space_t *s, word_t pgsize, word_t num)
+{ return self->next (s, (pgent_t::pgsize_e) pgsize, num); }
+
+struct mapnode_t * pgent_mapnode (pgent_t *self, struct space_t *s, word_t pgsize, addr_t vaddr)
+{ return self->mapnode (s, (pgent_t::pgsize_e) pgsize, vaddr); }
+
+void pgent_clear (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr)
+{ self->clear (s, (pgent_t::pgsize_e) pgsize, kernel, vaddr); }
+
+void pgent_make_subtree (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel)
+{ self->make_subtree (s, (pgent_t::pgsize_e) pgsize, kernel); }
+
+void pgent_remove_subtree (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel)
+{ self->remove_subtree (s, (pgent_t::pgsize_e) pgsize, kernel); }
+
+void pgent_set_entry (pgent_t *self, struct space_t *s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel)
+{ self->set_entry (s, (pgent_t::pgsize_e) pgsize, paddr, rwx, attrib, kernel); }
+
+void pgent_set_linknode (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map, addr_t vaddr)
+{ self->set_linknode (s, (pgent_t::pgsize_e) pgsize, map, vaddr); }
+
+void pgent_update_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
+{ self->update_rights (s, (pgent_t::pgsize_e) pgsize, rwx); }
+END_DECLS

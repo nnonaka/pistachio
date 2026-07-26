@@ -384,6 +384,28 @@ public:
 };
 typedef struct pgent_t pgent_t;
 
+/* C wrappers for the pgent_t methods above (defined in glue/v4-x86/space.cc)
+   so generic/linear_ptab_walker.c can drive the page tables. pgsize is a
+   word_t holding an X86_PGSIZE_* value; the wrappers cast it to pgsize_e. */
+BEGIN_DECLS
+bool      pgent_is_valid       (pgent_t *self, struct space_t *s, word_t pgsize);
+bool      pgent_is_writable    (pgent_t *self, struct space_t *s, word_t pgsize);
+bool      pgent_is_readable    (pgent_t *self, struct space_t *s, word_t pgsize);
+bool      pgent_is_executable  (pgent_t *self, struct space_t *s, word_t pgsize);
+bool      pgent_is_subtree     (pgent_t *self, struct space_t *s, word_t pgsize);
+addr_t    pgent_address        (pgent_t *self, struct space_t *s, word_t pgsize);
+word_t    pgent_attributes     (pgent_t *self, struct space_t *s, word_t pgsize);
+pgent_t * pgent_subtree        (pgent_t *self, struct space_t *s, word_t pgsize);
+pgent_t * pgent_next           (pgent_t *self, struct space_t *s, word_t pgsize, word_t num);
+struct mapnode_t * pgent_mapnode      (pgent_t *self, struct space_t *s, word_t pgsize, addr_t vaddr);
+void      pgent_clear          (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr);
+void      pgent_make_subtree   (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel);
+void      pgent_remove_subtree (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel);
+void      pgent_set_entry      (pgent_t *self, struct space_t *s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel);
+void      pgent_set_linknode   (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map, addr_t vaddr);
+void      pgent_update_rights  (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+END_DECLS
+
 #if defined(CONFIG_NEW_MDB)
 #undef mapnode_t
 #endif
