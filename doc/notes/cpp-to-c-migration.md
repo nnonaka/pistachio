@@ -1226,3 +1226,31 @@ batch of these accessors as free functions before they can flip.
 
 State: 24 .cc remain. All byte-identical / boot-verified. The tcb accessor free-fn API is now the
 incremental unblock path for the core queue.
+
+## 44. api/v4/smp.cc -> smp.c: a wider cascade (2026-07-26, commit b449c26)
+
+smp.cc looked small (OOL=3) but cascaded across 6 files -- a good example of how a Pass B flip's
+cost is set by how many wholesale-guarded types and C++-only helpers its body touches, not by line
+count.
+
+- Two config surprises: CONFIG_SMP_SYNC_REQUEST is defined in glue/v4-x86/x64/config.h (NOT the
+  main config.h), so the "dead" synchronous XCPU half is actually LIVE. Always grep the glue
+  config.h too, not just build/.../config.h.
+- Dual-repped cpu_mb_entry_t, cpu_mb_t, and sync_entry_t (all were wholesale-guarded in smp.h from
+  the §41 pass). sync_entry_t is single-inheritance from cpu_mb_entry_t -> whole-class #if/#else
+  split with `cpu_mb_entry_t base;` first member in C; inherited-member access becomes `.base.x`,
+  and an upcast `&e` (sync->mb) becomes `&e.base`.
+- Method -> free-function rules of thumb: if a method has NO C++ callers (walk_mailbox except via
+  process_xcpu_mailbox; all of sync_entry_t's), make it a pure C free function and delete the
+  method. If it DOES (dump_mailbox via xcpu_request; cpu_mb_entry_t::set via cpu_mb_t::enter),
+  keep the C++ method (or a forwarder) AND add the C free function beside it.
+- Default-arg decls can't go in BEGIN_DECLS as-is: sync_xcpu_request needs its C++ default-arg
+  declaration for space.cc, so split `#if __cplusplus <defaults> #else <no defaults> #endif`
+  inside BEGIN_DECLS.
+- Two more C-linkage exposures the body forced: get_kdebug_tcb() (moved from a __cplusplus block
+  into debug.h's BEGIN_DECLS -- had to write `struct tcb_t *` since the tcb_t typedef isn't
+  visible that early, only the types.h forward `struct tcb_t;`), and spin() (glue debug.h; added a
+  C branch without the default arg, C callers pass spin(pos, 0)). Both are non-byte-identical
+  (get_kdebug_tcb's symbol demangles).
+
+Result non-byte-identical (361608 -> 361816). Boots, AP startup exercised. 24 .cc remain.
