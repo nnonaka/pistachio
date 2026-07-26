@@ -1191,3 +1191,38 @@ name (Makeconf `SOURCES+=`, voodoo `SYMSRCS`), update that reference and force-r
   (`git show HEAD:...cc | gcc -x c++ -fsyntax-only`) to tell regressions from pre-existing.
 
 Ready queue now 27 .cc CLEAN (asmsyms/idt flipped out of the set).  0 blockers.
+
+## 43. tcb C-API foundation + more Pass B flips (2026-07-26, commits 08aa098 ee8acd9 8c88382)
+
+Flipped x64/user.cc (pure extern-"C" inline-asm syscall stubs; drop extern "C", add explicit
+#include <tcb_layout.h> since glue tcb.h -- which used to pull it in -- is now C++-guarded in
+api tcb.h; byte-identical).
+
+Then the foundational piece the rest of the queue needs: **expose the glue tcb layer to C**.
+Nearly every remaining .cc calls get_current_tcb() and tcb accessors, but the glue tcb headers
+were reachable only in C++ (api/v4/tcb.h wrapped `#include INC_GLUE(tcb.h)` inside the big
+__cplusplus tail-guard from the keystone work, and glue tcb.h + glue x64 tcb.h are almost all
+tcb_t:: OOL methods).
+- api/v4/tcb.h: split the tail guard so INC_GLUE(tcb.h) is included in BOTH C and C++ (close the
+  guard before the include, reopen after -- a no-op for C++, so byte-identical).
+- glue/v4-x86/tcb.h + glue/v4-x86/x64/tcb.h: guard the tcb_t:: OOL methods (and the
+  kdb/tracebuffer.h include, which has C++ classes) behind __cplusplus; leave get_current_tcb(),
+  tcb_layout.h, initial_switch_to, and the C-safe includes visible to C.
+Diagnostic trick used: `gcc -E` the header as C vs C++ and grep for a body-only token (e.g.
+`leaq -8` from get_current_tcb's asm) to prove whether a header's body actually reaches C.
+
+Then flipped x64/syscalls.cc (the dispatcher) as the first tcb-C-API consumer:
+- threadid_t X.set_raw(v) -> threadid_set_raw(&X,v) (threadid_t's C API already existed); sys_*
+  handlers are in BEGIN_DECLS and take threadid_t by value -> C calls them directly.
+- get_current_tcb()->get_local_id().get_raw() -> tcb_get_local_id() temp + threadid_get_raw().
+  Added tcb_get_local_id() as the first tcb_t C accessor free function (mirrors the method,
+  which stays for C++; add more accessors here as C files need them).
+- C-only -Wsign-conversion on `uip & ~(SYSCALL_ALIGN-1)` fixed with a `~(word_t)` cast.
+
+**Pattern for adding a tcb accessor to C**: add `INLINE T tcb_<name>(const tcb_t*self){return
+self-><member>;}` right after INC_GLUE(tcb.h) in api tcb.h (C-visible), leave the C++ method
+alone (byte-identity). The big files (ipc.cc 166 tcb-calls, thread.cc 154, ...) will each need a
+batch of these accessors as free functions before they can flip.
+
+State: 24 .cc remain. All byte-identical / boot-verified. The tcb accessor free-fn API is now the
+incremental unblock path for the core queue.
