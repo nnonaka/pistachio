@@ -64,8 +64,8 @@
 
 #if defined(CONFIG_DEBUG)
 
-void init_console (void);
 BEGIN_DECLS
+void init_console (void);
 int printf (const char * format, ...);
 struct tcb_t *get_kdebug_tcb();	/* elaborated: tcb_t typedef not yet visible here */
 END_DECLS

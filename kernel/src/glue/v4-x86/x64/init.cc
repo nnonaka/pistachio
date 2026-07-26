@@ -77,6 +77,15 @@ struct gdt_struct {
 u8_t x86_x64_cache_line_size;
 
 
+/* These are called from the (now C) glue/v4-x86/init.c, so give them C linkage
+   (this file provides the definitions). */
+BEGIN_DECLS
+void check_cpu_features (void);
+void setup_msrs (void);
+void init_meminfo (void);
+void setup_smp_boot_gdt (void);
+END_DECLS
+
 // from glue/v4-x86/
 void clear_bss (void);
 

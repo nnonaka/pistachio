@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2007,  Karlsruhe University
  *
- * File path:     glue/v4-x86/init.cc
+ * File path:     glue/v4-x86/init.c
  * Description:   ia32-specific initialization
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,14 +62,16 @@
 #include INC_GLUE_SA(logging.h)
 #endif
 
-// from either glue/v4-ia32/ or glue/v4-x86/
-void setup_msrs();
-void SECTION(SEC_INIT) init_meminfo();
-void SECTION(".init.cpu") check_cpu_features();
-cpuid_t SECTION(".init.cpu") init_cpu();
-void SECTION(SEC_INIT) setup_gdt(x86_tss_t &tss, cpuid_t cpuid);
+/* Defined in glue/v4-x86/x64/init.cc with C linkage; the tss/gdt wrappers hide
+   the cpulocal tss global and the reference-taking setup_gdt.  init_cpu (the
+   3-arg per-processor init) is declared in api/v4/cpu.h. */
+void setup_msrs (void);
+void init_meminfo (void);
+void check_cpu_features (void);
+void x86_tss_setup_c (word_t kernel_ds);
+void setup_gdt_c (cpuid_t cpuid);
 #if defined(CONFIG_X_X86_HVM)
-void SECTION(".init.cpu") setup_vmx (cpuid_t cpuid);
+void setup_vmx (cpuid_t cpuid);
 #endif
 
 
@@ -79,27 +81,32 @@ void SECTION(".init.cpu") setup_vmx (cpuid_t cpuid);
  * SMP functions.
  *
  *************************************************************************/
-extern "C" void _start_ap(void);
-extern void setup_smp_boot_gdt();
+void _start_ap(void);
+void setup_smp_boot_gdt(void);
 
 spinlock_t smp_boot_lock;
 /* commence to sync TSC */
 spinlock_t smp_commence_lock;
 
+#if defined(CONFIG_DEBUG)
+/* C-visible forms of the debug.h reboot hooks (declared there only for C++). */
+extern void x86_reset(void);
+extern bool x86_reboot_scheduled;
+#endif
 
-INLINE u8_t get_apic_id (void)
+
+static u8_t get_apic_id (void)
 {
-    local_apic_t<APIC_MAPPINGS_START> apic;
-    return apic.id();
+    return (u8_t) apic_get_id ();
 }
 
 
 static void smp_ap_commence (void)
 {
-    smp_boot_lock.unlock();
+    spinlock_unlock (&smp_boot_lock);
 
     /* finally we sync the time-stamp counters */
-    while( smp_commence_lock.is_locked() );
+    while( spinlock_is_locked (&smp_commence_lock) );
 
     x86_settsc(0);
 }
@@ -108,19 +115,23 @@ static void smp_ap_commence (void)
 static void smp_bp_commence (void)
 {
     // wait for last processor to call in
-    smp_boot_lock.lock();
+    spinlock_lock (&smp_boot_lock);
 
     // now release all at once
-    smp_commence_lock.unlock();
+    spinlock_unlock (&smp_commence_lock);
 
     x86_settsc(0);
 }
 
 
+/* forward decl: the per-CPU init (renamed from the C++ glue init_cpu(void) to
+   avoid clashing with the C api/v4 init_cpu(cpuid, freq, freq) in cpu.h). */
+static cpuid_t init_cpu_local (void);
+
 /**
  * startup_cpu
  */
-extern "C" void SECTION(SEC_INIT) startup_cpu (void)
+void SECTION(SEC_INIT) startup_cpu (void)
 {
 #if defined(CONFIG_DEBUG)
     if (x86_reboot_scheduled)
@@ -128,20 +139,20 @@ extern "C" void SECTION(SEC_INIT) startup_cpu (void)
 #endif
 
     TRACE_INIT("\tAP processor is alive\n");
-    x86_mmu_t::set_active_pagetable((word_t) get_kernel_space()->get_top_pdir_phys());
+    x86_mmu_set_active_pagetable((word_t) space_get_top_pdir_phys (get_kernel_space_c(), get_current_cpu()));
     TRACE_INIT("\tAP switched to kernel ptab\n");
-    
+
     // first thing -- check CPU features
     check_cpu_features();
 
     /* perform processor local initialization */
-    cpuid_t cpuid = init_cpu();
+    cpuid_t cpuid = init_cpu_local();
 
-    get_current_scheduler()->init (false);
-    get_idle_tcb()->notify (smp_ap_commence);
-    get_current_scheduler()->start (cpuid);
+    sched_init (false);
+    tcb_notify (get_idle_tcb_c (), smp_ap_commence);
+    sched_start (cpuid);
 
-    spin_forever(cpuid);
+    spin_forever_c (cpuid);
 }
 #endif /* defined(CONFIG_SMP) */
 
@@ -171,7 +182,7 @@ void SECTION(SEC_INIT) init_bootmem (void)
     /* now do reservations */
 
     // Mark the kernel code as reserved
-    get_kip()->reserved_mem0.set(start_text_phys, end_bootmem_phys);
+    mem_region_set (&get_kip()->reserved_mem0, start_text_phys, end_bootmem_phys);
 
 #if defined(CONFIG_SUBARCH_X32)
     // Were we booted via RMGR?
@@ -183,7 +194,7 @@ void SECTION(SEC_INIT) init_bootmem (void)
          *accessible physical memory, whatever is lower  */
 	if (end < virt_to_phys (KERNEL_AREA_END))
 	    end = virt_to_phys(KERNEL_AREA_END);
-        
+
         get_kip()->reserved_mem1.set((addr_t) (end - ADDITIONAL_KMEM_SIZE),
                                      (addr_t) end);
     }
@@ -199,63 +210,63 @@ void SECTION(SEC_INIT) add_more_kmem (void)
      * boot loader for us. */
     bool found = false;
     for (word_t i = 0;
-         i < get_kip()->memory_info.get_num_descriptors();
+         i < memory_info_get_num_descriptors (&get_kip()->memory_info);
          i++)
     {
-        memdesc_t* md = get_kip()->memory_info.get_memdesc(i);
-	
-        if (!md->is_virtual() &&
-            (md->type() == memdesc_t::reserved) &&
-            (word_t) md->high() <= KERNEL_AREA_END)
-	{	    
-	    TRACE_INIT("\tfound  %dM kmem (%x-%x) -> (%x-%x)\n", 
-		       md->size() / (1024*1024), md->low(), md->high(), 
-		       phys_to_virt(md->low()), phys_to_virt(md->high()));
-	    
+        memdesc_t* md = memory_info_get_memdesc (&get_kip()->memory_info, i);
+
+        if (!memdesc_is_virtual (md) &&
+            (memdesc_type (md) == MEMDESC_RESERVED) &&
+            (word_t) memdesc_high (md) <= KERNEL_AREA_END)
+	{
+	    TRACE_INIT("\tfound  %dM kmem (%x-%x) -> (%x-%x)\n",
+		       memdesc_size (md) / (1024*1024), memdesc_low (md), memdesc_high (md),
+		       phys_to_virt(memdesc_low (md)), phys_to_virt(memdesc_high (md)));
+
 #if defined(CONFIG_X_EVT_LOGGING)
 	    add_logging_kmem(md);
 #endif
 
 	    // Align to kernel page size
-	    mem_region_t alloc = { addr_align_up(md->low(), KERNEL_PAGE_SIZE),
-				   addr_align(addr_offset(md->low(),md->size()), KERNEL_PAGE_SIZE) };
+	    mem_region_t alloc = { addr_align_up(memdesc_low (md), KERNEL_PAGE_SIZE),
+				   addr_align(addr_offset(memdesc_low (md), memdesc_size (md)), KERNEL_PAGE_SIZE) };
 
 	    // If KMEM is larger than 32 MB, allocate it chunkwise
 	    const word_t chunksize = 32 * 1024 * 1024;
 	    word_t allocsize = 0;
-	    
-	    while (alloc.get_size()) 
-	    {
-		if (alloc.get_size() >= chunksize )
-		    allocsize = chunksize - (word_t) addr_mask(alloc.low, (chunksize-1));
-		else 
-		    allocsize = alloc.get_size();
-		
 
-		// Map region kernel writable 
+	    while (mem_region_get_size (&alloc))
+	    {
+		if (mem_region_get_size (&alloc) >= chunksize )
+		    allocsize = chunksize - (word_t) addr_mask(alloc.low, (chunksize-1));
+		else
+		    allocsize = mem_region_get_size (&alloc);
+
+
+		// Map region kernel writable
 		//TRACE("\tadd %x %dM\n", alloc.low, allocsize / (1024 * 1024));
-		get_kernel_space()->remap_area(
+		space_remap_area (get_kernel_space_c (),
 		    phys_to_virt(alloc.low), alloc.low,
 		    PGSIZE_KERNEL,
 		    allocsize, true, true, true);
 
 		// Add it to allocator
 		kmem_add(&kmem, phys_to_virt(alloc.low), allocsize);
-		
+
 		alloc.low = addr_offset(alloc.low, allocsize);
 	    }
             found = true;
         }
     }
-    
+
     /* Fall back to ol'style if no memory descriptors can be
        found */
     if (!found)
     {
-        if (!get_kip()->reserved_mem1.is_empty())
+        if (!mem_region_is_empty (&get_kip()->reserved_mem1))
         {
-            kmem_add(&kmem, phys_to_virt(get_kip()->reserved_mem1.low), 
-                     get_kip()->reserved_mem1.get_size());
+            kmem_add(&kmem, phys_to_virt(get_kip()->reserved_mem1.low),
+                     mem_region_get_size (&get_kip()->reserved_mem1));
         }
     }
 }
@@ -270,7 +281,7 @@ void setup_tracebuffer (void)
     if (!tracebuffer)
         return;
     for (word_t p = 0; p < TRACEBUFFER_SIZE; p += KERNEL_PAGE_SIZE)
-    {	
+    {
 	//TRACEF("add tbuf mapping %t -> %t\n", addr_offset(tracebuffer, p),
         //     virt_to_phys(addr_offset(tracebuffer, p)));
 	get_kernel_space()->add_mapping(addr_offset(tracebuffer, p),
@@ -290,39 +301,39 @@ void setup_tracebuffer (void)
  * this function is called once for each processor to initialize
  * the processor specific data and registers
  */
-cpuid_t SECTION(".init.cpu") init_cpu (void)
+static cpuid_t SECTION(".init.cpu") init_cpu_local (void)
 {
     cpuid_t cpuid = 0;
 
     /* configure IRQ hardware - local part
      * this has to be done before reading the cpuid since it may change
      * when having one of those broken BIOSes like ServerWorks */
-    get_interrupt_ctrl()->init_cpu();
-    
+    intctrl_init_cpu ();
+
 #if defined(CONFIG_SMP)
     word_t id = get_apic_id();
     for (cpuid = 0; cpuid < cpu_count; cpuid++)
-	if (cpu_t::get(cpuid)->get_id() == id)
+	if (cpu_get_id (cpu_get (cpuid)) == id)
 	    break;
     if (cpuid > CONFIG_SMP_MAX_CPUS)
 	panic("unconfigured CPU started (LAPIC id %d)\n", id);
 #endif
-    
-    TRACE_INIT("\tActivating TSS (CPU %d)se\n", cpuid);
-    tss.setup(X86_KDS);
 
-   
+    TRACE_INIT("\tActivating TSS (CPU %d)se\n", cpuid);
+    x86_tss_setup_c (X86_KDS);
+
+
     TRACE_INIT("\tInitializing GDT (CPU %d)\n", cpuid);
-    setup_gdt(tss, cpuid);
+    setup_gdt_c (cpuid);
 
     /* can take exceptions from now on,
      * idt is initialized by idt_init() in startup_system() */
     TRACE_INIT("\tActivating IDT (CPU %d)\n", cpuid);;
-    idt.activate();
-    
+    idt_activate (&idt);
+
 #if defined(CONFIG_PERFMON)
-    
-#if defined(CONFIG_TBUF_PERFMON) 
+
+#if defined(CONFIG_TBUF_PERFMON)
     /* initialize performance monitoring counters */
     TRACE_INIT("\tInitializing Tracebuffer PMCs (CPU %d)\n", cpuid);
     setup_perfmon_cpu(cpuid);
@@ -335,10 +346,10 @@ cpuid_t SECTION(".init.cpu") init_cpu (void)
 
 #if defined(CONFIG_X86_PGE)
     TRACE_INIT("\tEnabling global pages (CPU %d)\n", cpuid);
-    x86_mmu_t::enable_global_pages();
+    x86_mmu_enable_global_pages();
 #endif
 
-#if defined(CONFIG_CPU_X86_K8) 
+#if defined(CONFIG_CPU_X86_K8)
 #if defined(CONFIG_K8_FLUSHFILTER)
     TRACE_INIT("\tEnabling K8 Flush Filter\n");
     x86_amdhwcr_t::enable_flushfilter();
@@ -359,15 +370,15 @@ cpuid_t SECTION(".init.cpu") init_cpu (void)
 #endif
 
     TRACE_INIT("\tInitializing Timer (CPU %d)\n", cpuid);
-    get_timer()->init_cpu(cpuid);
+    timer_init_cpu (get_timer(), cpuid);
 
     /* initialize V4 processor info */
     TRACE_INIT("\tInitializing Processor (CPU %d)\n", cpuid);
-    init_cpu (cpuid, get_timer()->get_bus_freq(),
-		    get_timer()->get_proc_freq());
+    init_cpu (cpuid, timer_get_bus_freq (get_timer()),
+		    timer_get_proc_freq (get_timer()));
 
     /* CPU specific mappings */
-    get_kernel_space()->init_cpu_mappings(cpuid);
+    space_init_cpu_mappings (get_kernel_space_c (), cpuid);
 
     /* initialize logging */
 #if defined(CONFIG_X_EVT_LOGGING)
@@ -400,9 +411,9 @@ cpuid_t SECTION(".init.cpu") init_cpu (void)
  */
 
 #if defined(CONFIG_IS_64BIT)
-extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
+void SECTION(".init.init64") startup_system(u32_t is_ap)
 #else
-    extern "C" void SECTION(SEC_INIT) startup_system (void)
+    void SECTION(SEC_INIT) startup_system (void)
 #endif
 {
 #if defined(CONFIG_IS_64BIT) && defined(CONFIG_SMP)
@@ -448,28 +459,28 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 #endif
 	       UTCB_MAPPING,  SPACE_BACKLINK
 	);
-	       
-	       
+
+
     /* feed the kernel memory allocator */
     init_bootmem();
 
     TRACE_INIT("Initializing kernel space\n");
-    space_t::init_kernel_space();
+    space_init_kernel_space ();
 
     TRACE_INIT("Initializing TCBs\n");
-    tcb_t::init_tcbs();
+    tcb_init_tcbs ();
 
     TRACE_INIT("Activating TSS (Preliminary)\n");
-    tss.setup(X86_KDS);
+    x86_tss_setup_c (X86_KDS);
 
     TRACE_INIT("Initializing GDT (Preliminary)\n");
-    setup_gdt(tss, 0);
+    setup_gdt_c (0);
 
     TRACE_INIT("Activating IDT (Preliminary)\n");
-    idt.activate();
+    idt_activate (&idt);
 
     TRACE_INIT("Initializing kernel interface page (%p)\n", get_kip());
-    get_kip()->init();
+    kernel_interface_page_init (get_kip());
 
     TRACE_INIT("Adding more kernel memory\n");
     add_more_kmem();
@@ -497,20 +508,20 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 
     /* configure IRQ hardware - global part */
     TRACE_INIT("Initializing IRQ hardware\n");
-    get_interrupt_ctrl()->init_arch();
+    intctrl_init_arch ();
 
     /* initialize the kernel's timer source */
     TRACE_INIT("Initializing Timer\n");
-    get_timer()->init_global();
+    timer_init_global ();
 
 #if defined(CONFIG_SMP)
     /* start APs on an SMP + rendezvous */
     {
 	TRACE_INIT("Starting %d application processors (%p->%p)\n",
 		   cpu_count, _start_ap, SMP_STARTUP_ADDRESS);
-	
+
 	// aqcuire commence lock before starting any processor
-	smp_commence_lock.init (1);
+	spinlock_init (&smp_commence_lock, 1);
 
 	// boot gdt
 	setup_smp_boot_gdt();
@@ -522,45 +533,48 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 	for (word_t i = 0; i < X86_PAGE_SIZE / sizeof(word_t); i++)
 	    ((word_t*)SMP_STARTUP_ADDRESS)[i] = ((word_t*)_start_ap)[i];
 
-	/* at this stage we still have our 1:1 mapping at 0 */
+	/* at this stage we still have our 1:1 mapping at 0.  These are the
+	   fixed-address BIOS warm-reset-vector writes; -Warray-bounds gives a
+	   known false positive on absolute-address derefs, so silence it. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
 	*((volatile unsigned short *) 0x469) = (SMP_STARTUP_ADDRESS >> 4);
 	*((volatile unsigned short *) 0x467) = (SMP_STARTUP_ADDRESS) & 0xf;
-
-	local_apic_t<APIC_MAPPINGS_START> local_apic;
+#pragma GCC diagnostic pop
 
 	word_t id = get_apic_id();
 
-	for (cpuid_t cpuid = 0; cpuid < cpu_count; cpuid++) 
+	for (cpuid_t cpuid = 0; cpuid < cpu_count; cpuid++)
         {
-	    cpu_t* cpu = cpu_t::get(cpuid);
+	    cpu_t* cpu = cpu_get (cpuid);
 
 	    // don't start ourselfs
-	    if (cpu->get_id() == id)
+	    if (cpu_get_id (cpu) == id)
 		continue;
 
-	    smp_boot_lock.lock(); // unlocked by AP
-	    TRACE_INIT("Sending startup IPI to CPU#%d APIC %d\n", 
-		       cpuid, cpu->get_id());
-	    local_apic.send_init_ipi((u8_t) cpu->get_id(), true);
+	    spinlock_lock (&smp_boot_lock); // unlocked by AP
+	    TRACE_INIT("Sending startup IPI to CPU#%d APIC %d\n",
+		       cpuid, cpu_get_id (cpu));
+	    apic_send_init_ipi (cpu_get_id (cpu), true);
             x86_wait_cycles(1000000);
-	    local_apic.send_init_ipi((u8_t) cpu->get_id(), false);
-	    local_apic.send_startup_ipi((u8_t) cpu->get_id(), (void(*)(void))SMP_STARTUP_ADDRESS);
+	    apic_send_init_ipi (cpu_get_id (cpu), false);
+	    apic_send_startup_ipi (cpu_get_id (cpu), (void(*)(void))SMP_STARTUP_ADDRESS);
 
 #warning VU: time out on AP call in
 	}
     }
-    
+
 #endif /* CONFIG_SMP */
 
     /* Initialize CPU */
-    cpuid_t cpuid = init_cpu();
-    
+    cpuid_t cpuid = init_cpu_local();
+
 #if defined(CONFIG_SMP)
     smp_bp_commence ();
 #else
-    cpu_t::add_cpu(0);
+    cpu_add_cpu (0);
 #endif
-    
+
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
     TRACE_INIT("\tInitializing 32-bit kernel interface page (%p)\n", x32::get_kip());
     x32::get_kip()->init();
@@ -568,11 +582,10 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
     /* initialize the scheduler */
-    get_current_scheduler()->init(true);
+    sched_init (true);
     /* get the thing going - we should never return */
-    get_current_scheduler()->start(cpuid);
+    sched_start (cpuid);
 
     /* make sure we don't fall off the edge */
-    spin_forever(cpuid);
+    spin_forever_c (cpuid);
 }
-
