@@ -1118,3 +1118,33 @@ re-emitting the class close.
 Remaining gates (larger, multi-class/template): api/v4/smp.h (cpu_mb_t/entry/sync + get_on_cpu<T>
 template), api/v4/schedule.h (schedule_req_t + scheduler_t : policy_scheduler_t), pc99/82093.h
 (IO-APIC classes), acpi.h.  Then the bulk of the .cc flips.
+
+## 41. All header gates cleared -- every .cc has a C-clean closure (2026-07-26, commits 9cba3ef 5006c7c 881cf6c d0c2c81)
+
+Finished the gate-clearing phase.  All byte-identical (362168), boots.  Guarded wholesale (all
+C++-only, no C-visible declaration references them):
+- api/v4/smp.h (SMP central-handler block + get_on_cpu<T>), api/v4/schedule.h (schedule_req_t /
+  schedule_request_queue_t / scheduler_t : policy_scheduler_t -- depend on wholesale-guarded
+  schedule_ctrl_t / cpu_mb_entry_t; the enum sched_flags_e + const sched_* flags stay C-visible).
+- APIC/IO-APIC driver stack: apic.h (local_apic_t<base> template), 82093.h (ioapic_redir_t +
+  i82093_t; ioapic_version_t stays C-visible), intctrl-apic.h (intctrl_t), glue intctrl.h
+  (get_interrupt_ctrl).
+- Misc driver/firmware overlays: generic-archmap.h (acceptor_t OOL method only), generic timer.h
+  (base classes), glue timer.h (timer_t), amdhwcr.h (x86_amdhwcr_t static-only), rtc.h (rtc_t
+  template), nmi.h (nmi_t), generic acpi.h (all ACPI table classes; acpi_remap/unmap externs stay
+  C-visible), pc99 acpi.h (acpi_rsdp_t::locate), resource_functions.h (thread_resources_t OOL
+  methods).
+
+Pattern confirmed: a driver/overlay class used *only* via pointer or only inside .cc files needs
+no dual-rep -- guard it wholesale.  Dual-rep (C-visible data) is required only when the type is a
+by-value member or `extern` global that a C translation unit must see the layout of.
+
+**Re-scan bug fixed (important):** the stub previously grepped every raw `#include` line, ignoring
+`#if` context, so it pulled in x32comp headers that live behind `#if defined(CONFIG_X86_COMPATIBILITY_MODE)`
+(OFF) -- a false blocker.  Fix: the stub now also carries `#if/#ifdef/#ifndef/#else/#elif/#endif`
+directives, so CONFIG-gated includes evaluate correctly (CONFIG_* come from -imacros config.h).
+x32comp is dead code in this config and needs no conversion.
+
+**State: 0 blockers.** All 29 remaining .cc files (of 40 objects; the other 11 are already-flipped
+.c + assembly) have a fully C-includable header closure.  The structural header layer is done.
+Next phase is Pass B: flipping .cc bodies to .c -- the CLEAN list is the ready queue.
