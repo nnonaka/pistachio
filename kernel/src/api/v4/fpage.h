@@ -324,6 +324,7 @@ bool   fpage_is_overlapping (fpage_t *self, fpage_t other);
 word_t fpage_get_size (fpage_t *self);
 fpage_t fpage_complete_mem (void);
 void   arch_unmap_fpage_c (struct tcb_t *from, fpage_t fpage, bool flush);
+void   fpage_set_rwx_all (fpage_t *self);	/* the no-arg set_rwx() */
 END_DECLS
 
 

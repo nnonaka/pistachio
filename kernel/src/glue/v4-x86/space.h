@@ -25,10 +25,12 @@ class space_t : public x86_space_t
 {
 public:
     void init(fpage_t utcb_area, fpage_t kip_area);
-    void free();
+    /* free/handle_pagefault are defined in C (api/v4/space.c); the __asm__
+       labels make the C++ call sites resolve to the C symbols. */
+    void free() __asm__ ("space_free");
     bool sync_kernel_space(addr_t addr);
     static void switch_to_kernel_space(cpuid_t cpu);
-    void handle_pagefault(addr_t addr, addr_t ip, access_e access, bool kernel);
+    void handle_pagefault(addr_t addr, addr_t ip, access_e access, bool kernel) __asm__ ("space_handle_pagefault");
     bool is_initialized();
 
     /* mapping */

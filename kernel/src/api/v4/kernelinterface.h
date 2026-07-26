@@ -127,6 +127,10 @@ struct utcb_info_t
 };
 typedef struct utcb_info_t utcb_info_t;
 
+#if !defined(__cplusplus)
+INLINE word_t utcb_info_get_minimal_size (const utcb_info_t *self) { return 1 << self->size; }
+#endif
+
 /**
  * info for kernel interface page size
  */
@@ -143,6 +147,10 @@ struct kip_area_info_t
 #endif
 };
 typedef struct kip_area_info_t kip_area_info_t;
+
+#if !defined(__cplusplus)
+INLINE word_t kip_area_info_get_size (const kip_area_info_t *self) { return 1 << self->size; }
+#endif
 
 /**
  * clock_info_t: info for precision of system clock and scheduler
