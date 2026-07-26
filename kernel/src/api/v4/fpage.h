@@ -301,5 +301,23 @@ INLINE addr_t address (fpage_t fp, word_t size)
 }
 #endif /* __cplusplus */
 
+/* C wrappers for the fpage_t methods and the base_mask/address helpers
+   (defined in glue/v4-x86/space.cc) for generic/linear_ptab_walker.c. */
+BEGIN_DECLS
+bool   fpage_is_nil_fpage (fpage_t *self);
+word_t fpage_get_size_log2 (fpage_t *self);
+bool   fpage_is_range_overlapping (fpage_t *self, addr_t start, addr_t end);
+addr_t fpage_get_base (fpage_t *self);
+addr_t fpage_get_address (fpage_t *self);
+word_t fpage_get_rwx (fpage_t *self);
+void   fpage_set_rwx (fpage_t *self, word_t rwx);
+bool   fpage_is_read (fpage_t *self);
+bool   fpage_is_write (fpage_t *self);
+bool   fpage_is_execute (fpage_t *self);
+void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write, bool exec);
+word_t fpage_base_mask (fpage_t fp, word_t size);
+addr_t fpage_address (fpage_t fp, word_t size);
+END_DECLS
+
 
 #endif /* !__API__V4__FPAGE_H__ */

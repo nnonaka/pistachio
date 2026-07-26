@@ -200,6 +200,28 @@ INLINE bool readmem (space_t * space, addr_t vaddr, T * v)
 
     return true;
 }
+#else /* !__cplusplus */
+
+/* C reimplementations of the page-geometry helpers. The C++ versions above
+   take pgent_t::pgsize_e; C passes a word_t holding an X86_PGSIZE_* value. */
+INLINE word_t page_size (word_t pgsize)
+{ return 1UL << hw_pgshifts[pgsize]; }
+
+INLINE word_t page_shift (word_t pgsize)
+{ return hw_pgshifts[pgsize]; }
+
+INLINE word_t page_mask (word_t pgsize)
+{ return (1UL << hw_pgshifts[pgsize]) - 1; }
+
+INLINE word_t page_table_size (word_t pgsize)
+{ return 1UL << (hw_pgshifts[pgsize+1] - hw_pgshifts[pgsize]); }
+
+INLINE word_t page_table_index (word_t pgsize, addr_t vaddr)
+{ return ((word_t) vaddr >> hw_pgshifts[pgsize]) & (page_table_size (pgsize) - 1); }
+
+INLINE bool is_page_size_valid (word_t pgsize)
+{ return ((1UL << hw_pgshifts[pgsize]) & HW_VALID_PGSIZES) != 0; }
+
 #endif /* __cplusplus */
 
 

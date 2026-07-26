@@ -652,3 +652,23 @@ static NOINLINE dualnode_t * mdb_create_dual (mapnode_t * map,
     dual->root = root;
     return dual;
 }
+
+
+/* C-linkage wrappers for the mapping-database entry points, so
+   linear_ptab_walker.c can call them (declared in mapping.h). */
+BEGIN_DECLS
+mapnode_t * mdb_map_c (mapnode_t * f_map, pgent_t * f_pg, word_t f_hwpgsize,
+		       addr_t f_addr, pgent_t * t_pg, word_t t_hwpgsize,
+		       space_t * t_space, bool grant)
+{
+    return mdb_map (f_map, f_pg, (pgent_t::pgsize_e) f_hwpgsize, f_addr,
+		    t_pg, (pgent_t::pgsize_e) t_hwpgsize, t_space, grant);
+}
+
+word_t mdb_flush_c (mapnode_t * f_map, pgent_t * f_pg, word_t f_hwpgsize,
+		    addr_t f_addr, word_t t_hwpgsize, fpage_t * fp, bool unmap_self)
+{
+    return mdb_flush (f_map, f_pg, (pgent_t::pgsize_e) f_hwpgsize, f_addr,
+		      (pgent_t::pgsize_e) t_hwpgsize, *fp, unmap_self);
+}
+END_DECLS

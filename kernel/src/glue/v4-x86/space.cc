@@ -1205,3 +1205,51 @@ void pgent_set_linknode (pgent_t *self, struct space_t *s, word_t pgsize, struct
 void pgent_update_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
 { self->update_rights (s, (pgent_t::pgsize_e) pgsize, rwx); }
 END_DECLS
+
+
+/* C wrappers for fpage_t and space_t used by generic/linear_ptab_walker.c
+   (declared in api/v4/fpage.h and glue/v4-x86/space.h). Thin delegations;
+   word_t pgsize args are cast back to pgent_t::pgsize_e. */
+BEGIN_DECLS
+
+/* fpage_t */
+bool   fpage_is_nil_fpage (fpage_t *self)			{ return self->is_nil_fpage (); }
+word_t fpage_get_size_log2 (fpage_t *self)			{ return self->get_size_log2 (); }
+bool   fpage_is_range_overlapping (fpage_t *self, addr_t start, addr_t end)
+							{ return self->is_range_overlapping (start, end); }
+addr_t fpage_get_base (fpage_t *self)				{ return self->get_base (); }
+addr_t fpage_get_address (fpage_t *self)			{ return self->get_address (); }
+word_t fpage_get_rwx (fpage_t *self)				{ return self->get_rwx (); }
+void   fpage_set_rwx (fpage_t *self, word_t rwx)		{ self->set_rwx (rwx); }
+bool   fpage_is_read (fpage_t *self)				{ return self->is_read (); }
+bool   fpage_is_write (fpage_t *self)				{ return self->is_write (); }
+bool   fpage_is_execute (fpage_t *self)				{ return self->is_execute (); }
+void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write, bool exec)
+							{ self->set (base, size, read, write, exec); }
+word_t fpage_base_mask (fpage_t fp, word_t size)		{ return base_mask (fp, size); }
+addr_t fpage_address (fpage_t fp, word_t size)			{ return address (fp, size); }
+
+/* space_t */
+pgent_t * space_pgent (space_t *self, word_t num)		{ return self->pgent (num); }
+pgent_t * space_pgent_cpu (space_t *self, word_t num, word_t cpu){ return self->pgent (num, cpu); }
+void      space_begin_update (void)				{ space_t::begin_update (); }
+void      space_end_update (void)				{ space_t::end_update (); }
+bool      space_is_mappable_addr (space_t *self, addr_t addr)	{ return self->is_mappable (addr); }
+bool      space_is_mappable_fpage (space_t *self, fpage_t fp)	{ return self->is_mappable (fp); }
+bool      space_is_user_area_addr (addr_t addr)			{ return space_t::is_user_area (addr); }
+bool      space_does_tlbflush_pay (word_t log2size)		{ return space_t::does_tlbflush_pay (log2size); }
+fpage_t   space_get_kip_page_area (space_t *self)		{ return self->get_kip_page_area (); }
+fpage_t   space_get_utcb_page_area (space_t *self)		{ return self->get_utcb_page_area (); }
+paddr_t   space_sigma0_translate (addr_t addr, word_t size)
+					{ return space_t::sigma0_translate (addr, (pgent_t::pgsize_e) size); }
+word_t    space_sigma0_attributes (pgent_t *pg, addr_t addr, word_t size)
+					{ return space_t::sigma0_attributes (pg, addr, (pgent_t::pgsize_e) size); }
+word_t    space_readmem_phys (addr_t paddr)			{ return space_t::readmem_phys (paddr); }
+void      space_release_kernel_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t log2size)
+							{ self->release_kernel_mapping (vaddr, paddr, log2size); }
+void      space_flush_tlb (space_t *self, space_t *curspace)	{ self->flush_tlb (curspace); }
+void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, word_t log2size)
+							{ self->flush_tlbent (curspace, vaddr, log2size); }
+bool      space_is_sigma0 (space_t *space)			{ return is_sigma0_space (space); }
+space_t * get_current_space_c (void)				{ return get_current_space (); }
+END_DECLS

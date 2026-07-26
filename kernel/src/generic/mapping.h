@@ -465,5 +465,21 @@ addr_t mdb_alloc_buffer (word_t size);
 void mdb_free_buffer (addr_t addr, word_t size);
 END_DECLS
 
+/* C-linkage wrappers for mdb_map/mdb_flush (defined in mapping.cc), so
+   linear_ptab_walker.c can drive the mapping database. The hwpgsize args are
+   word_t (an X86_PGSIZE_* value); all struct types are elaborated and fpage_t
+   passes by pointer so this header needs no complete pgent_t/fpage_t (it is
+   also included by plain C files such as mapping_alloc.c). */
+struct fpage_t;
+BEGIN_DECLS
+struct mapnode_t * mdb_map_c (struct mapnode_t * f_map, struct pgent_t * f_pg,
+			      word_t f_hwpgsize, addr_t f_addr,
+			      struct pgent_t * t_pg, word_t t_hwpgsize,
+			      struct space_t * t_space, bool grant);
+word_t mdb_flush_c (struct mapnode_t * f_map, struct pgent_t * f_pg,
+		    word_t f_hwpgsize, addr_t f_addr,
+		    word_t t_hwpgsize, struct fpage_t * fp, bool unmap_self);
+END_DECLS
+
 
 #endif /* !__MAPPING_H__ */

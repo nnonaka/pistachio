@@ -467,5 +467,29 @@ void   space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu);
 bool   space_has_cpu_top_pdir (space_t *self, cpuid_t cpu);
 END_DECLS
 
+/* C wrappers for the space_t methods that generic/linear_ptab_walker.c drives
+   (space_t stays a C++ class); defined in space.cc. pgsize args are word_t
+   holding an X86_PGSIZE_* value. */
+BEGIN_DECLS
+pgent_t * space_pgent (space_t *self, word_t num);
+pgent_t * space_pgent_cpu (space_t *self, word_t num, word_t cpu);
+void      space_begin_update (void);
+void      space_end_update (void);
+bool      space_is_mappable_addr (space_t *self, addr_t addr);
+bool      space_is_mappable_fpage (space_t *self, fpage_t fp);
+bool      space_is_user_area_addr (addr_t addr);
+bool      space_does_tlbflush_pay (word_t log2size);
+fpage_t   space_get_kip_page_area (space_t *self);
+fpage_t   space_get_utcb_page_area (space_t *self);
+paddr_t   space_sigma0_translate (addr_t addr, word_t size);
+word_t    space_sigma0_attributes (pgent_t *pg, addr_t addr, word_t size);
+word_t    space_readmem_phys (addr_t paddr);
+void      space_release_kernel_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t log2size);
+void      space_flush_tlb (space_t *self, space_t *curspace);
+void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, word_t log2size);
+bool      space_is_sigma0 (space_t *space);
+space_t * get_current_space_c (void);
+END_DECLS
+
 
 #endif /* !__GLUE__V4_X86__SPACE_H__ */
