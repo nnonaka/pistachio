@@ -150,13 +150,13 @@ typedef struct {
 	word_t       r11;							\
 	word_t       rsp;							\
     } x86_x64_ret;								\
-    x86_x64_ret.rdi = pager.get_raw();						\
+    x86_x64_ret.rdi = threadid_get_raw(&(pager));				\
     x86_x64_ret.r8 = ip;								\
     x86_x64_ret.r9 = flags;							\
     x86_x64_ret.r10 = handle;							\
-    x86_x64_ret.r11 = (word_t) x86_x64_current->get_user_flags();			\
-    x86_x64_ret.rsp = (word_t) x86_x64_current->get_user_sp();			\
-    x86_x64_uip = (word_t) x86_x64_current->get_user_ip();				\
+    x86_x64_ret.r11 = (word_t) tcb_get_user_flags(x86_x64_current);		\
+    x86_x64_ret.rsp = (word_t) tcb_get_user_sp(x86_x64_current);			\
+    x86_x64_uip = (word_t) tcb_get_user_ip(x86_x64_current);			\
     if (utcb->is_compatibility_mode())						\
     {										\
 	utcb->exreg32.control = cntrl;						\
@@ -217,13 +217,13 @@ typedef struct {
 	word_t       r11;							\
 	word_t       rsp;							\
     } x86_x64_ret;								\
-    x86_x64_ret.rdi = pager.get_raw();						\
+    x86_x64_ret.rdi = threadid_get_raw(&(pager));				\
     x86_x64_ret.r8 = ip;								\
     x86_x64_ret.r9 = flags;							\
     x86_x64_ret.r10 = handle;							\
-    x86_x64_ret.r11 = (word_t) x86_x64_current->get_user_flags();			\
-    x86_x64_ret.rsp = (word_t) x86_x64_current->get_user_sp();			\
-    x86_x64_uip = (word_t) x86_x64_current->get_user_ip();				\
+    x86_x64_ret.r11 = (word_t) tcb_get_user_flags(x86_x64_current);		\
+    x86_x64_ret.rsp = (word_t) tcb_get_user_sp(x86_x64_current);			\
+    x86_x64_uip = (word_t) tcb_get_user_ip(x86_x64_current);			\
     __asm__ __volatile__("movq   (%[ret]), %%rdi	\n"			\
 			 "movq  8(%[ret]), %%r8		\n"			\
 			 "movq 16(%[ret]), %%r9		\n"			\
