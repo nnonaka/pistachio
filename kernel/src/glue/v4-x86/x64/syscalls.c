@@ -42,7 +42,7 @@
 DECLARE_TRACEPOINT(SYSCALL_MEMORY_CONTROL);
 
 
-extern "C" x86_x64_sysret_t syscall_dispatcher(word_t arg1,  /* RDI */
+x86_x64_sysret_t syscall_dispatcher(word_t arg1,  /* RDI */
 					     word_t arg2,  /* RSI */
 					     word_t arg3,  /* RDX */
 					     word_t uip,   /* RCX */
@@ -65,58 +65,59 @@ extern "C" x86_x64_sysret_t syscall_dispatcher(word_t arg1,  /* RDI */
 #endif
 
     /* Calculate address of user-mode system call stub from uip. */
-    addr_t syscall = (addr_t) (uip & ~(SYSCALL_ALIGN - 1));
+    addr_t syscall = (addr_t) (uip & ~(word_t)(SYSCALL_ALIGN - 1));
     x86_x64_sysret_t ret;
 
     if (syscall == user_exchange_registers)
     {
 	threadid_t dest;
-	dest.set_raw(arg6);
+	threadid_set_raw(&dest, arg6);
 	threadid_t pager;
-	pager.set_raw(arg1);
+	threadid_set_raw(&pager, arg1);
 	sys_exchange_registers(dest, arg2, arg3, arg4, arg5, arg7, pager, ufl & X86_FLAGS_ZF);
 
     }
     else if (syscall == user_thread_control)
     {
 	threadid_t dest;
-	dest.set_raw(arg1);
+	threadid_set_raw(&dest, arg1);
 	threadid_t pager;
-	pager.set_raw(arg2);
+	threadid_set_raw(&pager, arg2);
 	threadid_t scheduler;
-	scheduler.set_raw(arg3);
+	threadid_set_raw(&scheduler, arg3);
 	threadid_t space;
-	space.set_raw(arg4);
+	threadid_set_raw(&space, arg4);
 	return sys_thread_control(dest, space, scheduler, pager, arg5);
     }
     else if (syscall == user_space_control)
     {
 	threadid_t space_tid;
-	space_tid.set_raw(arg1);
+	threadid_set_raw(&space_tid, arg1);
 	fpage_t kip_area;
 	kip_area.raw = arg3;
 	fpage_t utcb_area;
 	utcb_area.raw = arg4;
 	threadid_t redirector;
-	redirector.set_raw(arg5);
+	threadid_set_raw(&redirector, arg5);
 	return sys_space_control(space_tid, arg2, kip_area, utcb_area, redirector);
     }
     else if (syscall == user_schedule)
     {
 	threadid_t dest;
-	dest.set_raw(arg1);
+	threadid_set_raw(&dest, arg1);
 	return sys_schedule(dest, arg3, arg4, arg2, arg5);
     }    
     else if (syscall == user_thread_switch)
     {
 	threadid_t dest;
-	dest.set_raw(arg1);
+	threadid_set_raw(&dest, arg1);
 	sys_thread_switch(dest);
     }
     else if (syscall == user_unmap)
     {
 	sys_unmap(arg3);
-	ret.rax = get_current_tcb()->get_local_id ().get_raw ();
+	threadid_t lid = tcb_get_local_id(get_current_tcb());
+	ret.rax = threadid_get_raw(&lid);
 	ret.rdx = 0;
 	return ret;
     }
@@ -133,7 +134,7 @@ extern "C" x86_x64_sysret_t syscall_dispatcher(word_t arg1,  /* RDI */
     }
     else if (syscall == user_system_clock)
     {
-	procdesc_t * pdesc = get_kip()->processor_info.get_procdesc(0);
+	procdesc_t * pdesc = processor_info_get_procdesc(&get_kip()->processor_info, 0);
 	ASSERT(pdesc);
 	ret.rax = x86_rdtsc() / (pdesc->internal_freq / 1000);
 	ret.rdx = 0;

@@ -811,6 +811,10 @@ INLINE tcb_t * get_dummy_tcb()
  */
 #include INC_GLUE(tcb.h)
 
+/* C free-function accessors (mirror the like-named tcb_t methods, which stay
+   for C++ callers). Add more here as C files come to need them. */
+INLINE threadid_t tcb_get_local_id (const tcb_t *self) { return self->myself_local; }
+
 #if defined(__cplusplus)
 
 
