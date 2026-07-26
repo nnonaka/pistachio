@@ -1402,3 +1402,47 @@ labels because trap.S calls them by name. Two lessons stand out.
 
 Non-byte-identical (361496 -> 361720; de-inlining). Boots; save/load exercised on
 every context switch via trap.S. 20 .cc remain.
+
+## 49. linear_ptab_walker.cc -> C: the mapping engine, staged (2026-07-26, commits 1a28bba 97cab43 e9919a8)
+
+The hardest file in the kernel (map_fpage calls itself "the single most
+algorithmically complex part of the kernel"). Done in three staged commits so
+each was independently verifiable -- the pattern to reuse for any high-risk flip.
+
+- **Step 1 (1a28bba) -- pgent_t C-API + pgsize_e hoist.** Hoisted the pgsize_e
+  enumerators to X86_PGSIZE_* macros (byte-identical: linear_ptab_walker.o
+  rebuilt bit-for-bit against HEAD) and added a 16-function pgent_t C API as thin
+  delegating wrappers in space.cc. space_t/mapnode_t have no C typedef in
+  pgent.h, so wrapper decls use elaborated `struct` pointers.
+
+- **Step 2a (97cab43) -- the rest of the C-API batch (~40 entry points).** fpage_t
+  C API + base_mask/address; the linear_ptab.h page-geometry helpers reimplemented
+  as C inlines (word_t pgsize) in a !__cplusplus branch; space_t wrappers (pgent,
+  begin/end_update, is_mappable, get_kip/utcb_page_area, sigma0_*, flush_tlb*,
+  readmem_phys, release_kernel_mapping); mdb_map_c/mdb_flush_c C-linkage wrappers.
+  Again byte-identical for existing code; only new unused symbols. Gotchas:
+  mapping.h is included by plain C files (mapping_alloc.c) and only forward-decls
+  `struct pgent_t` for C, so the mdb wrapper decls must use elaborated structs and
+  pass fpage_t by pointer (no complete type needed); addr_offset/addr_mask already
+  had C forms.
+
+- **Step 2b (e9919a8) -- the translation.** map_fpage/mapctrl/readmem -> C free
+  functions via __asm__ labels on their space.h declarations (fpage_t/mdb_ctrl_t
+  pass by value, ABI identical). Key hazard: lookup_mapping's out-param is a 4-byte
+  pgent_t::pgsize_e; an asm-labelled C symbol writing word_t (8 bytes) would
+  corrupt its many external callers' stacks. So lookup_mapping stays C++ (moved to
+  space.cc) with a word_t-bridging wrapper (space_lookup_mapping_c) for the C
+  readmem. pgsize_e locals become word_t and the enum ++/--/+/- operators become
+  plain unsigned arithmetic (loops are bounded -> no underflow). mdb_ctrl_t is
+  already dual-repped so mapctrl takes it by value in C; its string() method is
+  reimplemented as a small static C helper for the tracepoint.
+
+- **Verification beyond boot.** For a page-table file, "it boots" is weak proof
+  (silent corruption). Drove l4test interactively under QEMU (-serial stdio, feed
+  menu digits): Memory (Page touch), Sigma0 (memory request) and IPC (untyped
+  transfers) all OK. The lone FAILED subtest -- "Local destination Id", about
+  thread-local IDs, not page tables -- reproduces identically on the pre-flip 2a
+  kernel, proving no regression. This "run the app's own test suite and diff the
+  failure set against the pre-flip build" is the right bar for risky flips.
+
+Non-byte-identical (367864 -> 363752). Boots + mapping suites pass. 19 .cc remain.
