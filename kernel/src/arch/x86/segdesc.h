@@ -140,6 +140,27 @@ static inline void x86_descreg_setdescreg(x86_descreg_t *self, int type)
 	break;
     }
 }
+
+/* the x86_descreg_t(u16_t sel) constructor. */
+static inline void x86_descreg_set_sel(x86_descreg_t *self, u16_t sel)
+{
+    self->selector = sel;
+}
+
+static inline void x86_descreg_setselreg(x86_descreg_t *self, int type)
+{
+    switch (type)
+    {
+    case X86_DESCREG_LDTR:
+	__asm__ __volatile__("lldt %0\n" : /* No Output */ : "m"(self->selector));
+	break;
+    case X86_DESCREG_TR:
+	__asm__ __volatile__("ltr %0\n"  : /* No Output */ : "m"(self->selector));
+	break;
+    default:
+	break;
+    }
+}
 #endif /* !__cplusplus */
 
 #endif /* !__ARCH__X86__SEGDESC_H__ */

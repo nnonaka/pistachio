@@ -140,6 +140,49 @@ public:
 };
 typedef struct x86_segdesc_t x86_segdesc_t;
 
+/* segtype_e / mode_e / msr_e values as macros so C can reference them. */
+#define X86_SEGDESC_INV		0x0
+#define X86_SEGDESC_CODE	0xb
+#define X86_SEGDESC_DATA	0x3
+#define X86_SEGDESC_M_LONG	1
+#define X86_SEGDESC_M_COMP	0
+#define X86_SEGDESC_MSR_NONE	0
+#define X86_SEGDESC_MSR_FS	1
+#define X86_SEGDESC_MSR_GS	2
+
+#if !defined(__cplusplus)
+/* C form of the 5-arg x86_segdesc_t::set_seg (the union is C-visible). */
+INLINE void x86_segdesc_set_seg (x86_segdesc_t *self, u64_t base, int type, int dpl, int mode, int msr)
+{
+    if (msr != X86_SEGDESC_MSR_NONE && (base >> 32))
+    {
+	u32_t reg = (msr == X86_SEGDESC_MSR_FS) ? X86_X64_MSR_FS : X86_X64_MSR_GS;
+	x86_wrmsr (reg, base);
+    }
+
+    self->x.d.base_low   = base & 0xFFFFFF;
+    self->x.d.base_high  = (base >> 24) & 0xFF;
+
+    self->x.d.limit_low  = 0xFFFF;
+    self->x.d.limit_high = 0xF;
+
+    self->x.d.g = 1;
+
+    self->x.d.type = type & 0xF;
+    self->x.d.l    = mode & 0x1;
+    self->x.d.dpl  = dpl & 0x3;
+
+    if (mode == X86_SEGDESC_M_LONG && type == X86_SEGDESC_CODE)
+	self->x.d.d = 0;
+    else
+	self->x.d.d = 1;
+
+    self->x.d.p = 1;
+    self->x.d.s = 1;
+    self->x.d.avl = 0;
+}
+#endif /* !__cplusplus */
+
 /* 
  * Limits are ignored for code/data segments in 64bit mode, 
  * addresses are ignored unless segment is selected by FS or GS
@@ -218,6 +261,34 @@ INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
     x.d.avl = 0;
     x.d.mbz = 0;
     x.d.res0 = 0;
+}
+#else /* !__cplusplus: C form of x86_tssdesc_t::set_seg. */
+INLINE void x86_tssdesc_set_seg (x86_tssdesc_t *self, u64_t base, u32_t limit)
+{
+    self->x.d.base_low  = base & 0xFFFFFF;
+    self->x.d.base_med  = (base >> 24) & 0xFF;
+    self->x.d.base_high = (u32_t) ((base >> 32) & 0xFFFFFFFF);
+
+    if (limit >= (1 << 20))
+    {
+	self->x.d.limit_low  = (limit >> 12) & 0xFFFF;
+	self->x.d.limit_high = (u8_t) (limit >> 28) & 0xF;
+	self->x.d.g = 1;      /* 4K granularity       */
+    }
+    else
+    {
+	self->x.d.limit_low  =  limit        & 0xFFFF;
+	self->x.d.limit_high = (limit >> 16) & 0xF;
+	self->x.d.g = 0;      /* 1B granularity       */
+    }
+
+    self->x.d.type = 0x9;	/* 64bit TSS type	*/
+    self->x.d.s = 0;		/* system segment	*/
+    self->x.d.dpl =  0;		/* Privilege Level 0	*/
+    self->x.d.p = 1;		/* present		*/
+    self->x.d.avl = 0;
+    self->x.d.mbz = 0;
+    self->x.d.res0 = 0;
 }
 #endif /* __cplusplus */
 
