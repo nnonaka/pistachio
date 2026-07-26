@@ -21,15 +21,19 @@ int printf(const char* format, ...);
 END_DECLS
 #endif
 
+#if defined(CONFIG_DEBUG)
+/* register name / debug-register-list tables: plain globals (not class
+   statics) so they can be defined in C (x64/exception.c). */
+extern const char  * x86_exceptionframe_name[X86_EXCEPTIONREGS_NUM_REGS];
+extern const word_t  x86_exceptionframe_dbgreg[18];
+#endif
+
 #if defined(__cplusplus)
 class x86_exceptionframe_t : public x86_exceptionregs_t
 {
 public:
 
 #if defined(CONFIG_DEBUG)
-    static const char		*name[num_regs];
-    static const word_t		dbgreg[num_dbgregs];
-
     void dump_flags()
 	{
 	    printf("%c%c%c%c%c%c%c%c%c%c%c",
@@ -63,9 +67,9 @@ public:
 	    
 	    for (word_t r=0; r < num_dbgregs; r++)
 	    {
-		printf("\t%s: %wx", name[dbgreg[r]], regs[dbgreg[r]]);
-		
-		if (dbgreg[r] == freg)
+		printf("\t%s: %wx", x86_exceptionframe_name[x86_exceptionframe_dbgreg[r]], regs[x86_exceptionframe_dbgreg[r]]);
+
+		if (x86_exceptionframe_dbgreg[r] == freg)
 		{ 
 		    printf(" ["); dump_flags(); printf("]"); 
 		} 

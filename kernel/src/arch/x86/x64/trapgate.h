@@ -36,18 +36,48 @@
  
 #define X86_EXCEPTIONREGS_NUM_REGS 22
 
+/* Exception-frame register indices into regs[], as macros so C (e.g.
+   x64/exception.c) can name them; the C++ reg_e enum below aliases these.
+   The ambiguous case-pairs (Dreg/dreg, Breg/breg) use register-name macros. */
+#define X86_EXC_R15REG	1
+#define X86_EXC_R14REG	2
+#define X86_EXC_R13REG	3
+#define X86_EXC_R12REG	4
+#define X86_EXC_R11REG	5
+#define X86_EXC_R10REG	6
+#define X86_EXC_R9REG	7
+#define X86_EXC_R8REG	8
+#define X86_EXC_RDIREG	9	/* Dreg */
+#define X86_EXC_RSIREG	10	/* Sreg */
+#define X86_EXC_RBPREG	11	/* Breg */
+#define X86_EXC_RDXREG	12	/* dreg */
+#define X86_EXC_RBXREG	13	/* breg */
+#define X86_EXC_RCXREG	14	/* creg */
+#define X86_EXC_RAXREG	15	/* areg */
+#define X86_EXC_EREG	16
+#define X86_EXC_IPREG	17
+#define X86_EXC_CSREG	18
+#define X86_EXC_FREG	19
+#define X86_EXC_SPREG	20
+#define X86_EXC_SSREG	21
+
 struct x86_exceptionregs_t
 {
 #if defined(__cplusplus)
     enum { num_regs = X86_EXCEPTIONREGS_NUM_REGS };
 
     enum reg_e {
-	r15reg =   1,	r14reg =   2,	r13reg =   3,	r12reg =   4,
-	r11reg =   5,	r10reg =   6,	r9reg  =   7,	r8reg  =   8,
-	Dreg   =   9,	Sreg   =  10,	Breg   =  11,	dreg   =  12,
-	breg   =  13,	creg   =  14,	areg   =  15,	ereg   =  16,
-	ipreg  =  17,	csreg  =  18,	freg   =  19,	spreg  =  20,
-	ssreg  =  21,
+	r15reg = X86_EXC_R15REG,	r14reg = X86_EXC_R14REG,
+	r13reg = X86_EXC_R13REG,	r12reg = X86_EXC_R12REG,
+	r11reg = X86_EXC_R11REG,	r10reg = X86_EXC_R10REG,
+	r9reg  = X86_EXC_R9REG,		r8reg  = X86_EXC_R8REG,
+	Dreg   = X86_EXC_RDIREG,	Sreg   = X86_EXC_RSIREG,
+	Breg   = X86_EXC_RBPREG,	dreg   = X86_EXC_RDXREG,
+	breg   = X86_EXC_RBXREG,	creg   = X86_EXC_RCXREG,
+	areg   = X86_EXC_RAXREG,	ereg   = X86_EXC_EREG,
+	ipreg  = X86_EXC_IPREG,		csreg  = X86_EXC_CSREG,
+	freg   = X86_EXC_FREG,		spreg  = X86_EXC_SPREG,
+	ssreg  = X86_EXC_SSREG,
     };
 #endif /* defined(__cplusplus) */
 

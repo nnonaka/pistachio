@@ -43,7 +43,7 @@
 #include INC_GLUE(hvm.h)
 #endif
 
-const word_t x86_exc_reg_t::mr2reg[NUM_EXC_REGS][2] = 
+const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2] = 
 {    
     {  3, ~0UL  /* EXC */ }, 
     {  1, x86_exceptionframe_t::ipreg  /* EIP */ }, 
@@ -61,7 +61,7 @@ const word_t x86_exc_reg_t::mr2reg[NUM_EXC_REGS][2] =
 
 
 #if defined(CONFIG_DEBUG)
-const word_t x86_exceptionframe_t::dbgreg[x86_exceptionframe_t::num_dbgregs] = 
+const word_t x86_exceptionframe_dbgreg[18] = 
 {
     x86_exceptionframe_t::areg,  x86_exceptionframe_t::breg,
     x86_exceptionframe_t::creg,  x86_exceptionframe_t::dreg,
@@ -71,7 +71,7 @@ const word_t x86_exceptionframe_t::dbgreg[x86_exceptionframe_t::num_dbgregs] =
     x86_exceptionframe_t::dsreg, x86_exceptionframe_t::esreg,
 };
 
-const char *x86_exceptionframe_t::name[x86_exceptionframe_t::num_regs] = 
+const char *x86_exceptionframe_name[X86_EXCEPTIONREGS_NUM_REGS] = 
 {  "rsn", "es ", "ds ", "edi",	"esi", "ebp",    0, "ebx",		
    "edx", "ecx", "eax", "err", "eip", "cs ", "efl", "esp", "ss "		
 };    

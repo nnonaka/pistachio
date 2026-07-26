@@ -34,14 +34,17 @@ void exc_catch_common_wrapper(void);
 void exc_catch_common(void);
 END_DECLS
 
+/* exception-frame register <-> IPC message-register map. A plain global (not
+   a class static) so it can be defined in C (x64/exception.c). */
+extern const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2];
+
 #if defined(__cplusplus)
 /* exception handling */
 class x86_exc_reg_t
 {
-    static const word_t mr2reg[NUM_EXC_REGS][2];
 public:
-    static const word_t mr(word_t num) { return mr2reg[num][0]; };
-    static const word_t reg(word_t num) { return mr2reg[num][1]; };
+    static const word_t mr(word_t num) { return x86_exc_reg_mr2reg[num][0]; };
+    static const word_t reg(word_t num) { return x86_exc_reg_mr2reg[num][1]; };
 };
 
 bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception);

@@ -41,45 +41,45 @@
 #include INC_API(kernelinterface.h)
 
 
-const word_t x86_exc_reg_t::mr2reg[NUM_EXC_REGS][2] = 
+const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2] = 
 {    
     {    19, (word_t) ~0UL			/* EXC	*/},
-    {     1, x86_exceptionframe_t::ipreg	/* RIP	*/},
-    {     2, x86_exceptionframe_t::breg		/* RBX	*/},
-    {     3, x86_exceptionframe_t::r10reg	/* R10	*/},
-    {     4, x86_exceptionframe_t::r12reg	/* R12	*/},
-    {     5, x86_exceptionframe_t::r13reg	/* R13	*/},
-    {     6, x86_exceptionframe_t::r14reg	/* R14	*/},
-    {     7, x86_exceptionframe_t::r15reg	/* R15	*/},
-    {     8, x86_exceptionframe_t::areg  	/* RAX	*/},
-    {     9, x86_exceptionframe_t::creg  	/* RCX	*/},
-    {    10, x86_exceptionframe_t::dreg  	/* RDX	*/},
-    {    11, x86_exceptionframe_t::Sreg  	/* RSI	*/},
-    {    12, x86_exceptionframe_t::Dreg  	/* RDI	*/},
-    {    13, x86_exceptionframe_t::Breg  	/* RBP	*/},	
-    {    14, x86_exceptionframe_t::r8reg   	/* R8  */},
-    {    15, x86_exceptionframe_t::r9reg   	/* R9   */},
-    {    16, x86_exceptionframe_t::r11reg  	/* R11	*/},
-    {    17, x86_exceptionframe_t::spreg  	/* RSP	*/},
-    {    18, x86_exceptionframe_t::freg  	/* RFL	*/},
-    {    20, x86_exceptionframe_t::ereg  	/* ERR	*/},
+    {     1, X86_EXC_IPREG	/* RIP	*/},
+    {     2, X86_EXC_RBXREG		/* RBX	*/},
+    {     3, X86_EXC_R10REG	/* R10	*/},
+    {     4, X86_EXC_R12REG	/* R12	*/},
+    {     5, X86_EXC_R13REG	/* R13	*/},
+    {     6, X86_EXC_R14REG	/* R14	*/},
+    {     7, X86_EXC_R15REG	/* R15	*/},
+    {     8, X86_EXC_RAXREG  	/* RAX	*/},
+    {     9, X86_EXC_RCXREG  	/* RCX	*/},
+    {    10, X86_EXC_RDXREG  	/* RDX	*/},
+    {    11, X86_EXC_RSIREG  	/* RSI	*/},
+    {    12, X86_EXC_RDIREG  	/* RDI	*/},
+    {    13, X86_EXC_RBPREG  	/* RBP	*/},	
+    {    14, X86_EXC_R8REG   	/* R8  */},
+    {    15, X86_EXC_R9REG   	/* R9   */},
+    {    16, X86_EXC_R11REG  	/* R11	*/},
+    {    17, X86_EXC_SPREG  	/* RSP	*/},
+    {    18, X86_EXC_FREG  	/* RFL	*/},
+    {    20, X86_EXC_EREG  	/* ERR	*/},
 };
 
 #if defined(CONFIG_DEBUG)
-const word_t x86_exceptionframe_t::dbgreg[x86_exceptionregs_t::num_dbgregs] = 
+const word_t x86_exceptionframe_dbgreg[18] = 
 {
-    x86_exceptionframe_t::areg,  x86_exceptionframe_t::breg,
-    x86_exceptionframe_t::creg,  x86_exceptionframe_t::dreg,
-    x86_exceptionframe_t::Sreg,  x86_exceptionframe_t::Dreg,
-    x86_exceptionframe_t::Breg,  x86_exceptionframe_t::freg,
-    x86_exceptionframe_t::r8reg, x86_exceptionframe_t::r9reg,
-    x86_exceptionframe_t::r10reg, x86_exceptionframe_t::r11reg,
-    x86_exceptionframe_t::r12reg, x86_exceptionframe_t::r13reg,
-    x86_exceptionframe_t::r14reg, x86_exceptionframe_t::r15reg,
-    x86_exceptionframe_t::csreg, x86_exceptionframe_t::ssreg,
+    X86_EXC_RAXREG,  X86_EXC_RBXREG,
+    X86_EXC_RCXREG,  X86_EXC_RDXREG,
+    X86_EXC_RSIREG,  X86_EXC_RDIREG,
+    X86_EXC_RBPREG,  X86_EXC_FREG,
+    X86_EXC_R8REG, X86_EXC_R9REG,
+    X86_EXC_R10REG, X86_EXC_R11REG,
+    X86_EXC_R12REG, X86_EXC_R13REG,
+    X86_EXC_R14REG, X86_EXC_R15REG,
+    X86_EXC_CSREG, X86_EXC_SSREG,
 };
 
-const char *x86_exceptionframe_t::name[x86_exceptionregs_t::num_regs] = 
+const char *x86_exceptionframe_name[X86_EXCEPTIONREGS_NUM_REGS] = 
 {   "reason",    "r15",	 "r14",	 "r13",	 "r12",	 "r11",	 "r10",	 "r09",	 
     "r08",	 "rdi",	 "rsi",	 "rbp",	 "rdx",	 "rbx",	 "rcx",	 "rax",	 
     "err",	 "rip",	 "cs ",	 "rfl",	 "rsp",	 "ss "	 };    
