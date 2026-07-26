@@ -14,6 +14,16 @@
 #define __API__V4__SCHED_RR__SCHEDULE_H__
 
 
+#if !defined(__cplusplus)
+/* C rep: same layout as the C++ prio_queue_t (max_prio, then the private
+   timeslice_tcb + prio_queue[] in declaration order). */
+typedef struct prio_queue_t
+{
+    s16_t max_prio;
+    tcb_t * timeslice_tcb;
+    tcb_t * prio_queue[MAX_PRIORITY + 1];
+} prio_queue_t;
+#else
 class prio_queue_t
 {
 public:
@@ -80,12 +90,24 @@ private:
     tcb_t * timeslice_tcb;
     tcb_t * prio_queue[MAX_PRIORITY + 1];
 };
+#endif /* prio_queue_t: C struct / C++ class dual-rep */
 
 
+#if !defined(__cplusplus)
+/* C rep of rr_scheduler_t: instance data only (its statics and methods, and
+   smp_requeue_t, are C++-only). */
+typedef struct rr_scheduler_t
+{
+    tcb_t * wakeup_list;
+    prio_queue_t root_prio_queue;
+} rr_scheduler_t;
+typedef rr_scheduler_t policy_scheduler_t;
+typedef void policy_sched_next_thread_t;
+#else /* __cplusplus: the C++ scheduler classes + inline methods */
 
 #if defined(CONFIG_SMP)
 
-class smp_requeue_t 
+class smp_requeue_t
 {
     tcb_t* tcb_list;
     char cache_pad0[CACHE_LINE_SIZE - sizeof(tcb_t*)];
@@ -260,6 +282,7 @@ protected:
 
 typedef class rr_scheduler_t policy_scheduler_t;
 typedef void policy_sched_next_thread_t;
+#endif /* __cplusplus */
 
 
 #endif /* !__API__V4__SCHED_RR__SCHEDULE_H__ */

@@ -166,10 +166,16 @@ struct schedule_request_queue_t
 };
 typedef struct schedule_request_queue_t schedule_request_queue_t;
 
-#if defined(__cplusplus)
-
+/* The RR policy scheduler types are dual-repped, so this is C-includable now. */
 #include INC_API_SCHED(schedule.h)
 
+#if !defined(__cplusplus)
+/* C rep of scheduler_t: derives from policy_scheduler_t with no added instance
+   data, so it has that base's layout (composed as __base at offset 0). */
+typedef struct scheduler_t { policy_scheduler_t __base; } scheduler_t;
+#endif
+
+#if defined(__cplusplus)
 
 class scheduler_t : public policy_scheduler_t
 {
