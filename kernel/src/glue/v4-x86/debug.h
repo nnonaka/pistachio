@@ -78,6 +78,14 @@ INLINE void spin(int pos, int cpu = 0)
     ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2 + 1] = 7;
 #endif /* defined(CONFIG_SPIN_WHEELS) */
 }
+#else /* !__cplusplus: C form of spin() (no default arg), same body */
+INLINE void spin(int pos, int cpu)
+{
+#if defined(CONFIG_SPIN_WHEELS)
+    ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2] += 1;
+    ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2 + 1] = 7;
+#endif /* defined(CONFIG_SPIN_WHEELS) */
+}
 #endif /* defined(__cplusplus) */
 
 #define enter_kdebug(arg...)                    \

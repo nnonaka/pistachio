@@ -38,23 +38,23 @@
 #error do not include glue/v4-ia32/smp.h directly -- use api/v4/smp.h
 #endif
 
-INLINE void sync_entry_t::set_pending(cpuid_t cpu)
+INLINE void sync_entry_set_pending(sync_entry_t *self, cpuid_t cpu)
 {
     asm ("lock; or %0, %1\n"
 	 :
-	 : "r"(1 << cpu), "m"(this->pending_mask));
-}
- 
-INLINE void sync_entry_t::clear_pending(cpuid_t cpu)
-{ 
-    asm ("lock; and %0, %1\n"
-	 :
-	 : "r"(~(1 << cpu)), "m"(this->pending_mask));
+	 : "r"(1 << cpu), "m"(self->pending_mask));
 }
 
-INLINE void sync_entry_t::ack(cpuid_t cpu)
+INLINE void sync_entry_clear_pending(sync_entry_t *self, cpuid_t cpu)
 {
-    ack_mask = 1 << cpu;
+    asm ("lock; and %0, %1\n"
+	 :
+	 : "r"(~(1 << cpu)), "m"(self->pending_mask));
+}
+
+INLINE void sync_entry_ack(sync_entry_t *self, cpuid_t cpu)
+{
+    self->ack_mask = 1 << cpu;
 }
 
 /**

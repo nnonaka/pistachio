@@ -67,10 +67,8 @@
 void init_console (void);
 BEGIN_DECLS
 int printf (const char * format, ...);
+struct tcb_t *get_kdebug_tcb();	/* elaborated: tcb_t typedef not yet visible here */
 END_DECLS
-#if defined(__cplusplus)
-tcb_t *get_kdebug_tcb();
-#endif
 
 # define UNIMPLEMENTED()                                        \
 do {                                                            \

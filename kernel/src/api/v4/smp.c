@@ -69,16 +69,16 @@ void processor_sleep()
 
 static sync_entry_t sync_xcpu_entry[CONFIG_SMP_MAX_CPUS];
 
-void sync_entry_t::handle_sync_requests()
+void sync_entry_handle_sync_requests(sync_entry_t *self)
 {
-    while (this->pending_mask)
+    while (self->pending_mask)
     {
 	for (cpuid_t cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; cpu++)
-	    if (this->pending_mask & (1 << cpu))
+	    if (self->pending_mask & (1 << cpu))
 	    {
-		sync_xcpu_entry[cpu].handler(&sync_xcpu_entry[cpu]);
-		this->clear_pending(cpu);
-		sync_xcpu_entry[cpu].ack(get_current_cpu());
+		sync_xcpu_entry[cpu].base.handler(&sync_xcpu_entry[cpu].base);
+		sync_entry_clear_pending(self, cpu);
+		sync_entry_ack(&sync_xcpu_entry[cpu], get_current_cpu());
 	    }
     }
 }
@@ -95,19 +95,19 @@ void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb,
     sync_entry_t * entry = &sync_xcpu_entry[get_current_cpu()];
 
     entry->ack_mask = 0;
-    entry->set (handler, tcb, param0, param1, param2);
+    cpu_mb_entry_set (&entry->base, handler, tcb, param0, param1, param2);
 
     // now signal the other CPU
-    sync_xcpu_entry[dstcpu].set_pending(get_current_cpu());
+    sync_entry_set_pending(&sync_xcpu_entry[dstcpu], get_current_cpu());
 
     // trigger other side to make sure it gets processed ASAP
     smp_xcpu_trigger(dstcpu);
-    
+
     // now we poll till the CPU has finished the request
     while (entry->ack_mask == 0)
     {
-	spin(70);
-	sync_xcpu_entry[get_current_cpu()].handle_sync_requests();
+	spin(70, 0);
+	sync_entry_handle_sync_requests(&sync_xcpu_entry[get_current_cpu()]);
     }
 }
 #endif /* CONFIG_SMP_SYNC_REQUEST */
@@ -125,29 +125,29 @@ void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb,
 
 cpu_mb_t cpu_mailboxes[CONFIG_SMP_MAX_CPUS];
 
-void cpu_mb_t::walk_mailbox()
+void cpu_mb_walk_mailbox(cpu_mb_t *self)
 {
-    while(first_free != first_alloc)
+    while(self->first_free != self->first_alloc)
     {
-	lock.lock();
-	cpu_mb_entry_t entry = entries[first_alloc];
-	entries[first_alloc].handler = NULL;
-	first_alloc = (first_alloc + 1) % MAX_MAILBOX_ENTRIES;
-	lock.unlock();
+	spinlock_lock(&self->lock);
+	cpu_mb_entry_t entry = self->entries[self->first_alloc];
+	self->entries[self->first_alloc].handler = NULL;
+	self->first_alloc = (self->first_alloc + 1) % MAX_MAILBOX_ENTRIES;
+	spinlock_unlock(&self->lock);
 	ASSERT(entry.handler);
-	
+
 	//printf("CPU%d: XCPU-entry (handler: %t)\n", get_current_cpu(), entry.handler);
 	entry.handler(&entry);
     }
 }
 
 
-void cpu_mb_t::dump_mailbox(word_t cpu)
+void cpu_mb_dump_mailbox(cpu_mb_t *self, word_t cpu)
 {
-    printf("CPU%d Mailbox first alloc %d first free %d\n", cpu, first_alloc, first_free);
+    printf("CPU%d Mailbox first alloc %d first free %d\n", cpu, self->first_alloc, self->first_free);
     for (word_t e=0; e < MAX_MAILBOX_ENTRIES; e++)
     {
-        cpu_mb_entry_t entry = entries[e];
+        cpu_mb_entry_t entry = self->entries[e];
 	if (entry.handler != NULL)
             printf("\tXCPU-entry %d\n\t\thandler:%t,"
 		   "tcb %t\n\t\tparams %x:%x:%x:%x:%x:%x:%x:%x\n",
@@ -161,9 +161,9 @@ void cpu_mb_t::dump_mailbox(word_t cpu)
 void process_xcpu_mailbox()
 {
 #if defined(CONFIG_SMP_SYNC_REQUEST)
-    sync_xcpu_entry[get_current_cpu()].handle_sync_requests();
+    sync_entry_handle_sync_requests(&sync_xcpu_entry[get_current_cpu()]);
 #endif
-    get_cpu_mailbox (get_current_cpu())->walk_mailbox();
+    cpu_mb_walk_mailbox(get_cpu_mailbox (get_current_cpu()));
 }
 
 

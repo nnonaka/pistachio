@@ -61,18 +61,19 @@ template<typename T> INLINE T *get_on_cpu(cpuid_t cpu, T *item)
 
 #define ON_CONFIG_SMP(x) do { x; } while(0)
 
-#if defined(__cplusplus)
+BEGIN_DECLS
 /**
  * central SMP handler function; should be called in processor_sleep
- * deals with both, sync and async 
+ * deals with both, sync and async
  */
-void process_xcpu_mailbox();
+void process_xcpu_mailbox(void);
 
 /**
  * Architecture specific XCPU trigger function (IPI) processing XCPU
- * mailboxes 
+ * mailboxes
  */
 void smp_xcpu_trigger(cpuid_t cpu);
+END_DECLS
 
 
 /**********************************************************************
@@ -84,14 +85,15 @@ void smp_xcpu_trigger(cpuid_t cpu);
 // maximum number of outstanding XCPU requests
 #define MAX_MAILBOX_ENTRIES	32
 
-class cpu_mb_entry_t;
-typedef void (*xcpu_handler_t)(cpu_mb_entry_t *);
+struct cpu_mb_entry_t;
+typedef void (*xcpu_handler_t)(struct cpu_mb_entry_t *);
 
 // mailbox entry
-class cpu_mb_entry_t
+struct cpu_mb_entry_t
 {
+#if defined(__cplusplus)
 public:
-    void set(xcpu_handler_t handler, tcb_t * tcb, 
+    void set(xcpu_handler_t handler, tcb_t * tcb,
 	     word_t param0, word_t param1, word_t param2)
 	{
 	    this->handler = handler;
@@ -115,17 +117,31 @@ public:
 	}
 
 public:
+#endif /* __cplusplus */
     xcpu_handler_t handler;
     tcb_t * tcb;
     word_t param[8];
 };
+typedef struct cpu_mb_entry_t cpu_mb_entry_t;
+
+/* C free-function form of cpu_mb_entry_t::set (5-arg); the C++ method stays. */
+INLINE void cpu_mb_entry_set (cpu_mb_entry_t *self, xcpu_handler_t handler,
+			      tcb_t *tcb, word_t param0, word_t param1, word_t param2)
+{
+    self->handler = handler;
+    self->tcb = tcb;
+    self->param[0] = param0;
+    self->param[1] = param1;
+    self->param[2] = param2;
+}
 
 /**
  * Asynchronous XCPU mailbox
  * currently not very efficient using a spin-lock for the mailbox
  */
-class cpu_mb_t
+struct cpu_mb_t
 {
+#if defined(__cplusplus)
 public:
     void walk_mailbox();
     void dump_mailbox(word_t cpu);
@@ -173,13 +189,20 @@ public:
 	}
 
 private:
+#endif /* __cplusplus */
     unsigned first_alloc;
     unsigned first_free;
     spinlock_t lock;
-    cpu_mb_entry_t entries[MAX_MAILBOX_ENTRIES] 
+    cpu_mb_entry_t entries[MAX_MAILBOX_ENTRIES]
     __attribute__((aligned (CACHE_LINE_SIZE)));
 } __attribute__ ((aligned (CACHE_LINE_SIZE)));
+typedef struct cpu_mb_t cpu_mb_t;
 
+/* C free-function API for the OOL cpu_mb_t methods (defined in smp.c). */
+BEGIN_DECLS
+void cpu_mb_walk_mailbox(cpu_mb_t *self);
+void cpu_mb_dump_mailbox(cpu_mb_t *self, word_t cpu);
+END_DECLS
 
 extern cpu_mb_t cpu_mailboxes[];
 INLINE cpu_mb_t * get_cpu_mailbox (cpuid_t dst)
@@ -188,7 +211,13 @@ INLINE cpu_mb_t * get_cpu_mailbox (cpuid_t dst)
     return &cpu_mailboxes[dst];
 }
 
-INLINE void xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler, 
+#if defined(__cplusplus)
+/* C++ method forwarders to the C free functions above; the remaining inline
+   helpers, sync_entry_t, and the glue include below are C++-only. */
+INLINE void cpu_mb_t::walk_mailbox() { cpu_mb_walk_mailbox(this); }
+INLINE void cpu_mb_t::dump_mailbox(word_t cpu) { cpu_mb_dump_mailbox(this, cpu); }
+
+INLINE void xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
 			 tcb_t * tcb = NULL, 
 			 word_t param0 = 0, word_t param1 = 0, 
 			 word_t param2 = 0 )
@@ -236,6 +265,7 @@ INLINE void xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb,
     smp_xcpu_trigger(dstcpu);
 #endif
 }
+#endif /* __cplusplus */
 
 
 /**********************************************************************
@@ -248,31 +278,42 @@ INLINE void xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb,
 /*
  * synchronous XCPU request handling, depends on the hardware
  * architecture. Needed e.g. on IA32 for TLB shoot-downs. See
- * api/v4/smp.cc for a detailed description. 
+ * api/v4/smp.c for a detailed description.
+ *
+ * sync_entry_t: single inheritance from cpu_mb_entry_t; its methods are C
+ * free functions (no C++ callers) defined in glue smp.h and smp.c.
  */
-
-class sync_entry_t : public cpu_mb_entry_t
+#if defined(__cplusplus)
+struct sync_entry_t : public cpu_mb_entry_t
 {
-public:
-    void set_pending(cpuid_t cpu);
-    void clear_pending(cpuid_t cpu);
-    void ack(cpuid_t cpu);
-
-    void handle_sync_requests();
-
-public:
     word_t pending_mask;
     word_t ack_mask;
 };
+#else
+struct sync_entry_t
+{
+    cpu_mb_entry_t	base;	/* single inheritance -> base as first member */
+    word_t pending_mask;
+    word_t ack_mask;
+};
+#endif
+typedef struct sync_entry_t sync_entry_t;
 
+BEGIN_DECLS
+void sync_entry_handle_sync_requests(sync_entry_t *self);
+#if defined(__cplusplus)
 void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
-		       tcb_t * tcb = NULL, word_t param0 = 0, 
+		       tcb_t * tcb = NULL, word_t param0 = 0,
 		       word_t param1 = 0, word_t param2 = 0);
+#else
+void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
+		       tcb_t * tcb, word_t param0, word_t param1, word_t param2);
+#endif
+END_DECLS
 
 #endif /* CONFIG_SMP_SYNC_REQUEST */
 
 #include INC_GLUE(smp.h)
-#endif /* __cplusplus */
 
 #else /* ! CONFIG_SMP */
 
