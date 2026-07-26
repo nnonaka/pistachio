@@ -42,7 +42,7 @@ SOURCES += src/generic/acpi.cc
 endif
 
 # use linear_ptab_walker if need be
-SOURCES+=src/generic/linear_ptab_walker.cc \
+SOURCES+=src/generic/linear_ptab_walker.c \
 	 src/generic/mapping_alloc.c 
 
 ifeq ("$(CONFIG_NEW_MDB)","y")

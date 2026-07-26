@@ -33,11 +33,14 @@ public:
 
     /* mapping */
     void map_sigma0(addr_t addr);
-    void map_fpage(fpage_t snd_fp, word_t base, 
-	space_t * t_space, fpage_t rcv_fp, bool grant);
+    /* map_fpage/mapctrl/readmem are defined in C (linear_ptab_walker.c); the
+       __asm__ labels make these C++ call sites resolve to the C symbols (ABI:
+       'this' leads, and fpage_t/mdb_ctrl_t pass by value identically). */
+    void map_fpage(fpage_t snd_fp, word_t base,
+	space_t * t_space, fpage_t rcv_fp, bool grant) __asm__ ("space_map_fpage");
     fpage_t unmap_fpage(fpage_t fpage, bool flush, bool unmap_all);
     fpage_t mapctrl (fpage_t fpage, mdb_t::ctrl_t ctrl,
-		     word_t attribute, bool unmap_all);
+		     word_t attribute, bool unmap_all) __asm__ ("space_mapctrl");
 
     
     /* tcb management */
@@ -121,7 +124,7 @@ public:
     static bool does_tlbflush_pay (word_t log2size)
 	{ return log2size >= 28; }
 
-    bool readmem (addr_t vaddr, word_t * contents);
+    bool readmem (addr_t vaddr, word_t * contents) __asm__ ("space_readmem");
     static word_t readmem_phys (addr_t paddr);
 
     /* kip and utcb handling */
@@ -489,6 +492,10 @@ void      space_flush_tlb (space_t *self, space_t *curspace);
 void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, word_t log2size);
 bool      space_is_sigma0 (space_t *space);
 space_t * get_current_space_c (void);
+/* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
+   C symbol would corrupt the many external callers). This wrapper bridges it for
+   linear_ptab_walker.c's readmem, writing the page size as a word_t. */
+bool      space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size);
 END_DECLS
 
 

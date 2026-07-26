@@ -1253,3 +1253,60 @@ void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, wo
 bool      space_is_sigma0 (space_t *space)			{ return is_sigma0_space (space); }
 space_t * get_current_space_c (void)				{ return get_current_space (); }
 END_DECLS
+
+
+/* space_t::lookup_mapping moved here from linear_ptab_walker.cc (now C); its
+   out-param is a pgent_t::pgsize_e, so it stays C++ for its external callers. */
+bool space_t::lookup_mapping (addr_t vaddr, pgent_t ** r_pg,
+			      pgent_t::pgsize_e * r_size, cpuid_t cpu)
+{
+    pgent_t * pg = this->pgent (page_table_index (pgent_t::size_max, vaddr), cpu);
+    pgent_t::pgsize_e pgsize = pgent_t::size_max;
+
+    for (;;)
+    {
+	if (!pg)
+	    return false;
+	else if (pg->is_valid (this, pgsize))
+	{
+	    if (pg->is_subtree (this, pgsize))
+	    {
+		// Recurse into subtree
+		if (pgsize == 0)
+		    return false;
+
+		pg = pg->subtree (this, pgsize)->next
+		    (this, pgsize-1, page_table_index (pgsize-1, vaddr));
+		pgsize--;
+	    }
+	    else
+	    {
+		// Return mapping
+		if (r_pg)
+		    *r_pg = pg;
+		if (r_size)
+		    *r_size = pgsize;
+		return true;
+	    }
+	}
+	else
+	    // No valid mapping or subtree
+	    return false;
+    }
+
+    /* NOTREACHED */
+    return false;
+}
+
+/* C bridge for linear_ptab_walker.c's readmem: the 3-arg lookup_mapping
+   (default cpu = data.reference_ptab) with the page size returned as word_t. */
+BEGIN_DECLS
+bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size)
+{
+    pgent_t::pgsize_e sz;
+    bool r = self->lookup_mapping (vaddr, r_pg, &sz);
+    if (r_size)
+	*r_size = (word_t) sz;
+    return r;
+}
+END_DECLS
