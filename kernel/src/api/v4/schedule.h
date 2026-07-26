@@ -91,38 +91,44 @@ void  sched_init (bool bootcpu);
 void  sched_start (cpuid_t cpu);
 END_DECLS
 
-#if defined(__cplusplus)
-class schedule_req_t
-{
-public:
+/* schedule_req_t / schedule_request_queue_t are dual-repped: api/v4/schedule.c
+   uses schedule_req_t by value and indexes the request queue.  The data is
+   C-visible; the C++ methods stay guarded. */
+#define SCHEDULE_QUEUE_LEN 128
 
+struct schedule_req_t
+{
     schedule_ctrl_t time_control;
     schedule_ctrl_t prio_control;
     schedule_ctrl_t preemption_control;
     schedule_ctrl_t processor_control;
-    tcb_t* tcb;					 
+    tcb_t* tcb;
     bool valid;
-    
-    void init() { time_control = 0; prio_control = 0; preemption_control = 0;  processor_control = 0; valid = false; } 
-    schedule_req_t (void) { init();  }
-};
 
-class schedule_request_queue_t 
+#if defined(__cplusplus)
+    void init() { time_control = 0; prio_control = 0; preemption_control = 0;  processor_control = 0; valid = false; }
+    schedule_req_t (void) { init();  }
+#endif
+};
+typedef struct schedule_req_t schedule_req_t;
+
+struct schedule_request_queue_t
 {
-public:
-    static const word_t schedule_queue_len = 128;
-    schedule_req_t entries[schedule_queue_len];
+#if defined(__cplusplus)
+    static const word_t schedule_queue_len = SCHEDULE_QUEUE_LEN;
+#endif
+    schedule_req_t entries[SCHEDULE_QUEUE_LEN];
     word_t first_alloc;
     word_t first_free;
     spinlock_t lock;
-    
-public:
+
     char pad2[CACHE_LINE_SIZE - sizeof(spinlock_t)];
 
+#if defined(__cplusplus)
     schedule_request_queue_t (void) { lock.init(); first_alloc = first_free = 0; }
-    
-    schedule_req_t *reserve_request() 
-	{ 
+
+    schedule_req_t *reserve_request()
+	{
 	    lock.lock();
 	    if ( ((first_free + 1) % schedule_queue_len) == first_alloc )
 	    {
@@ -133,17 +139,17 @@ public:
 	    first_free = (first_free + 1) % schedule_queue_len;
 	    return &entries[idx];
 	}
-    
+
     schedule_req_t process_request ()
 	{
 	    ASSERT(!is_empty());
-	    
+
 	    lock.lock();
 	    schedule_req_t req = entries[first_alloc];
 	    entries[first_alloc].valid = false;
 	    first_alloc = (first_alloc + 1) % schedule_queue_len;
 	    lock.unlock();
-	    
+
 	    return req;
 	}
 
@@ -153,10 +159,14 @@ public:
 	    lock.unlock();
 	}
 
-    
+
     bool is_empty() { return  (first_alloc == first_free); };
-    
+#endif /* __cplusplus */
+
 };
+typedef struct schedule_request_queue_t schedule_request_queue_t;
+
+#if defined(__cplusplus)
 
 #include INC_API_SCHED(schedule.h)
 

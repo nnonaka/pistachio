@@ -258,10 +258,8 @@ INLINE void exregs_ctrl_set (exregs_ctrl_t *self, word_t flag)
 { self->raw |= (1UL << flag); }
 #endif /* !__cplusplus */
 
-/* Remaining syscall-control types stay C++-only (matched by the #endif far
-   below); only exregs_ctrl_t above needed a C form. */
-#if defined(__cplusplus)
-
+/* schedule_ctrl_t is dual-repped: the union is C-visible (api/v4/schedule.c
+   uses schedule_req_t by value, which embeds these); methods stay C++. */
 struct schedule_ctrl_t {
     union {
 	struct {
@@ -269,7 +267,7 @@ struct schedule_ctrl_t {
 	    time_t	timeslice;
 	    time_t	total_quantum;
 	};
-	struct {	
+	struct {
 	    BITFIELD4(long,
 		      prio		:  9,
 		      logid		:  7,
@@ -283,11 +281,11 @@ struct schedule_ctrl_t {
 		      log_pm_msg	:  1,
 		      hs_extended	:  1,
 		      hs_extended_ctrl	:  6);
-	}; 	
+	};
 	struct {
 	    BITFIELD3(word_t,
 		      processor		: 16,
-		      extended_migrate	: 1, 
+		      extended_migrate	: 1,
 		      : BITS_WORD-17);
 	};
         threadid_t tid;
@@ -295,13 +293,14 @@ struct schedule_ctrl_t {
 
    } __attribute__((packed));
 
-    inline void operator = (word_t raw) 
+#if defined(__cplusplus)
+    inline void operator = (word_t raw)
 	{ this->raw = raw; }
 
-    inline bool operator == (schedule_ctrl_t ctrl) 
+    inline bool operator == (schedule_ctrl_t ctrl)
 	{ return (this->raw == ctrl.raw); }
 
-    inline bool operator != (schedule_ctrl_t ctrl) 
+    inline bool operator != (schedule_ctrl_t ctrl)
 	{ return (this->raw != ctrl.raw); }
 
     word_t get_raw()
@@ -313,9 +312,14 @@ struct schedule_ctrl_t {
 	    ctrl.raw = (~0UL);
 	    return ctrl;
 	}
+#endif /* __cplusplus */
 
 };
-#endif /* __cplusplus */
+typedef struct schedule_ctrl_t schedule_ctrl_t;
+
+#if !defined(__cplusplus)
+INLINE word_t schedule_ctrl_get_raw (const schedule_ctrl_t *self) { return self->raw; }
+#endif
 
 /*
  * Error code values
