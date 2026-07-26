@@ -62,14 +62,17 @@ typedef struct {
 	sys_ipc (timeout, to, from)		
 
 
+/* Language-neutral (used only by the IPC syscall, C now): spill `from` once so
+   both rvalue args and &-taking work, and use C accessor forms. */
 #define return_ipc(from)			\
 {						\
+	threadid_t x86_x64_from = (from);	\
 	x86_x64_sysret_t x86_x64_ret;		\
-	x86_x64_ret.rax = (from).get_raw();	\
-	x86_x64_ret.rdx = current->get_tag().raw;	\
-	current->set_partner(from);		\
+	x86_x64_ret.rax = threadid_get_raw(&x86_x64_from);	\
+	x86_x64_ret.rdx = tcb_get_tag(current).raw;	\
+	tcb_set_partner(current, x86_x64_from);	\
 	return x86_x64_ret;			\
-} 
+}
 
 
 //

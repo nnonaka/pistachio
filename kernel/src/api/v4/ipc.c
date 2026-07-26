@@ -1,11 +1,11 @@
 /*********************************************************************
- *                
+ *
  * Copyright (C) 1999-2010,  Karlsruhe University
  * Copyright (C) 2008-2009,  Volkmar Uhlig, Jan Stoess, IBM Corporation
- *                
- * File path:     api/v4/ipc.cc
- * Description:   
- *                
+ *
+ * File path:     api/v4/ipc.c
+ * Description:
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -14,7 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -26,9 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *                
+ *
  * $Id$
- *                
+ *
  ********************************************************************/
 #include <debug.h>
 #include <kdb/tracepoints.h>
@@ -56,22 +56,22 @@ INLINE bool transfer_message(tcb_t * src, tcb_t * dst, msg_tag_t tag)
     ASSERT(src);
     ASSERT(dst);
     TRACEPOINT (IPC_TRANSFER, "IPC transfer message: src=%t, dst=%t\n", src, dst);
-    
+
     // clear all flags except propagation
-    tag.clear_receive_flags();
+    msg_tag_clear_receive_flags (&tag);
 
-    /* VU: this copy loop is safe - untyped items can never 
+    /* VU: this copy loop is safe - untyped items can never
      * exceed the total number of message registers */
-    if (tag.get_untyped())
-	src->copy_mrs(dst, 1, tag.get_untyped());
+    if (msg_tag_get_untyped (&tag))
+	tcb_copy_mrs (src, dst, 1, msg_tag_get_untyped (&tag));
 
-    if (EXPECT_TRUE( !tag.get_typed() ))
+    if (EXPECT_TRUE( !msg_tag_get_typed (&tag) ))
     {
 	// If we have only untyped we know there will be no error.
 	// Allow for some gcc optimizations here.
-	dst->set_tag(tag);
+	tcb_set_tag (dst, tag);
 
-	if (EXPECT_FALSE (tag.is_propagated ()))
+	if (EXPECT_FALSE (msg_tag_is_propagated (&tag)))
 	{
 	    // If propagated message transfer was successful we can
 	    // set the ActualSender field of the destination, and also
@@ -82,20 +82,25 @@ INLINE bool transfer_message(tcb_t * src, tcb_t * dst, msg_tag_t tag)
 	    // mean time).
 
 	fixup_propagation:
-
-	    tcb_t * virt_sender = tcb_t::get_tcb (src->get_virtual_sender ());
-
-	    if (src->get_virtual_sender () == virt_sender->get_global_id ()
-		&& (src->get_space () == virt_sender->get_space () ||
-		    src->get_space () == dst->get_space ())
-		&& virt_sender->get_state ().is_waiting ()
-		&& virt_sender->get_partner () == src->get_global_id ())
 	    {
-		TRACE_IPC_DETAILS("redirect virtual sender %t to partner %t \n", 
+	    tcb_t * virt_sender = tcb_get_tcb (tcb_get_virtual_sender (src));
+	    threadid_t vsend = tcb_get_virtual_sender (src);
+	    threadid_t vgid  = tcb_get_global_id (virt_sender);
+	    threadid_t vpart = tcb_get_partner (virt_sender);
+	    threadid_t sgid  = tcb_get_global_id (src);
+
+	    if (threadid_equals (&vsend, &vgid)
+		&& (tcb_get_space (src) == tcb_get_space (virt_sender) ||
+		    tcb_get_space (src) == tcb_get_space (dst))
+		&& thread_state_is_waiting (&virt_sender->thread_state)
+		&& threadid_equals (&vpart, &sgid))
+	    {
+		TRACE_IPC_DETAILS("redirect virtual sender %t to partner %t \n",
 				  virt_sender, dst);
-		virt_sender->set_partner (dst->get_global_id ());
+		tcb_set_partner (virt_sender, tcb_get_global_id (dst));
 	    }
-	    dst->set_actual_sender (src->get_global_id ());
+	    tcb_set_actual_sender (dst, tcb_get_global_id (src));
+	    }
 	}
 
 	return true;
@@ -103,15 +108,15 @@ INLINE bool transfer_message(tcb_t * src, tcb_t * dst, msg_tag_t tag)
     else
     {
 	tag = extended_transfer(src, dst, tag);
-	dst->set_tag(tag);
+	tcb_set_tag (dst, tag);
 
-	if (EXPECT_FALSE (tag.is_propagated ()))
+	if (EXPECT_FALSE (msg_tag_is_propagated (&tag)))
 	{
-	    if (EXPECT_TRUE (! tag.is_error ()))
+	    if (EXPECT_TRUE (! msg_tag_is_error (&tag)))
 		goto fixup_propagation;
-	    dst->set_actual_sender (src->get_global_id ());
+	    tcb_set_actual_sender (dst, tcb_get_global_id (src));
 	}
-	return (! tag.is_error ());
+	return (! msg_tag_is_error (&tag));
     }
 }
 
@@ -132,16 +137,21 @@ static void do_xcpu_receive(cpu_mb_entry_t * entry)
 	       to_tcb, to_tcb->get_state().string());
 
     // did the sender migrate meanwhile?
-    if (!from_tcb->is_local_cpu())
+    if (!tcb_is_local_cpu (from_tcb))
 	UNIMPLEMENTED();
-    
+
+    threadid_t from_partner = tcb_get_partner (from_tcb);
+    threadid_t to_gid = tcb_get_global_id (to_tcb);
+    threadid_t to_partner = tcb_get_partner (to_tcb);
+    threadid_t from_gid = tcb_get_global_id (from_tcb);
+
     // still waiting for the IPC?
-    if ( (from_tcb->get_state().is_polling() && (from_tcb->get_partner() == to_tcb->get_global_id()) ) ||
-	 (to_tcb->get_state().is_locked_waiting() && (to_tcb->get_partner() == from_tcb->get_global_id())) )
+    if ( (thread_state_is_polling (&from_tcb->thread_state) && threadid_equals (&from_partner, &to_gid) ) ||
+	 (thread_state_is_locked_waiting (&to_tcb->thread_state) && threadid_equals (&to_partner, &from_gid)) )
     {
 	// everything is fine -- now kick the thread
-	from_tcb->set_state(thread_state_t::locked_running);
-	get_current_scheduler()->schedule(from_tcb);
+	tcb_set_state (from_tcb, THREAD_STATE_LOCKED_RUNNING);
+	sched_schedule (from_tcb, sched_default);
     }
     else
 	UNIMPLEMENTED();
@@ -153,17 +163,17 @@ static void do_xcpu_send_reply(cpu_mb_entry_t * entry)
     // the send operation can start now
     tcb_t * from_tcb = (tcb_t*)entry->tcb;
     TRACE_XIPC_DETAILS("ipc xcpu %s from_tcb: %t (s=%s), result %x",
-	       __func__, entry->tcb, entry->tcb->get_state().string(), 
+	       __func__, entry->tcb, entry->tcb->get_state().string(),
 	       entry->param[0]);
 
     // we can let the thread run
-    if (!from_tcb->is_local_cpu())
+    if (!tcb_is_local_cpu (from_tcb))
     {
 	TRACE_XIPC_DETAILS("ipc xcpu %s from_tcb: %t (%s) migrated to cpu %d",
 		   __func__, entry->tcb, entry->tcb->get_state().string(), from_tcb->get_cpu());
-	
+
 	// Forward request
-	xcpu_request(from_tcb->get_cpu(), do_xcpu_send_reply, from_tcb, 0);
+	xcpu_request_c (tcb_get_cpu (from_tcb), do_xcpu_send_reply, from_tcb, 0);
 	return;
     }
 
@@ -171,89 +181,93 @@ static void do_xcpu_send_reply(cpu_mb_entry_t * entry)
     from_tcb->xcpu_status = entry->param[0];
 
     // and re-activate the thread
-    from_tcb->set_state(thread_state_t::locked_running);
-    get_current_scheduler()->schedule(from_tcb);
+    tcb_set_state (from_tcb, THREAD_STATE_LOCKED_RUNNING);
+    sched_schedule (from_tcb, sched_default);
 }
 
 static void do_xcpu_send(cpu_mb_entry_t * entry)
 {
     tcb_t * to_tcb = entry->tcb;
     tcb_t * from_tcb = (tcb_t*)entry->param[0];
-    threadid_t sender_id; 
-    sender_id.set_raw(entry->param[1]);
+    threadid_t sender_id;
+    threadid_set_raw (&sender_id, entry->param[1]);
 
     ASSERT(to_tcb);
     ASSERT(from_tcb);
-    
+
     TRACE_XIPC_DETAILS("ipc xcpu %s to_tcb: %t (%s), from_tcb: %t (%s)",
-	       __func__, to_tcb, to_tcb->get_state().string(), 
+	       __func__, to_tcb, to_tcb->get_state().string(),
 	       from_tcb, from_tcb->get_state().string());
 
     // did the receiver migrate meanwhile?
-    if (!to_tcb->is_local_cpu())
+    if (!tcb_is_local_cpu (to_tcb))
     {
 	TRACE_XIPC_DETAILS("ipc xcpu %s to_tcb: %t migrated to cpu %d",
 		   __func__, to_tcb, to_tcb->get_cpu());
-	xcpu_request(from_tcb->get_cpu(), do_xcpu_send_reply, from_tcb, 1);
+	xcpu_request_c (tcb_get_cpu (from_tcb), do_xcpu_send_reply, from_tcb, 1);
 	return;
     }
 
-    if ( to_tcb->get_state().is_waiting() &&
-	 ( to_tcb->get_partner() == sender_id || 
-	   to_tcb->get_partner().is_anythread() ))
+    threadid_t to_partner = tcb_get_partner (to_tcb);
+
+    if ( thread_state_is_waiting (&to_tcb->thread_state) &&
+	 ( threadid_equals (&to_partner, &sender_id) ||
+	   threadid_is_anythread (&to_partner) ))
     {
 	// ok, still waiting --> everything is fine
-	to_tcb->sched_state.cancel_timeout();
-	to_tcb->set_state(thread_state_t::locked_waiting);
-	to_tcb->set_partner(sender_id);
+	sched_ktcb_cancel_timeout (&to_tcb->sched_state);
+	tcb_set_state (to_tcb, THREAD_STATE_LOCKED_WAITING);
+	tcb_set_partner (to_tcb, sender_id);
 
 	// now let the other thread run again
-	xcpu_request(from_tcb->get_cpu(), do_xcpu_send_reply, from_tcb, 0);
+	xcpu_request_c (tcb_get_cpu (from_tcb), do_xcpu_send_reply, from_tcb, 0);
     }
-    else if (to_tcb->get_state().is_locked_waiting() &&
-	     to_tcb->get_partner() == sender_id)
+    else if (thread_state_is_locked_waiting (&to_tcb->thread_state) &&
+	     threadid_equals (&to_partner, &sender_id))
     {
 	// ok, we are locked_waiting -- means we already issued
 	// a request packet (do_xcpu_receive) -- so don't bother
-	TRACE_XIPC_DETAILS("ipc xcpu %s %t is locked_waiting for %t", 
+	TRACE_XIPC_DETAILS("ipc xcpu %s %t is locked_waiting for %t",
 		   __func__, to_tcb, TID(sender_id));
     }
     else
     {
 	TRACE_XIPC_DETAILS("ipc xcpu %s (not waiting) to_tcb: %t (%s), from_tcb: %t",
 		   __func__, to_tcb, to_tcb->get_state().string(), from_tcb);
-	xcpu_request(from_tcb->get_cpu(), do_xcpu_send_reply, from_tcb, 1);
+	xcpu_request_c (tcb_get_cpu (from_tcb), do_xcpu_send_reply, from_tcb, 1);
     }
 }
 
 static void do_xcpu_send_done(cpu_mb_entry_t * entry)
 {
     tcb_t * to_tcb = entry->tcb;
-    threadid_t sender_id; 
-    sender_id.set_raw(entry->param[0]);
-    
+    threadid_t sender_id;
+    threadid_set_raw (&sender_id, entry->param[0]);
+
     TRACE_XIPC_DETAILS("ipc xcpu %s to_tcb: %t (%s) partner %t sender %t",
 	       __func__, to_tcb, to_tcb->get_state().string(),
 	       TID(to_tcb->get_partner()), TID(sender_id));
 
     // did the receiver migrate meanwhile?
-    if (!to_tcb->is_local_cpu())
-    { 	
+    if (!tcb_is_local_cpu (to_tcb))
+    {
 	TRACE_XIPC_DETAILS("ipc xcpu %s to_tcb: %t migrated to cpu %d",
 		   __func__, to_tcb, to_tcb->get_cpu());
 	// Forward request
-	xcpu_request( to_tcb->get_cpu(), do_xcpu_send_done, to_tcb, sender_id.get_raw());
+	xcpu_request_c (tcb_get_cpu (to_tcb), do_xcpu_send_done, to_tcb, threadid_get_raw (&sender_id));
 	return;
     }
 
-    if ( to_tcb->get_state().is_locked_waiting() && 
-	 to_tcb->get_partner() == sender_id )
+    threadid_t to_partner = tcb_get_partner (to_tcb);
+
+    if ( thread_state_is_locked_waiting (&to_tcb->thread_state) &&
+	 threadid_equals (&to_partner, &sender_id) )
     {
-	msg_tag_t tag = to_tcb->get_tag();
-	tag.set_xcpu();
-	to_tcb->set_tag(tag);
-	to_tcb->set_state(thread_state_t::running);
-	get_current_scheduler()->schedule(to_tcb);	
+	msg_tag_t tag = tcb_get_tag (to_tcb);
+	msg_tag_set_xcpu (&tag);
+	tcb_set_tag (to_tcb, tag);
+	tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
+	sched_schedule (to_tcb, sched_default);
     }
     else
     {
@@ -277,14 +291,13 @@ SYS_IPC (threadid_t to_tid, threadid_t from_tid, timeout_t timeout)
     tcb_t * to_tcb = NULL;
     tcb_t * from_tcb;
     tcb_t * current = get_current_tcb();
-    scheduler_t * scheduler = get_current_scheduler();
-    msg_tag_t tag = current->get_tag();
-   
+    msg_tag_t tag = tcb_get_tag (current);
+
     //ENABLE_TRACE_XIPC_DETAILS(~0, 0);
-    TRACEPOINT (SYSCALL_IPC, 
+    TRACEPOINT (SYSCALL_IPC,
 		"SYS_IPC: %t->%t (<-%t), to: %x, t: %x (l=0x%x, u=%d, t=%d)",
 		current, TID(to_tid), TID(from_tid), timeout.raw,
-		current->get_tag().raw, current->get_tag().get_label(), 
+		current->get_tag().raw, current->get_tag().get_label(),
 		current->get_tag().get_untyped(), current->get_tag().get_typed());
 
     /* --- send phase --------------------------------------------------- */
@@ -292,130 +305,137 @@ SYS_IPC (threadid_t to_tid, threadid_t from_tid, timeout_t timeout)
 send_path:
 #endif
 
-    if (! EXPECT_FALSE( to_tid.is_nilthread() ))
+    if (! EXPECT_FALSE( threadid_is_nilthread (&to_tid) ))
     {
-	to_tcb = tcb_t::get_tcb(to_tid);
+	to_tcb = tcb_get_tcb (to_tid);
 	TRACE_IPC_DETAILS("ipc send phase curr=%t, to=%t", current, TID(to_tid));
 
-	if (EXPECT_FALSE( to_tcb->get_global_id() != to_tid ))
+	threadid_t to_gid = tcb_get_global_id (to_tcb);
+	if (EXPECT_FALSE( !threadid_equals (&to_gid, &to_tid) ))
 	{
 	    /* specified thread id invalid */
 	    TRACE_IPC_ERROR("ipc invalid send tid, wanted %t, but have %t", to_tid.get_raw(), to_tcb);
-	    current->set_error_code(IPC_SND_ERROR(ERR_IPC_NON_EXISTING));
-	    current->set_tag(msg_tag_t::error_tag());
+	    tcb_set_error_code (current, IPC_SND_ERROR(ERR_IPC_NON_EXISTING));
+	    tcb_set_tag (current, msg_tag_error_tag ());
 	    return_ipc(NILTHREAD);
 	}
 
-	threadid_t sender_id = current->get_global_id();
+	threadid_t sender_id = tcb_get_global_id (current);
 
-	if (EXPECT_FALSE( tag.is_propagated() ))
+	if (EXPECT_FALSE( msg_tag_is_propagated (&tag) ))
 	{
-	    tcb_t * virt_sender = tcb_t::get_tcb(current->get_virtual_sender());
-	    
+	    tcb_t * virt_sender = tcb_get_tcb (tcb_get_virtual_sender (current));
+	    threadid_t vsend = tcb_get_virtual_sender (current);
+	    threadid_t vgid  = tcb_get_global_id (virt_sender);
+
 	    // propagation only allowed within same address space
-	    if ((current->get_virtual_sender() == virt_sender->get_global_id() 
-		&& (current->get_space() == virt_sender->get_space() ||
-		    current->get_space() == to_tcb->get_space())))
+	    if ((threadid_equals (&vsend, &vgid)
+		&& (tcb_get_space (current) == tcb_get_space (virt_sender) ||
+		    tcb_get_space (current) == tcb_get_space (to_tcb))))
 	    {
-		sender_id = current->get_virtual_sender();
+		sender_id = tcb_get_virtual_sender (current);
 	    }
 	    else
 	    {
-		tag.set_propagated(false);
-		current->set_tag(tag);
+		msg_tag_set_propagated (&tag, false);
+		tcb_set_tag (current, tag);
 	    }
 	}
 
-#if defined(CONFIG_SMP)	
-	/* VU: set the thread state before actually checking 
+#if defined(CONFIG_SMP)
+	/* VU: set the thread state before actually checking
 	 * the partner. Allows for concurrent checks on SMP */
-	current->set_partner(to_tid);
-	current->set_state(thread_state_t::polling);
-	
+	tcb_set_partner (current, to_tid);
+	tcb_set_state (current, THREAD_STATE_POLLING);
+
         /* VU: add smp_memory_barrier() */
-	if ( to_tcb->lock_state.is_active() ) 
-	    to_tcb->lock();
+	if ( lock_state_is_active (&to_tcb->lock_state) )
+	    tcb_lock (to_tcb);
 #endif
 
 	// not waiting || (not waiting for me && not waiting for any && not waiting for anylocal)
 	// optimized for receive and wait any
+	{
+	threadid_t to_partner = tcb_get_partner (to_tcb);
+	threadid_t curr_gid = tcb_get_global_id (current);
 	if (EXPECT_FALSE(
-                ((!to_tcb->get_state().is_waiting())  ||
+                ((!thread_state_is_waiting (&to_tcb->thread_state))  ||
                  (   // Not waiting for sender (may be virtual sender)?
-                     to_tcb->get_partner() != sender_id &&
+                     !threadid_equals (&to_partner, &sender_id) &&
                      // Not open wait?
-                     !to_tcb->get_partner().is_anythread() &&
+                     !threadid_is_anythread (&to_partner) &&
                      // Not open local wait?
-                     !(to_tcb->get_partner().is_anylocalthread() && 
-                       to_tcb->get_space() == current->get_space()) &&
+                     !(threadid_is_anylocalthread (&to_partner) &&
+                       tcb_get_space (to_tcb) == tcb_get_space (current)) &&
                      // Not waiting for actual sender (if propagating IPC)?
-                     to_tcb->get_partner() != current->get_global_id()   ))
+                     !threadid_equals (&to_partner, &curr_gid)   ))
 #if defined(CONFIG_SMP)
-                && (!to_tcb->get_state().is_locked_waiting() || (to_tcb->get_partner() != current->get_global_id()))
+                && (!thread_state_is_locked_waiting (&to_tcb->thread_state) || (!threadid_equals (&to_partner, &curr_gid)))
 #endif
                 ))
 	{
-	    TRACE_IPC_DETAILS("ipc blocking send (curr=%t, to=%t s=%s)", 
+	    TRACE_IPC_DETAILS("ipc blocking send (curr=%t, to=%t s=%s)",
 		       current, TID(to_tid), to_tcb->get_state().string());
 
 	    /* thread is not receiving */
-	    if (EXPECT_FALSE( !timeout.get_snd().is_never() ))
+	    time_t snd_to = timeout_get_snd (&timeout);
+	    if (EXPECT_FALSE( !time_is_never (&snd_to) ))
 	    {
-		if (timeout.get_snd().is_zero())
+		if (time_is_zero (&snd_to))
 		{
 		    TRACE_IPC_ERROR("ipc zero send timeout (curr=%t, to=%t)", current, TID(to_tid));
-		    /* VU: set thread state to running - in case we 
+		    /* VU: set thread state to running - in case we
 		     * had a long IPC. Not on the critical path */
-		    current->set_state(thread_state_t::running);
-		    current->set_tag(msg_tag_t::error_tag());
-		    current->set_error_code(IPC_SND_ERROR(ERR_IPC_TIMEOUT));
-		    to_tcb->unlock();
+		    tcb_set_state (current, THREAD_STATE_RUNNING);
+		    tcb_set_tag (current, msg_tag_error_tag ());
+		    tcb_set_error_code (current, IPC_SND_ERROR(ERR_IPC_TIMEOUT));
+		    tcb_unlock (to_tcb);
 		    return_ipc(NILTHREAD);
 		}
-		TRACE_IPC_DETAILS("ipc setting timeout %dus current time %ld", 
-			   (word_t) timeout.get_snd().get_microseconds(), 
+		TRACE_IPC_DETAILS("ipc setting timeout %dus current time %ld",
+			   (word_t) timeout.get_snd().get_microseconds(),
 			   (word_t) scheduler->get_current_time());
-		current->sched_state.set_timeout(timeout.get_snd());
+		tcb_sched_set_timeout (current, timeout_get_snd (&timeout));
 
 	    }
 #if defined(CONFIG_SMP)
-	    if (!to_tcb->lock_state.is_active()) 
-		to_tcb->lock();
+	    if (!lock_state_is_active (&to_tcb->lock_state))
+		tcb_lock (to_tcb);
 #endif
-	    
-	    current->enqueue_send(to_tcb);
-	    to_tcb->unlock();
-	    current->set_partner(to_tid);
-	    current->set_state(thread_state_t::polling);
-	    scheduler->schedule(get_idle_tcb(), sched_ipcblk);
-	    
+
+	    tcb_enqueue_send (current, to_tcb);
+	    tcb_unlock (to_tcb);
+	    tcb_set_partner (current, to_tid);
+	    tcb_set_state (current, THREAD_STATE_POLLING);
+	    sched_schedule (get_idle_tcb_c (), sched_ipcblk);
+
 	    // got re-activated -- start IPC now
 	    // make sure we dequeue ourselfs from the wakeup list
-	    current->sched_state.cancel_timeout();
-	    to_tcb->lock();	
-	    current->dequeue_send(to_tcb); 
+	    sched_ktcb_cancel_timeout (&current->sched_state);
+	    tcb_lock (to_tcb);
+	    tcb_dequeue_send (current, to_tcb);
 	    // we re-acquire the lock and need to release for sure
 	}
-#if defined(CONFIG_SMP)	
-	else if (EXPECT_FALSE( !to_tcb->is_local_cpu() && !to_tcb->lock_state.is_enabled() ))
+#if defined(CONFIG_SMP)
+	else if (EXPECT_FALSE( !tcb_is_local_cpu (to_tcb) && !lock_state_is_enabled (&to_tcb->lock_state) ))
 	{
-    
-	    TRACE_XIPC_DETAILS("ipc xcpu send %t:%d (%s) -> %t:%d (%s)", 
+
+	    TRACE_XIPC_DETAILS("ipc xcpu send %t:%d (%s) -> %t:%d (%s)",
 		       current, current->get_cpu(), current->get_state().string(),
 		       to_tcb, to_tcb->get_cpu(), to_tcb->get_state().string());
-	    
+
 	    // receiver seems to be waiting -- try to send
-	    xcpu_request( to_tcb->get_cpu(), do_xcpu_send, 
-			  to_tcb, (word_t)current, sender_id.get_raw());
+	    xcpu_request_many ( tcb_get_cpu (to_tcb), do_xcpu_send,
+			  to_tcb, (word_t)current, threadid_get_raw (&sender_id), 0, 0);
 
 	    // at this stage we are already polling...
-	    scheduler->schedule(get_idle_tcb(), sched_ipcblk);
+	    sched_schedule (get_idle_tcb_c (), sched_ipcblk);
 
 	    // re-activated?
-	    TRACE_XIPC_DETAILS("ipc xcpu got reactivated after waiting to send %t:%d (%s) -> %t:%d (%s) result %d", 
+	    TRACE_XIPC_DETAILS("ipc xcpu got reactivated after waiting to send %t:%d (%s) -> %t:%d (%s) result %d",
 		       current, current->get_cpu(), current->get_state().string(),
 		       to_tcb, to_tcb->get_cpu(), to_tcb->get_state().string(), current->xcpu_status);
-	    
+
 	    // something happened -- retry sending
 	    if (current->xcpu_status != 0)
 	    {
@@ -431,10 +451,10 @@ send_path:
 		    return_ipc(NILTHREAD);
 		}
 #endif
-		TRACE_XIPC_DETAILS("ipc xcpu send failed, retry to send %t:%d (%s) -> %t:%d (%s)", 
+		TRACE_XIPC_DETAILS("ipc xcpu send failed, retry to send %t:%d (%s) -> %t:%d (%s)",
 			   current, current->get_cpu(), current->get_state().string(),
 			   to_tcb, to_tcb->get_cpu(), to_tcb->get_state().string());
-	    
+
 
 		goto send_path;
 	    }
@@ -443,43 +463,44 @@ send_path:
 #endif
 
 	// The partner must be told who the IPC originated from.
-	to_tcb->set_partner(sender_id);
+	tcb_set_partner (to_tcb, sender_id);
 
 	if (EXPECT_FALSE( !transfer_message(current, to_tcb, tag) ))
 	{
 	    /* error on transfer - activate the partner and return */
-	    current->set_tag(to_tcb->get_tag());
-	    current->set_state(thread_state_t::running);
-	    to_tcb->set_state(thread_state_t::running);
-	    to_tcb->unlock();
+	    tcb_set_tag (current, tcb_get_tag (to_tcb));
+	    tcb_set_state (current, THREAD_STATE_RUNNING);
+	    tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
+	    tcb_unlock (to_tcb);
 
-	    if (EXPECT_TRUE( to_tcb->is_local_cpu() ))
-		get_current_scheduler()->schedule(to_tcb, sched_current);	
+	    if (EXPECT_TRUE( tcb_is_local_cpu (to_tcb) ))
+		sched_schedule (to_tcb, sched_current);
 #if defined(CONFIG_SMP)
-	    else 
-		scheduler->remote_schedule(to_tcb);
+	    else
+		sched_remote_schedule (to_tcb);
 #endif
 	    return_ipc(to_tid);
 	}
 
 #if defined(CONFIG_SMP)
-	if (EXPECT_FALSE( !to_tcb->is_local_cpu() ))
+	if (EXPECT_FALSE( !tcb_is_local_cpu (to_tcb) ))
 	{
-	    if ( to_tcb->lock_state.is_enabled() )
+	    if ( lock_state_is_enabled (&to_tcb->lock_state) )
 	    {
 		// lock-based remote IPC
-		msg_tag_t tag = to_tcb->get_tag();
-		tag.set_xcpu();
-		to_tcb->set_tag(tag);
-		
-		if (to_tcb->get_saved_partner ().is_nilthread ())
-		    to_tcb->set_state(thread_state_t::running);
+		msg_tag_t xtag = tcb_get_tag (to_tcb);
+		msg_tag_set_xcpu (&xtag);
+		tcb_set_tag (to_tcb, xtag);
+
+		threadid_t saved = tcb_get_saved_partner (to_tcb);
+		if (threadid_is_nilthread (&saved))
+		    tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
 		else
 		    // Receiver had a nested IPC.
-		    to_tcb->set_state(thread_state_t::locked_running_ipc_done);
-		scheduler->remote_schedule(to_tcb);
-	    } 
-	    else 
+		    tcb_set_state (to_tcb, THREAD_STATE_LOCKED_RUNNING_IPC_DONE);
+		sched_remote_schedule (to_tcb);
+	    }
+	    else
 	    {
 		// RPC-based remote IPC
 		/* VU: kick receiver and forget about him
@@ -488,43 +509,45 @@ send_path:
 		TRACE_XIPC_DETAILS("ipc xcpu notify on send done %t:%d (%s) -> %t:%d (%s)",
 			   current, current->get_cpu(), current->get_state().string(),
 			   to_tcb, to_tcb->get_cpu(), to_tcb->get_state().string());
-	    
+
 		//UNIMPLEMENTED();
-		xcpu_request( to_tcb->get_cpu(), do_xcpu_send_done, 
-			      to_tcb, sender_id.get_raw());
+		xcpu_request_c ( tcb_get_cpu (to_tcb), do_xcpu_send_done,
+			      to_tcb, threadid_get_raw (&sender_id));
 	    }
-	    to_tcb->unlock();
+	    tcb_unlock (to_tcb);
 	    // make sure we are running before potentially exiting to user
-	    current->set_state(thread_state_t::running);
+	    tcb_set_state (current, THREAD_STATE_RUNNING);
 	    to_tcb = NULL;
 	} else
-	    to_tcb->unlock();
+	    tcb_unlock (to_tcb);
 #endif
+	}
     }
 
     /* --- send finished ------------------------------------------------ */
     TRACE_IPC_DETAILS("ipc send finished curr=%t to=%t from_tid %t", current, to_tcb, TID(from_tid));
 
-    if (EXPECT_FALSE( from_tid.is_nilthread() ))
+    if (EXPECT_FALSE( threadid_is_nilthread (&from_tid) ))
     {
 	/* this case is entered on:
 	 *   - send-only case
-	 *   - both descriptors set to nil id 
+	 *   - both descriptors set to nil id
 	 * in the SMP case to_tcb is always NULL! */
 	if (to_tcb != NULL)
 	{
-	    ASSERT(to_tcb->is_local_cpu());
+	    ASSERT(tcb_is_local_cpu (to_tcb));
 
-	    if (to_tcb->get_saved_partner ().is_nilthread ())
-		to_tcb->set_state(thread_state_t::running);
+	    threadid_t saved = tcb_get_saved_partner (to_tcb);
+	    if (threadid_is_nilthread (&saved))
+		tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
 	    else
 		// Receiver had a nested IPC.
-		to_tcb->set_state(thread_state_t::locked_running_ipc_done);
+		tcb_set_state (to_tcb, THREAD_STATE_LOCKED_RUNNING_IPC_DONE);
 
-	    current->set_state(thread_state_t::running);
-	    scheduler->schedule(to_tcb, sched_sndonly);	
+	    tcb_set_state (current, THREAD_STATE_RUNNING);
+	    sched_schedule (to_tcb, sched_sndonly);
 	}
-	
+
 	return_ipc(from_tid);
     }
     /* --- receive phase ------------------------------------------------ */
@@ -533,34 +556,36 @@ send_path:
 	TRACE_IPC_DETAILS("ipc receive phase curr=%t, from=%t", current, TID(from_tid));
 
 #if defined(CONFIG_SMP)
-        if (current->lock_state.is_active())
-	    current->lock();
+        if (lock_state_is_active (&current->lock_state))
+	    tcb_lock (current);
 #endif
 
 	/* VU: optimize for common case -- any, closed, anylocal */
-	if (from_tid.is_anythread())
+	if (threadid_is_anythread (&from_tid))
 	{
 	    from_tcb = current->send_head;
 	}
-	else if (EXPECT_TRUE( !from_tid.is_anylocalthread() ))
+	else if (EXPECT_TRUE( !threadid_is_anylocalthread (&from_tid) ))
 	{
 	    /* closed wait */
-	    ASSERT(from_tid.is_global());
-	    from_tcb = tcb_t::get_tcb(from_tid);
+	    ASSERT(threadid_is_global (&from_tid));
+	    from_tcb = tcb_get_tcb (from_tid);
 
 
 	    TRACE_IPC_DETAILS("ipc closed wait from %t, current=%t", TID(from_tid), current);
 
-	    if (EXPECT_FALSE( (from_tcb->get_global_id() != from_tid) &&
-			      ( (from_tcb->get_space() != current->get_space()) ||
-				(from_tcb->get_local_id() != from_tid) ) ))
+	    threadid_t from_gid = tcb_get_global_id (from_tcb);
+	    threadid_t from_lid = tcb_get_local_id (from_tcb);
+	    if (EXPECT_FALSE( !threadid_equals (&from_gid, &from_tid) &&
+			      ( (tcb_get_space (from_tcb) != tcb_get_space (current)) ||
+				(!threadid_equals (&from_lid, &from_tid)) ) ))
 	    {
 		/* wrong receiver id */
 		TRACE_IPC_ERROR("ipc invalid receiver id (curr=%t, from=%t)", current, TID(from_tid));
-		current->set_tag(msg_tag_t::error_tag());
-		current->set_error_code(IPC_RCV_ERROR(ERR_IPC_NON_EXISTING));
-		ON_CONFIG_SMP(current->set_state(thread_state_t::running));
-		current->unlock();
+		tcb_set_tag (current, msg_tag_error_tag ());
+		tcb_set_error_code (current, IPC_RCV_ERROR(ERR_IPC_NON_EXISTING));
+		ON_CONFIG_SMP(tcb_set_state (current, THREAD_STATE_RUNNING));
+		tcb_unlock (current);
 		return_ipc(NILTHREAD);
 	    }
 	}
@@ -577,9 +602,9 @@ send_path:
 	    if (head)
 	    {
 	        tcb_t *tcb = head;
-	  
+
 	        do {
-		    if (tcb->get_space () == current->get_space ())
+		    if (tcb_get_space (tcb) == tcb_get_space (current))
 		    {
 		        from_tcb = tcb;
 			break;
@@ -588,61 +613,65 @@ send_path:
 		} while (tcb != head);
 	    }
 	}
-	
+
 	/*
-	 * no partner || partner is not polling || 
+	 * no partner || partner is not polling ||
 	 * partner doesn't poll on me
 	 */
-	if( EXPECT_TRUE ( (from_tcb == NULL) || 
-			  (!from_tcb->get_state().is_polling()) ||
-			  ( (from_tcb->get_partner() != current->get_global_id()) &&
-			    (from_tcb->get_partner() != current->myself_local) )) )
+	threadid_t from_partner;
+	threadid_t curr_gid = tcb_get_global_id (current);
+	if (from_tcb) from_partner = tcb_get_partner (from_tcb);
+	if( EXPECT_TRUE ( (from_tcb == NULL) ||
+			  (!thread_state_is_polling (&from_tcb->thread_state)) ||
+			  ( (!threadid_equals (&from_partner, &curr_gid)) &&
+			    (!threadid_equals (&from_partner, &current->myself_local)) )) )
 	{
 	    TRACE_IPC_DETAILS("ipc blocking receive (curr=%t, from=%t)", current, TID(from_tid));
 
 	    /* partner is not trying to send to me */
-	    if (EXPECT_FALSE( !timeout.get_rcv().is_never() ))
+	    time_t rcv_to = timeout_get_rcv (&timeout);
+	    if (EXPECT_FALSE( !time_is_never (&rcv_to) ))
 	    {
 		/* prepare the IPC error */
-		current->set_error_code(IPC_RCV_ERROR(ERR_IPC_TIMEOUT));
+		tcb_set_error_code (current, IPC_RCV_ERROR(ERR_IPC_TIMEOUT));
 
-		if ( timeout.get_rcv().is_zero() )
+		if ( time_is_zero (&rcv_to) )
 		{
 		    TRACE_IPC_ERROR("ipc receive error (curr=%t, from=%t)", current, TID(from_tid));
-		    current->set_tag(msg_tag_t::error_tag());
-		    current->set_state(thread_state_t::running);
-		    current->unlock();
-		    /* zero timeout and partner not ready --> 
+		    tcb_set_tag (current, msg_tag_error_tag ());
+		    tcb_set_state (current, THREAD_STATE_RUNNING);
+		    tcb_unlock (current);
+		    /* zero timeout and partner not ready -->
 		     * we have to perform timeslice donation */
 		    if (to_tcb != NULL)
-			scheduler->schedule(to_tcb, sched_rcverr);
+			sched_schedule (to_tcb, sched_rcverr);
 		    return_ipc(NILTHREAD);
-		}	
-		TRACE_IPC_DETAILS("ipc setting timeout %dus current time %ld", 
-			   (word_t) timeout.get_rcv().get_microseconds(), 
+		}
+		TRACE_IPC_DETAILS("ipc setting timeout %dus current time %ld",
+			   (word_t) timeout.get_rcv().get_microseconds(),
 			   (word_t) scheduler->get_current_time());
-		current->sched_state.set_timeout(timeout.get_rcv());
-		current->set_state(thread_state_t::waiting_timeout);
+		tcb_sched_set_timeout (current, timeout_get_rcv (&timeout));
+		tcb_set_state (current, THREAD_STATE_WAITING_TIMEOUT);
 	    }
 	    else
-		current->set_state(thread_state_t::waiting_forever);
-	    	    
-	    /* VU: should we convert to a global id here??? */
-	    current->set_partner(from_tid);
+		tcb_set_state (current, THREAD_STATE_WAITING_FOREVER);
 
-	    if (EXPECT_FALSE(to_tcb == NULL)) 
-		to_tcb = get_idle_tcb();
+	    /* VU: should we convert to a global id here??? */
+	    tcb_set_partner (current, from_tid);
+
+	    if (EXPECT_FALSE(to_tcb == NULL))
+		to_tcb = get_idle_tcb_c ();
 	    else
-		to_tcb->set_state(thread_state_t::running);
+		tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
 
 #if defined(CONFIG_SMP)
-	    ASSERT(to_tcb->is_local_cpu());
-#endif	
-	    current->unlock();
-	    scheduler->schedule(to_tcb, sched_ipcblk);
+	    ASSERT(tcb_is_local_cpu (to_tcb));
+#endif
+	    tcb_unlock (current);
+	    sched_schedule (to_tcb, sched_ipcblk);
 
 #if defined(HANDLE_LOCAL_IDS)
-	    from_tcb = current->get_partner_tcb ();
+	    from_tcb = tcb_get_partner_tcb (current);
 #endif
 
 	    /* VU: if a timeout occurs the wakeup handling will set
@@ -650,13 +679,13 @@ send_path:
 	     * return from the IPC without additional checking
 	     * here. */
 
-	    TRACE_IPC_DETAILS("ipc %t received msg from %t (virtual %t)", 
+	    TRACE_IPC_DETAILS("ipc %t received msg from %t (virtual %t)",
 			      current, current->get_partner_tcb(),
 			      TID(current->get_virtual_sender()));
 
-	    /* XXX VU: restructure switching code so that dequeueing 
+	    /* XXX VU: restructure switching code so that dequeueing
 	     * from wakeup is removed from critical path */
-	    current->sched_state.cancel_timeout();
+	    sched_ktcb_cancel_timeout (&current->sched_state);
 	}
 	else
 	{
@@ -664,61 +693,61 @@ send_path:
 	    TRACE_IPC_DETAILS("ipc perform receive from %t",  from_tcb);
 
 	    // both threads on the same CPU?
-	    if (EXPECT_TRUE( from_tcb->is_local_cpu() ))
+	    if (EXPECT_TRUE( tcb_is_local_cpu (from_tcb) ))
 	    {
 		/* partner is ready to send */
-		from_tcb->set_state(thread_state_t::locked_running);
-		current->set_state(thread_state_t::locked_waiting);
-		current->unlock();
+		tcb_set_state (from_tcb, THREAD_STATE_LOCKED_RUNNING);
+		tcb_set_state (current, THREAD_STATE_LOCKED_WAITING);
+		tcb_unlock (current);
 
 		/* Switch to waiting partner.
 		 * If we do not switch to woken up we have to dequeue him
-		 * from the wakeup queue to make sure the IPC does not 
-		 * timeout meanwhile... 
+		 * from the wakeup queue to make sure the IPC does not
+		 * timeout meanwhile...
 		 */
 		if ( to_tcb != NULL)
 		{
-		    to_tcb->set_state( thread_state_t::running );
-		    scheduler->schedule(from_tcb, to_tcb, sched_rplywt);
+		    tcb_set_state (to_tcb, THREAD_STATE_RUNNING);
+		    sched_schedule_two (from_tcb, to_tcb, sched_rplywt);
 		}
 		else
-		    scheduler->schedule(from_tcb, sched_ipcblk);
+		    sched_schedule (from_tcb, sched_ipcblk);
 	    }
 #if defined(CONFIG_SMP)
-	    else 
+	    else
 	    {
 		TRACE_XIPC_DETAILS("ipc xcpu receive curr=%t:%d -> from=%t:%d",
 			   current, current->get_cpu(), from_tcb, from_tcb->get_cpu());
-		
-                current->set_partner(from_tid);
-		current->set_state(thread_state_t::locked_waiting);
-		current->set_state(thread_state_t::locked_waiting);
-		if (EXPECT_TRUE (current->lock_state.is_enabled())) 
-		{
-		    from_tcb->set_state(thread_state_t::locked_running);
-		    // remote enqueue into ready
-		    scheduler->remote_schedule(from_tcb);
-		} 
-		else
-		    xcpu_request(from_tcb->get_cpu(), do_xcpu_receive, from_tcb, (word_t)current);
-		
-		current->unlock();
 
-		if (!to_tcb) to_tcb = get_idle_tcb();
-		scheduler->schedule(to_tcb, sched_ipcblk);
+                tcb_set_partner (current, from_tid);
+		tcb_set_state (current, THREAD_STATE_LOCKED_WAITING);
+		tcb_set_state (current, THREAD_STATE_LOCKED_WAITING);
+		if (EXPECT_TRUE (lock_state_is_enabled (&current->lock_state)))
+		{
+		    tcb_set_state (from_tcb, THREAD_STATE_LOCKED_RUNNING);
+		    // remote enqueue into ready
+		    sched_remote_schedule (from_tcb);
+		}
+		else
+		    xcpu_request_c (tcb_get_cpu (from_tcb), do_xcpu_receive, from_tcb, (word_t)current);
+
+		tcb_unlock (current);
+
+		if (!to_tcb) to_tcb = get_idle_tcb_c ();
+		sched_schedule (to_tcb, sched_ipcblk);
 		TRACE_XIPC_DETAILS("ipc xcpu receive done (from=%t, curr=%t)\n", from_tcb, current);
 	    }
 #endif
 	}
-	current->set_state(thread_state_t::running);
+	tcb_set_state (current, THREAD_STATE_RUNNING);
 #if defined(HANDLE_LOCAL_IDS)
-	if (current->get_space () == from_tcb->get_space ())
-	    return_ipc (from_tcb->get_local_id ());
+	if (tcb_get_space (current) == tcb_get_space (from_tcb))
+	    return_ipc (tcb_get_local_id (from_tcb));
 #endif
-	return_ipc(current->get_partner());
+	return_ipc(tcb_get_partner (current));
     }
 
     // this case should never happen
     enter_kdebug("ipc fall-through - why?");
-    spin_forever();
+    spin_forever_c (0);
 }
