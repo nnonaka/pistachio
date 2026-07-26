@@ -49,7 +49,7 @@ ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	src/generic/mdb.cc \
 		src/generic/mdb_mem.cc
 else
-SOURCES+=	src/generic/mapping.cc
+SOURCES+=	src/generic/mapping.c
 endif
 
 

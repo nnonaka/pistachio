@@ -317,6 +317,7 @@ bool   fpage_is_execute (fpage_t *self);
 void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write, bool exec);
 word_t fpage_base_mask (fpage_t fp, word_t size);
 addr_t fpage_address (fpage_t fp, word_t size);
+bool   fpage_is_rwx (fpage_t *self);
 END_DECLS
 
 

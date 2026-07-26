@@ -1204,6 +1204,24 @@ void pgent_set_linknode (pgent_t *self, struct space_t *s, word_t pgsize, struct
 
 void pgent_update_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
 { self->update_rights (s, (pgent_t::pgsize_e) pgsize, rwx); }
+
+addr_t pgent_vaddr (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map)
+{ return self->vaddr (s, (pgent_t::pgsize_e) pgsize, map); }
+
+word_t pgent_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, addr_t vaddr)
+{ return self->reference_bits (s, (pgent_t::pgsize_e) pgsize, vaddr); }
+
+void pgent_reset_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize)
+{ self->reset_reference_bits (s, (pgent_t::pgsize_e) pgsize); }
+
+void pgent_update_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
+{ self->update_reference_bits (s, (pgent_t::pgsize_e) pgsize, rwx); }
+
+void pgent_revoke_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
+{ self->revoke_rights (s, (pgent_t::pgsize_e) pgsize, rwx); }
+
+void pgent_flush (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr)
+{ self->flush (s, (pgent_t::pgsize_e) pgsize, kernel, vaddr); }
 END_DECLS
 
 
@@ -1228,6 +1246,7 @@ void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write
 							{ self->set (base, size, read, write, exec); }
 word_t fpage_base_mask (fpage_t fp, word_t size)		{ return base_mask (fp, size); }
 addr_t fpage_address (fpage_t fp, word_t size)			{ return address (fp, size); }
+bool   fpage_is_rwx (fpage_t *self)				{ return self->is_rwx (); }
 
 /* space_t */
 pgent_t * space_pgent (space_t *self, word_t num)		{ return self->pgent (num); }

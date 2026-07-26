@@ -620,16 +620,14 @@ INLINE mapnode_t::pgsize_e operator- (mapnode_t::pgsize_e l, int r)
  * Function prototypes
  */
 
-/* From generic/mapping.cc */
-mapnode_t * mdb_map (mapnode_t * f_map, pgent_t * f_pg,
-		     pgent_t::pgsize_e f_hwpgsize, addr_t f_addr,
-		     pgent_t * t_pg, pgent_t::pgsize_e t_hwpgsize,
-		     space_t * t_space, bool grant);
-word_t mdb_flush (mapnode_t * f_map, pgent_t * f_pg,
-		  pgent_t::pgsize_e f_hwpgsize, addr_t f_addr,
-		  pgent_t::pgsize_e t_hwpgsize, fpage_t fp, bool unmap_self);
-void init_mdb (void);
+/* From generic/mapping.c: mdb_map/mdb_flush are now file-static there; their
+   external entry points are mdb_map_c/mdb_flush_c (declared below). */
 #endif /* __cplusplus */
+
+/* init_mdb is called from init.cc (C++) but defined in mapping.c (C). */
+BEGIN_DECLS
+void init_mdb (void);
+END_DECLS
 
 /* From generic/mapping_alloc.cc */
 BEGIN_DECLS

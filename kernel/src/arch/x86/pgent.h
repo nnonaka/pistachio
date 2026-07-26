@@ -404,6 +404,13 @@ void      pgent_remove_subtree (pgent_t *self, struct space_t *s, word_t pgsize,
 void      pgent_set_entry      (pgent_t *self, struct space_t *s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel);
 void      pgent_set_linknode   (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map, addr_t vaddr);
 void      pgent_update_rights  (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+/* Additional entries used by the mapping database (mapping.c). */
+addr_t    pgent_vaddr          (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map);
+word_t    pgent_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, addr_t vaddr);
+void      pgent_reset_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize);
+void      pgent_update_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+void      pgent_revoke_rights  (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+void      pgent_flush          (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr);
 END_DECLS
 
 #if defined(CONFIG_NEW_MDB)
