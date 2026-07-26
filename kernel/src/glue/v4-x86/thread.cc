@@ -191,6 +191,12 @@ void   handle_ipc_timeout_c (word_t state)			{ handle_ipc_timeout (state); }
 bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
 void   spin_forever_c (int pos)					{ spin_forever (pos); }
 void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush) { arch_unmap_fpage (from, fpage, flush); }
+void   arch_map_fpage_c (tcb_t *src, fpage_t snd_fpage, word_t snd_base, tcb_t *dst, fpage_t rcv_fpage, bool grant)
+					{ arch_map_fpage (src, snd_fpage, snd_base, dst, rcv_fpage, grant); }
+fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, tcb_t *dest)
+					{ return self->get_arch_specific_rcvwindow (dest); }
+void   tcb_adjust_for_copy_area (tcb_t *self, tcb_t *dst, addr_t *saddr, addr_t *daddr)
+					{ self->adjust_for_copy_area (dst, saddr, daddr); }
 END_DECLS
 
 BEGIN_DECLS

@@ -504,6 +504,9 @@ word_t    space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpa
 void      space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
 void      space_arch_free (space_t *self);
 fpage_t   space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all);
+/* space_map_fpage is the asm-name of space_t::map_fpage (no wrapper needed). */
+void      space_map_fpage (space_t *self, fpage_t snd_fp, word_t base, space_t *t_space, fpage_t rcv_fp, bool grant);
+word_t    space_get_copy_limit (space_t *self, addr_t addr, word_t limit);
 bool      space_is_tcb_area (addr_t addr);
 bool      space_is_copy_area (addr_t addr);
 bool      space_is_user_area_fpage (fpage_t fpage);

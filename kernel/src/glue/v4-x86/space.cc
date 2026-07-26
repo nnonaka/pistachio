@@ -1351,6 +1351,8 @@ void space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area)	{ self->ini
 void space_arch_free (space_t *self)				{ self->arch_free (); }
 fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all)
 					{ return self->unmap_fpage (fpage, flush, unmap_all); }
+word_t space_get_copy_limit (space_t *self, addr_t addr, word_t limit)
+					{ return self->get_copy_limit (addr, limit); }
 bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
 bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
 bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }

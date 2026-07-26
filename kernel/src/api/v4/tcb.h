@@ -929,6 +929,7 @@ void       tcb_unlock (tcb_t *self);
 void       tcb_notify (tcb_t *self, void (*func)(void));
 void       tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t a1, word_t a2);
 void       tcb_release_copy_area (tcb_t *self);
+void       tcb_adjust_for_copy_area (tcb_t *self, tcb_t *dst, addr_t *saddr, addr_t *daddr);
 void       migrate_interrupt_start_c (tcb_t *tcb);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);

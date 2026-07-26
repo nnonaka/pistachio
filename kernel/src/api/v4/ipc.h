@@ -172,6 +172,7 @@ INLINE msg_tag_t msgtag (word_t rawtag)
 /* C forms of the msg_tag_t methods (the raw/x union is C-visible); mirror the
    like-named C++ methods for api/v4/thread.c. */
 INLINE word_t msg_tag_get_untyped (const msg_tag_t *self)	{ return self->x.untyped; }
+INLINE word_t msg_tag_get_typed (const msg_tag_t *self)		{ return self->x.typed; }
 INLINE bool   msg_tag_is_error (const msg_tag_t *self)		{ return self->x.error; }
 INLINE void   msg_tag_set_error (msg_tag_t *self)		{ self->x.error = 1; }
 INLINE void   msg_tag_set (msg_tag_t *self, word_t typed, word_t untyped, word_t label)
@@ -264,6 +265,19 @@ public:
 };
 typedef struct msg_item_t msg_item_t;
 
+#if !defined(__cplusplus)
+/* C forms of the msg_item_t methods (the anonymous bitfield union is
+   C-visible; mirror the C++ inline bodies exactly). */
+INLINE bool   msg_item_is_map_item (const msg_item_t *self)	{ return self->type == 4; }
+INLINE bool   msg_item_is_grant_item (const msg_item_t *self)	{ return self->type == 5; }
+INLINE bool   msg_item_is_string_item (const msg_item_t *self)	{ return (self->type & 4) == 0; }
+INLINE bool   msg_item_more_strings (const msg_item_t *self)	{ return self->continued; }
+INLINE word_t msg_item_get_string_length (const msg_item_t *self)   { return self->length; }
+INLINE word_t msg_item_get_string_ptr_count (const msg_item_t *self){ return self->num_ptrs + 1; }
+INLINE bool   msg_item_is_string_compound (const msg_item_t *self)  { return self->continuation; }
+INLINE word_t msg_item_get_snd_base (const msg_item_t *self)	{ return self->raw & (~0x3ffUL); }
+#endif /* !__cplusplus */
+
 struct acceptor_t
 {
 #if defined(__cplusplus)
@@ -307,10 +321,18 @@ public:
 typedef struct acceptor_t acceptor_t;
 
 #if !defined(__cplusplus)
-/* C form of acceptor_t::set_rcv_window (the raw/x union is C-visible). */
+/* C forms of the acceptor_t methods (the raw/x union is C-visible). */
 INLINE void acceptor_set_rcv_window (acceptor_t *self, fpage_t fpage)
 { word_t window = fpage.raw >> 4; self->x.rcv_window = window & (~0UL >> 4); }
+INLINE bool   acceptor_accept_strings (const acceptor_t *self)	{ return self->x.strings; }
+INLINE word_t acceptor_get_rcv_window (const acceptor_t *self)	{ return self->x.rcv_window << 4; }
 #endif
+
+/* get_arch_specific_rcvwindow calls into the arch mapping layer, so it is a
+   real wrapper (defined in glue thread.cc with the map.h chain in scope). */
+BEGIN_DECLS
+fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, struct tcb_t *dest);
+END_DECLS
 
 #if !defined(CONFIG_X_CTRLXFER_MSG)
 #define IPC_NUM_SAVED_MRS	3
