@@ -174,7 +174,10 @@ void kdebug_check_breakin();
 #  define kdebug_check_breakin()
 # endif /* CONFIG_DEBUG_BREAKIN */
 
+/* C linkage: called from glue/v4-x86/exception.c (C). */
+BEGIN_DECLS
 bool kdebug_check_interrupt();
+END_DECLS
 
 #if 0
 #include <generic/simics.h>

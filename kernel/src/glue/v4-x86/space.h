@@ -509,6 +509,10 @@ void      space_map_fpage (space_t *self, fpage_t snd_fp, word_t base, space_t *
 word_t    space_get_copy_limit (space_t *self, addr_t addr, word_t limit);
 u8_t      space_get_from_user (space_t *self, addr_t addr);
 bool      space_is_tcb_area (addr_t addr);
+bool      space_is_user_area (addr_t addr);
+void      reload_user_segregs_c (void);
+/* space_readmem is the asm-name of space_t::readmem (no wrapper needed). */
+bool      space_readmem (space_t *self, addr_t vaddr, word_t *contents);
 bool      space_is_copy_area (addr_t addr);
 bool      space_is_user_area_fpage (fpage_t fpage);
 /* tcb reference-counting / utcb allocation for api/v4/thread.c. */

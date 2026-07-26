@@ -279,6 +279,12 @@ struct api_version_t
 };
 typedef struct api_version_t api_version_t;
 
+#if !defined(__cplusplus)
+/* C forms of the api_version_t / api_flags_t "conversion to word_t" operators. */
+INLINE word_t api_version_to_word (const api_version_t *self) { return (self->version << 24) | (self->subversion << 16); }
+INLINE word_t api_flags_to_word (const api_flags_t *self)     { return (self->word_size << 2) | self->endian; }
+#endif
+
 /**
  * The KIP magic - the "L4�K" byte string
  */

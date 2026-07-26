@@ -924,6 +924,7 @@ void       tcb_enqueue_send (tcb_t *self, tcb_t *t);
 void       tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count);
 threadid_t tcb_get_saved_partner (tcb_t *self);
 word_t *   tcb_get_stack_top (tcb_t *self);
+threadid_t tcb_get_exception_handler (tcb_t *self);
 void       tcb_enqueue_present (tcb_t *self);
 void       tcb_dequeue_present (tcb_t *self);
 void       tcb_lock_init (tcb_t *self);

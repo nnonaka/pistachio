@@ -207,6 +207,7 @@ void tcb_enqueue_send (tcb_t *self, tcb_t *t)		{ self->enqueue_send (t); }
 void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count) { self->copy_mrs (dest, start, count); }
 threadid_t tcb_get_saved_partner (tcb_t *self)		{ return self->get_saved_partner (); }
 word_t * tcb_get_stack_top (tcb_t *self)		{ return self->get_stack_top (); }
+threadid_t tcb_get_exception_handler (tcb_t *self)	{ return self->get_exception_handler (); }
 void tcb_enqueue_present (tcb_t *self)			{ self->enqueue_present (); }
 void tcb_dequeue_present (tcb_t *self)			{ self->dequeue_present (); }
 void tcb_lock_init (tcb_t *self)			{ self->tcb_lock.init (); }

@@ -1,14 +1,14 @@
 /*********************************************************************
- *                
+ *
  * Copyright (C) 2007-2010,  Karlsruhe University
- *                
- * File path:     glue/v4-x86/exception.cc
- * Description:   
- *                
+ *
+ * File path:     glue/v4-x86/exception.c
+ * Description:
+ *
  * @LICENSE@
- *                
+ *
  * $Id:$
- *                
+ *
  ********************************************************************/
 
 #include <debug.h>
@@ -37,86 +37,122 @@ DECLARE_TRACEPOINT (X86_HLT);
 #include INC_GLUE_SA(x32comp/kernelinterface.h)
 #endif
 
+/* asm-named methods (their C++ decls are invisible to C). */
+bool space_readmem (space_t *self, addr_t vaddr, word_t *contents);
+void tcb_resources_x86_no_math_exception (thread_resources_t *self, tcb_t *tcb);
+void tcb_save_state (tcb_t *self);
+void tcb_restore_state (tcb_t *self);
+
+/* C form of get_kernel_descriptor()->kernel_id.get_raw() (the KIP-read path). */
+static word_t kip_get_kernel_id_raw (kernel_interface_page_t *kip)
+{
+    kernel_descriptor_t *kd =
+	(kernel_descriptor_t *) ((addr_word_t) kip + kip->kernel_desc_ptr);
+    return (kd->kernel_id.id << 24) | (kd->kernel_id.subid << 16);
+}
+
+/*
+ * C form of the readmem<u8_t> template (linear_ptab.h): direct access for
+ * kernel memory, checked space_readmem for user memory, truncate to a byte.
+ */
+static bool readmem_u8 (space_t *space, addr_t vaddr, u8_t *v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(u8_t *) vaddr;
+	return true;
+    }
+
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+
+    *v = (u8_t) (w & 0xff);
+    return true;
+}
+
 
 bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)
 {
     tcb_t * current = get_current_tcb();
-    if (current->get_exception_handler().is_nilthread())
+    threadid_t handler = tcb_get_exception_handler (current);
+    if (threadid_is_nilthread (&handler))
 	return false;
 
-    TRACEPOINT (EXCEPTION_IPC, "exception ipc at %x, %T (%p) -> %T \n", 
-		frame->regs[x86_exceptionframe_t::ipreg], current->get_global_id().get_raw(),
+    TRACEPOINT (EXCEPTION_IPC, "exception ipc at %x, %T (%p) -> %T \n",
+		frame->regs[X86_EXC_IPREG], current->get_global_id().get_raw(),
 		current, current->get_exception_handler().get_raw());
 
     /* setup exception IPC */
     word_t saved_mr[NUM_EXC_REGS-IPC_NUM_SAVED_MRS];
     msg_tag_t tag;
-    
-    tag.set(0, 2, (word_t) (-5 << 4));
+
+    msg_tag_set (&tag, 0, 2, (word_t) (-5 << 4));
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
     tag.x.typed += current->append_ctrlxfer_item(tag, 3);
     bool ctrlxfer = (tag.x.typed != 0);
 #else
-    bool ctrlxfer = false; 
+    bool ctrlxfer = false;
 #endif
 
-    current->save_state();
+    tcb_save_state (current);
 
     if (ctrlxfer)
-    {	
-	current->set_mr(1, exception);
-	current->set_mr(2, frame->error);
+    {
+	tcb_set_mr (current, 1, exception);
+	tcb_set_mr (current, 2, frame->__base.error);
 	acceptor_t acceptor;
-	acceptor.clear();
-	acceptor.set_rcv_window(fpage_t::complete_mem());
+	acceptor.raw = 0;
+	acceptor_set_rcv_window (&acceptor, fpage_complete_mem ());
 	acceptor.x.ctrlxfer = 1;
-	current->set_br(0, acceptor.raw);
+	tcb_set_br (current, 0, acceptor.raw);
     }
     else
     {
 	tag.x.untyped = (tag.x.untyped + NUM_EXC_REGS - 3) & 0x3f;
-	
-	for (int i = 0; i < NUM_EXC_REGS-IPC_NUM_SAVED_MRS; i++)
-	    saved_mr[i] = current->get_mr(i+IPC_NUM_SAVED_MRS);
-	
-	current->set_mr(x86_exc_reg_t::mr(0), exception); 
-	for (word_t num=1; num < NUM_EXC_REGS; num++)
-	    current->set_mr(x86_exc_reg_t::mr(num), frame->regs[x86_exc_reg_t::reg(num)]);
-    }
-    
-    current->set_mr(0, tag.raw);
-    tag = current->do_ipc(current->get_exception_handler(), 
-			  current->get_exception_handler(), 
-			  timeout_t::never());
 
-    if (tag.is_error())
+	for (word_t i = 0; i < NUM_EXC_REGS-IPC_NUM_SAVED_MRS; i++)
+	    saved_mr[i] = tcb_get_mr (current, i+IPC_NUM_SAVED_MRS);
+
+	tcb_set_mr (current, x86_exc_reg_mr(0), exception);
+	for (word_t num=1; num < NUM_EXC_REGS; num++)
+	    tcb_set_mr (current, x86_exc_reg_mr(num), frame->__base.regs[x86_exc_reg_reg(num)]);
+    }
+
+    tcb_set_mr (current, 0, tag.raw);
+    tag = tcb_do_ipc (current, tcb_get_exception_handler (current),
+		      tcb_get_exception_handler (current),
+		      timeout_never ());
+
+    if (msg_tag_is_error (&tag))
     {
-	printf("exception delivery error tag=%x, error code=%x\n", 
-	       tag.raw, current->get_error_code());
-	
+	printf("exception delivery error tag=%x, error code=%x\n",
+	       tag.raw, tcb_get_error_code (current));
+
 	enter_kdebug("exception delivery error");
     }
 
-    
-   
+
+
     if (!ctrlxfer)
     {
-	word_t flags = current->get_user_flags();
-	
+	word_t flags = tcb_get_user_flags (current);
+
 	for (word_t num=0; num < NUM_EXC_REGS; num++)
-	    frame->regs[x86_exc_reg_t::reg(num)] = current->get_mr(x86_exc_reg_t::mr(num));
-    
+	    frame->__base.regs[x86_exc_reg_reg(num)] = tcb_get_mr (current, x86_exc_reg_mr(num));
+
 	/* mask eflags appropriately */
-	current->get_stack_top()[KSTACK_UFLAGS] &= X86_USER_FLAGMASK;
-	current->get_stack_top()[KSTACK_UFLAGS] |= (flags & ~X86_USER_FLAGMASK);
-	
-	for (int i = 0; i < NUM_EXC_REGS-IPC_NUM_SAVED_MRS; i++)
-	    current->set_mr(i+IPC_NUM_SAVED_MRS, saved_mr[i]);
+	tcb_get_stack_top (current)[KSTACK_UFLAGS] &= X86_USER_FLAGMASK;
+	tcb_get_stack_top (current)[KSTACK_UFLAGS] |= (flags & ~X86_USER_FLAGMASK);
+
+	for (word_t i = 0; i < NUM_EXC_REGS-IPC_NUM_SAVED_MRS; i++)
+	    tcb_set_mr (current, i+IPC_NUM_SAVED_MRS, saved_mr[i]);
     }
-    current->restore_state();  
-   
-    return !tag.is_error();
+    tcb_restore_state (current);
+
+    return !msg_tag_is_error (&tag);
 }
 
 /**
@@ -132,11 +168,11 @@ bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)
 static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 {
     tcb_t * current = get_current_tcb ();
-    space_t * space = current->get_space ();
-    addr_t instr = (addr_t) frame->regs[x86_exceptionframe_t::ipreg];
+    space_t * space = tcb_get_space (current);
+    addr_t instr = (addr_t) frame->__base.regs[X86_EXC_IPREG];
     u8_t i[4];
 
-    if (!readmem (space, instr, &i[0]))
+    if (!readmem_u8 (space, instr, &i[0]))
 	return false;
 
     switch (i[0])
@@ -163,7 +199,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 #endif
 
 #if defined(CONFIG_X86_IO_FLEXPAGES)
-    
+
     case 0xe4:  /* in  %al,      port imm8  (byte)  */
     case 0xe6:  /* out %al,      port imm8  (byte)  */
     {
@@ -182,12 +218,12 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     case 0xee:  /* out %al,        port %dx (byte)  */
     case 0x6c:  /* insb		   port %dx (byte)  */
     case 0x6e:  /* outsb           port %dx (byte)  */
-	return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 0, instr);
+	return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
     case 0xed:  /* in  %eax,   port %dx (dword) */
     case 0xef:  /* out %eax,   port %dx (dword) */
     case 0x6d:  /* insd	       port %dx (dword) */
     case 0x6f:  /* outsd       port %dx (dword) */
-	return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 2, instr);
+	return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
     case 0x66:
     {
 	if (!readmem (space, addr_offset(instr, 1), &i[1]))
@@ -206,7 +242,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0xef:  /* out %ax, port %dx  (word) */
 	case 0x6d:  /* insw     port %dx  (word) */
 	case 0x6f:  /* outsw    port %dx  (word) */
-	    return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 1, instr);
+	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
 	}
     }
     case 0xf3:
@@ -234,14 +270,14 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
         case 0xee:  /* out %al,    port %dx (byte)  */
         case 0x6c:  /* insb        port %dx (byte)  */
         case 0x6e:  /* outsb       port %dx (byte)  */
-	    return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 0, instr);
+	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
         case 0xed:  /* in  %eax,   port %dx (dword) */
         case 0xef:  /* out %eax,   port %dx (dword) */
         case 0x6d:  /* insd        port %dx (dword) */
         case 0x6f:  /* outsd       port %dx (dword) */
-	    return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 2, instr);
+	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
         case 0x66:
-	{	    
+	{
             /* operand size override prefix */
 	    if (!readmem (space, addr_offset(instr, 2), &i[2]))
 		return false;
@@ -258,7 +294,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
             case 0xef:  /* out %ax, port %dx  (word) */
             case 0x6d:  /* insw	    port %dx  (word) */
             case 0x6f:  /* outsw    port %dx  (word) */
-		return handle_io_pagefault(current, frame->regs[x86_exceptionframe_t::dreg] & 0xFFFF, 1, instr);
+		return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
 	    }
 	}
 	}
@@ -267,32 +303,32 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 
     case 0x0f: /* two-byte instruction prefix */
     {
-	if (!readmem (space, addr_offset(instr, 1), &i[1]))
+	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
 	    return false;
 	switch( i[1] )
 	{
 	case 0x30:
     	    /* wrmsr */
-	    if ( is_privileged_space(space) ) {
+	    if ( is_privileged_space_c (space) ) {
 		/* the MSR index is taken from ECX only, so truncating is correct */
-		x86_wrmsr ((u32_t) frame->regs[x86_exceptionframe_t::creg],
-			   ((u64_t)(frame->regs[x86_exceptionframe_t::areg])) | 
-			   ((u64_t)(frame->regs[x86_exceptionframe_t::dreg])) << 32);
-		frame->regs[x86_exceptionframe_t::ipreg] += 2;
+		x86_wrmsr ((u32_t) frame->__base.regs[X86_EXC_RCXREG],
+			   ((u64_t)(frame->__base.regs[X86_EXC_RAXREG])) |
+			   ((u64_t)(frame->__base.regs[X86_EXC_RDXREG])) << 32);
+		frame->__base.regs[X86_EXC_IPREG] += 2;
 		return true;
 	    } break;
 
 	case 0x32:
 	    /* rdmsr */
-	    if ( is_privileged_space(space) ) {
+	    if ( is_privileged_space_c (space) ) {
 		/* the MSR index is taken from ECX only, so truncating is correct */
-		u64_t val = x86_rdmsr ((u32_t) frame->regs[x86_exceptionframe_t::creg]);
-		frame->regs[x86_exceptionframe_t::areg] = (u32_t) val;
-		frame->regs[x86_exceptionframe_t::dreg] = (u32_t)(val >> 32);
-		frame->regs[x86_exceptionframe_t::ipreg] += 2;
+		u64_t val = x86_rdmsr ((u32_t) frame->__base.regs[X86_EXC_RCXREG]);
+		frame->__base.regs[X86_EXC_RAXREG] = (u32_t) val;
+		frame->__base.regs[X86_EXC_RDXREG] = (u32_t)(val >> 32);
+		frame->__base.regs[X86_EXC_IPREG] += 2;
 		return true;
 	    } break;
-	    
+
 	case 0xa1:
 	case 0xa9:
 	    goto pop_seg;
@@ -318,30 +354,30 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	 * instruction.
 	 */
 
-	if (! space->is_user_area (instr))
+	if (! space_is_user_area (instr))
 	    // Assume that kernel knows what it is doing.
 	    break;
 
 	TRACEPOINT (X86_SEGRELOAD, "segment register reload");
-	reload_user_segregs ();
+	reload_user_segregs_c ();
 #if defined(CONFIG_SUBARCH_X32)
 	frame->ds = frame->es = X86_UDS;
 #endif
-	frame->regs[x86_exceptionframe_t::ipreg]++;
-	
+	frame->__base.regs[X86_EXC_IPREG]++;
+
 	if (i[0] == 0x8e || i[0] == 0x0f)
-	    frame->regs[x86_exceptionframe_t::ipreg]++;
-	
+	    frame->__base.regs[X86_EXC_IPREG]++;
+
 	return true;
     case 0xf4:
 	/* HLT */
-        if (get_current_scheduler()->idle_hlt())
+        if (sched_idle_hlt ())
         {
-	    frame->regs[x86_exceptionframe_t::ipreg]++;
+	    frame->__base.regs[X86_EXC_IPREG]++;
             return true;
         }
     }
-       
+
 #if defined(CONFIG_X86_SMALL_SPACES)
     /*
      * A GP(0) or SS(0) might indicate that a small address space
@@ -361,9 +397,9 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     return false;
 }
 
-extern "C" void sysexit_tramp (void);
-extern "C" void sysexit_tramp_end (void);
-extern "C" void reenter_sysexit (void);
+EXTERN_C void sysexit_tramp (void);
+EXTERN_C void sysexit_tramp_end (void);
+EXTERN_C void reenter_sysexit (void);
 
 X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
 {
@@ -371,9 +407,9 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
     if (kdebug_check_interrupt())
         return;
 #endif
-    
-    TRACEPOINT (X86_GP, "general protection fault @ %p, error: %x\n", 
-                frame->regs[x86_exceptionframe_t::ipreg], frame->error);
+
+    TRACEPOINT (X86_GP, "general protection fault @ %p, error: %x\n",
+                frame->regs[X86_EXC_IPREG], frame->error);
 
 #if defined(CONFIG_X86_SMALL_SPACES) && defined(CONFIG_X86_SYSENTER)
     /*
@@ -384,7 +420,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
 
     if (user_eip >= (addr_t) sysexit_tramp &&
         user_eip <  (addr_t) sysexit_tramp_end)
-        
+
     {
         /*
          * If we faulted at the LRET instruction or otherwise was
@@ -420,16 +456,16 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
             fs == 0 || gs == 0 )
         {
             printf ("segment register reload\n");
-	    
+
             TRACEPOINT (X86_SEGRELOAD, "segment register reload");
-            reload_user_segregs ();
+            reload_user_segregs_c ();
             frame->ds = frame->es =
                 (frame->cs & 0xffff) == X86_UCS ? X86_UDS : X86_KDS;
             return;
         }
     }
 #endif
-    
+
     /*
      * In some cases we handle the faulting instruction without
      * involving the user-level exception handler.
@@ -446,10 +482,10 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
     word_t ds = 0 , es = 0, fs = 0, gs = 0;
 
     __asm__ (
-        "mov %%ds, %0   \n" 
-        "mov %%es, %1	\n" 
-        "mov %%fs, %2   \n" 
-        "mov %%gs, %3   \n" 
+        "mov %%ds, %0   \n"
+        "mov %%es, %1	\n"
+        "mov %%fs, %2   \n"
+        "mov %%gs, %3   \n"
         :
         : "r"(ds), "r"(es), "r"(fs),"r"(gs)
         );
@@ -457,8 +493,8 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
     enter_kdebug("#GP");
 #endif
 
-    get_current_tcb()->set_state(thread_state_t::halted);
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_handoff);
+    tcb_set_state (get_current_tcb(), THREAD_STATE_HALTED);
+    sched_schedule (get_idle_tcb_c(), sched_handoff);
 }
 
 
@@ -467,21 +503,22 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
 X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
 {
     tcb_t * current = get_current_tcb();
-    space_t * space = current->get_space();
-    addr_t addr = (addr_t) frame->regs[x86_exceptionframe_t::ipreg];
+    space_t * space = tcb_get_space (current);
+    addr_t addr = (addr_t) frame->__base.regs[X86_EXC_IPREG];
 
     TRACEPOINT (X86_UD, "x86_ud at %x (%x) (current=%x)", addr, space->get_from_user(addr), current);
-    
+
     /* instruction emulation */
-    switch( (u8_t) space->get_from_user(addr))
+    switch( (u8_t) space_get_from_user (space, addr))
     {
     case 0xf0: /* lock prefix */
-        if ( (u8_t) space->get_from_user(addr_offset(addr, 1)) == 0x90)
+        if ( (u8_t) space_get_from_user (space, addr_offset(addr, 1)) == 0x90)
         {
             /* lock; nop */
-            frame->regs[x86_exceptionframe_t::areg] = (word_t)space->get_kip_page_area().get_base();
-            frame->regs[x86_exceptionframe_t::creg] = get_kip()->api_version;
-            frame->regs[x86_exceptionframe_t::Sreg] = get_kip()->get_kernel_descriptor()->kernel_id.get_raw();
+	    fpage_t kip_area = space_get_kip_page_area (space);
+            frame->__base.regs[X86_EXC_RAXREG] = (word_t) fpage_get_base (&kip_area);
+            frame->__base.regs[X86_EXC_RCXREG] = api_version_to_word (&get_kip()->api_version);
+            frame->__base.regs[X86_EXC_RSIREG] = kip_get_kernel_id_raw (get_kip());
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
             if (space->is_compatibility_mode())
             {
@@ -489,26 +526,26 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
                    This is necessary because they are not set in the initialization phase. */
                 x32::get_kip()->thread_info.set_system_base(get_kip()->thread_info.get_system_base());
                 x32::get_kip()->thread_info.set_user_base(get_kip()->thread_info.get_user_base());
-                frame->regs[x86_exceptionframe_t::dreg] = x32::get_kip()->api_flags;
-                frame->regs[x86_exceptionframe_t::ipreg] += 2;
+                frame->regs[X86_EXC_RDXREG] = x32::get_kip()->api_flags;
+                frame->regs[X86_EXC_IPREG] += 2;
                 return;
             }
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
-            frame->regs[x86_exceptionframe_t::dreg] = get_kip()->api_flags;
-            frame->regs[x86_exceptionframe_t::ipreg] += 2;
+            frame->__base.regs[X86_EXC_RDXREG] = api_flags_to_word (&get_kip()->api_flags);
+            frame->__base.regs[X86_EXC_IPREG] += 2;
             return;
         }
-      
+
     default:
         printf ("%p: invalid opcode at IP %p\n", current, addr);
         enter_kdebug("invalid opcode");
     }
-    
+
     if (send_exception_ipc(frame, X86_EXC_INVALIDOPCODE))
         return;
-    
-    get_current_tcb()->set_state(thread_state_t::halted);
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_handoff);
+
+    tcb_set_state (get_current_tcb(), THREAD_STATE_HALTED);
+    sched_schedule (get_idle_tcb_c(), sched_handoff);
 
 }
 
@@ -518,34 +555,34 @@ X86_EXCNO_ERRORCODE(exc_nomath_coproc, X86_EXC_NOMATH_COPROC)
 {
     tcb_t * current = get_current_tcb();
 
-    TRACEPOINT(X86_NOMATH, "X86_NOMATH %t @ %p\n", 
-               current, frame->regs[x86_exceptionframe_t::ipreg]);
+    TRACEPOINT(X86_NOMATH, "X86_NOMATH %t @ %p\n",
+               current, frame->regs[X86_EXC_IPREG]);
 
-    current->resources.x86_no_math_exception(current);
+    tcb_resources_x86_no_math_exception (&current->resources, current);
 }
 
 
 u64_t exc_catch_all[IDT_SIZE] UNIT("x86.exc_all");
-extern "C" void exc_catch_common_handler(x86_exceptionframe_t *frame)
+EXTERN_C void exc_catch_common_handler(x86_exceptionframe_t *frame)
 {
 
-    word_t exc  = (frame->error - 5 - (word_t) exc_catch_all) / 8;
+    word_t exc  = (frame->__base.error - 5 - (word_t) exc_catch_all) / 8;
     if (send_exception_ipc(frame, exc))
         return;
 
-    
+
 #if defined(CONFIG_IOAPIC)
     if (exc == 15)
     {
         TRACE("Ignoring spurious APIC interrupt\n");
         return;
     }
-#endif    
+#endif
     printf("Unhandled exception %d\n", exc);
-    
+
     enter_kdebug("Exception caught");
-    
-    get_current_tcb()->set_state(thread_state_t::halted);
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_handoff);
+
+    tcb_set_state (get_current_tcb(), THREAD_STATE_HALTED);
+    sched_schedule (get_idle_tcb_c(), sched_handoff);
 
 }

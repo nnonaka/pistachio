@@ -1355,6 +1355,8 @@ word_t space_get_copy_limit (space_t *self, addr_t addr, word_t limit)
 					{ return self->get_copy_limit (addr, limit); }
 u8_t space_get_from_user (space_t *self, addr_t addr)	{ return self->get_from_user (addr); }
 bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
+bool space_is_user_area (addr_t addr)				{ return space_t::is_user_area (addr); }
+void reload_user_segregs_c (void)				{ reload_user_segregs (); }
 bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
 bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }
 END_DECLS
