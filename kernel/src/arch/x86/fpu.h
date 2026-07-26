@@ -91,6 +91,7 @@ public:
 /* C mirror of x86_fpu_t's static methods (resources.c), same cr0/asm bodies. */
 INLINE void x86_fpu_enable (void)	{ x86_cr0_mask(X86_CR0_TS); }
 INLINE void x86_fpu_disable (void)	{ x86_cr0_set(X86_CR0_TS); }
+INLINE void x86_fpu_enable_osfxsr (void) { x86_cr4_set(X86_CR4_OSFXSR); }
 INLINE void x86_fpu_init (void)		{ __asm__ __volatile__ ("finit\n"); }
 
 INLINE void x86_fpu_save_state (addr_t fpu_state)

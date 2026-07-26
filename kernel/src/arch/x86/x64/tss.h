@@ -67,6 +67,16 @@ public:
 } __attribute__((packed));
 typedef struct x86_x64_tss_t x86_x64_tss_t;
 
+#if !defined(__cplusplus)
+/* C form of x86_x64_tss_t::setup (ss0 is ignored, as in the C++ method). */
+INLINE void x86_tss_setup (x86_x64_tss_t *self, u16_t ss0)
+{
+    (void) ss0;
+    self->iopbm_offset = (u16_t)((u64_t)self->io_bitmap - (u64_t)self);
+    self->stopper = 0xff;
+}
+#endif
+
 #if defined(__cplusplus)
 INLINE void x86_x64_tss_t::setup(u16_t ss0)
 {
