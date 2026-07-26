@@ -246,6 +246,13 @@ void SECTION(SEC_INIT) setup_gdt(x86_tss_t &tss, cpuid_t cpuid)
     
 }
 
+/* C wrappers over the cpulocal `tss` global + the reference-taking setup_gdt,
+   so the C init.c can drive them without a C++ reference or the tss symbol. */
+BEGIN_DECLS
+void x86_tss_setup_c (word_t kernel_ds)	{ tss.setup (kernel_ds); }
+void setup_gdt_c (cpuid_t cpuid)	{ setup_gdt (tss, cpuid); }
+END_DECLS
+
 /**
  * setup_msrs: initializes all model specific registers for CPU
  */

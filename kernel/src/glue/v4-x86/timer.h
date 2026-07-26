@@ -75,6 +75,14 @@ INLINE timer_t * get_timer()
     extern timer_t timer;
     return &timer;
 }
+#else /* !__cplusplus: C forms for api/glue C callers (init.c). */
+INLINE timer_t * get_timer (void)
+{
+    extern timer_t timer;
+    return &timer;
+}
+INLINE word_t timer_get_bus_freq (timer_t *self)	{ return self->bus_freq; }
+INLINE word_t timer_get_proc_freq (timer_t *self)	{ return self->proc_freq; }
 #endif /* __cplusplus */
 
 #endif /* !__GLUE__V4_X86__TIMER_H__ */

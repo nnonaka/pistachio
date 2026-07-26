@@ -649,4 +649,33 @@ void intctrl_set_cpu(word_t irq, word_t cpu)
 {
     get_interrupt_ctrl()->set_cpu(irq, cpu);
 }
+
+void intctrl_init_cpu(void)
+{
+    get_interrupt_ctrl()->init_cpu();
+}
+
+void intctrl_init_arch(void)
+{
+    get_interrupt_ctrl()->init_arch();
+}
+
+/* local_apic_t<APIC_MAPPINGS_START> ops for the SMP AP-startup path (init.c). */
+word_t apic_get_id(void)
+{
+    local_apic_t<APIC_MAPPINGS_START> apic;
+    return apic.id();
+}
+
+void apic_send_init_ipi(word_t id, bool assert)
+{
+    local_apic_t<APIC_MAPPINGS_START> apic;
+    apic.send_init_ipi((u8_t) id, assert);
+}
+
+void apic_send_startup_ipi(word_t id, void (*startup)(void))
+{
+    local_apic_t<APIC_MAPPINGS_START> apic;
+    apic.send_startup_ipi((u8_t) id, startup);
+}
 END_DECLS

@@ -257,10 +257,15 @@ INLINE word_t x86_mmu_t::get_pagefault_address(void)
 #endif /* __cplusplus */
 
 #if !defined(__cplusplus)
-/* C mirror of the x86_mmu_t static methods used by resources.c. */
+/* C mirror of the x86_mmu_t static methods used by resources.c / init.c. */
 INLINE void x86_mmu_set_active_pagetable (word_t root)
 {
     __asm__ __volatile__ ("mov %0, %%cr3 \n" : : "r"(root));
+}
+
+INLINE void x86_mmu_enable_global_pages (void)
+{
+    x86_cr4_set (X86_CR4_PGE);
 }
 
 INLINE void x86_mmu_flush_tlb (bool global)

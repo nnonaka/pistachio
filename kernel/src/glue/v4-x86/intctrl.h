@@ -70,6 +70,11 @@ void intctrl_enable(word_t irq);
 void intctrl_disable(word_t irq);
 bool intctrl_is_pending(word_t irq);
 void intctrl_set_cpu(word_t irq, word_t cpu);
+void intctrl_init_cpu(void);
+void intctrl_init_arch(void);
+word_t apic_get_id(void);
+void apic_send_init_ipi(word_t id, bool assert);
+void apic_send_startup_ipi(word_t id, void (*startup)(void));
 END_DECLS
 
 #endif /* !__GLUE__V4_X86__INTCTRL_H__ */

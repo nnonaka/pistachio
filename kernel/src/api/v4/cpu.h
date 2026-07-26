@@ -67,6 +67,13 @@ extern word_t cpu_count;
 /* C free-function accessors; the C++ methods above stay for C++ callers. */
 INLINE cpu_t * cpu_get (cpuid_t cpuid)		{ return &cpu_descriptors[cpuid]; }
 INLINE word_t  cpu_get_id (cpu_t *self)		{ return self->id; }
+INLINE bool    cpu_add_cpu (word_t id)
+{
+    if (cpu_count >= CONFIG_SMP_MAX_CPUS)
+	return false;
+    cpu_descriptors[cpu_count++].id = id;
+    return true;
+}
 INLINE void    cpu_set_id (cpu_t *self, word_t id) { self->id = id; }
 INLINE bool    cpu_is_valid (cpu_t *self)	{ return self->id < ~0UL; }
 

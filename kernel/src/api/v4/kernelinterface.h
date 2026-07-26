@@ -102,6 +102,10 @@ struct memory_info_t
 };
 typedef struct memory_info_t memory_info_t;
 
+#if !defined(__cplusplus)
+INLINE word_t memory_info_get_num_descriptors (memory_info_t *self) { return self->n; }
+#endif
+
 /**
  * Info for utcb size and allocation
  */
