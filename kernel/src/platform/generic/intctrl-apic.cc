@@ -609,4 +609,44 @@ void intctrl_pmtimer_wait(word_t ms)
 {
     get_interrupt_ctrl()->pmtimer_wait(ms);
 }
+
+word_t intctrl_get_number_irqs(void)
+{
+    return get_interrupt_ctrl()->get_number_irqs();
+}
+
+bool intctrl_is_irq_available(word_t irq)
+{
+    return get_interrupt_ctrl()->is_irq_available(irq);
+}
+
+void intctrl_mask(word_t irq)
+{
+    get_interrupt_ctrl()->mask(irq);
+}
+
+bool intctrl_unmask(word_t irq)
+{
+    return get_interrupt_ctrl()->unmask(irq);
+}
+
+void intctrl_enable(word_t irq)
+{
+    get_interrupt_ctrl()->enable(irq);
+}
+
+void intctrl_disable(word_t irq)
+{
+    get_interrupt_ctrl()->disable(irq);
+}
+
+bool intctrl_is_pending(word_t irq)
+{
+    return get_interrupt_ctrl()->is_pending(irq);
+}
+
+void intctrl_set_cpu(word_t irq, word_t cpu)
+{
+    get_interrupt_ctrl()->set_cpu(irq, cpu);
+}
 END_DECLS

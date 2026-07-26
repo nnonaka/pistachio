@@ -198,6 +198,7 @@ typedef struct thread_info_t thread_info_t;
 #if !defined(__cplusplus)
 INLINE word_t thread_info_get_user_base (const thread_info_t *self)	{ return self->user_base; }
 INLINE word_t thread_info_get_system_base (const thread_info_t *self)	{ return self->system_base; }
+INLINE void   thread_info_set_system_base (thread_info_t *self, word_t base)	{ self->system_base = base & 0xfff; }
 INLINE void   thread_info_set_user_base (thread_info_t *self, word_t base) { self->user_base = base & 0xfff; }
 #endif
 

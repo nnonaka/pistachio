@@ -457,4 +457,6 @@ void xcpu_request_many (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, wor
 void sched_schedule_current (void)		{ get_current_scheduler ()->schedule (); }
 void sched_move_tcb (tcb_t *tcb, cpuid_t cpu)	{ get_current_scheduler ()->move_tcb (tcb, cpu); }
 threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self)	{ return self->get_scheduler (); }
+void sched_schedule_interrupt (tcb_t *irq, tcb_t *handler)
+{ get_current_scheduler ()->schedule_interrupt (irq, handler); }
 END_DECLS

@@ -83,6 +83,7 @@ tcb_t * sched_get_accounted_tcb (void);
 void  sched_set_accounted_tcb (tcb_t *tcb);
 void  sched_schedule_current (void);
 void  sched_move_tcb (tcb_t *tcb, cpuid_t cpu);
+void  sched_schedule_interrupt (tcb_t *irq, tcb_t *handler);
 END_DECLS
 
 #if defined(__cplusplus)

@@ -842,6 +842,10 @@ INLINE space_t *  tcb_get_space (const tcb_t *self)		{ return self->space; }
 INLINE word_t     tcb_get_state (const tcb_t *self)		{ return self->thread_state.state; }
 INLINE void       tcb_set_state (tcb_t *self, word_t s)		{ self->thread_state.state = s; }
 INLINE tcb_t *    tcb_get_partner_tcb (const tcb_t *self)	{ return tcb_get_tcb (self->partner); }
+INLINE void       tcb_set_partner (tcb_t *self, threadid_t tid)	{ self->partner = tid; }
+/* IRQ handler is stored in the scheduler field of the sched-ktcb. */
+INLINE void       tcb_set_irq_handler (tcb_t *self, threadid_t tid) { sched_ktcb_set_scheduler (&self->sched_state, tid); }
+INLINE threadid_t tcb_get_irq_handler (tcb_t *self)		{ return sched_ktcb_get_scheduler (&self->sched_state); }
 
 /* Dynamic-KTCB allocate/deallocate (CONFIG_STATIC_TCBS off): the TCB area is
    demand-paged, so allocation just touches the page and clears the stack. */

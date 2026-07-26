@@ -62,6 +62,14 @@ INLINE intctrl_t * get_interrupt_ctrl()
 BEGIN_DECLS
 bool intctrl_has_pmtimer(void);
 void intctrl_pmtimer_wait(word_t ms);
+word_t intctrl_get_number_irqs(void);
+bool intctrl_is_irq_available(word_t irq);
+void intctrl_mask(word_t irq);
+bool intctrl_unmask(word_t irq);
+void intctrl_enable(word_t irq);
+void intctrl_disable(word_t irq);
+bool intctrl_is_pending(word_t irq);
+void intctrl_set_cpu(word_t irq, word_t cpu);
 END_DECLS
 
 #endif /* !__GLUE__V4_X86__INTCTRL_H__ */

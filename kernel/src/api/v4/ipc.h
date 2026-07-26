@@ -185,6 +185,8 @@ INLINE msg_tag_t msg_tag_error_tag (void)
 { msg_tag_t t; t.raw = 0; t.x.error = 1; return t; }
 INLINE msg_tag_t msg_tag_preemption_tag (void)
 { msg_tag_t t; msg_tag_set (&t, 0, 2, (-3UL << 4)); return t; }
+INLINE msg_tag_t msg_tag_irq_tag (void)
+{ msg_tag_t t; msg_tag_set (&t, 0, 0, (-1UL << 4)); return t; }
 #endif /* __cplusplus */
 
 struct msg_item_t
