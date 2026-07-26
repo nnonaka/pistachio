@@ -514,3 +514,78 @@ bool sched_schedule_requests_pending (cpuid_t cpu)
 void sched_idle (void)
 { get_current_scheduler ()->idle (); }
 END_DECLS
+
+/* ---- current-scheduler / xcpu / sched_ktcb wrappers migrated from
+   api/v4/schedule.cc when it was flipped to C; this file stays C++. ---- */
+/* C entry point wrapping the current scheduler's timer-tick handler
+   (called from the APIC timer interrupt in glue/v4-x86/timer-apic.c). */
+BEGIN_DECLS
+void sched_handle_timer_interrupt(void)
+{
+    get_current_scheduler()->handle_timer_interrupt();
+}
+END_DECLS
+
+
+/* C wrappers for the current scheduler (declared in api/v4/schedule.h). */
+BEGIN_DECLS
+void sched_schedule (tcb_t *dest, word_t flags)
+{
+    get_current_scheduler ()->schedule (dest, (sched_flags_t) flags);
+}
+
+u64_t sched_get_current_time (void)
+{
+    return get_current_scheduler ()->get_current_time ();
+}
+END_DECLS
+
+
+/* C wrapper for xcpu_request (first overload); declared in api/v4/smp.h. */
+BEGIN_DECLS
+void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t *tcb, word_t param0)
+{
+    xcpu_request (dstcpu, handler, tcb, param0);
+}
+END_DECLS
+
+
+/* More current-scheduler wrappers for api/v4/thread.c (declared in schedule.h). */
+BEGIN_DECLS
+void sched_deschedule (tcb_t *tcb)		{ get_current_scheduler ()->deschedule (tcb); }
+tcb_t * sched_get_accounted_tcb (void)		{ return get_current_scheduler ()->get_accounted_tcb (); }
+void sched_set_accounted_tcb (tcb_t *tcb)	{ get_current_scheduler ()->set_accounted_tcb (tcb); }
+END_DECLS
+
+
+/* C wrappers for sched_ktcb_t methods (declared in api/v4/sktcb.h). */
+BEGIN_DECLS
+void sched_ktcb_init (sched_ktcb_t *self, sktcb_type_e type)	{ self->init (type); }
+void sched_ktcb_set_scheduler (sched_ktcb_t *self, threadid_t tid) { self->set_scheduler (tid); }
+void sched_ktcb_delete_tcb (sched_ktcb_t *self)			{ self->delete_tcb (); }
+void sched_ktcb_cancel_timeout (sched_ktcb_t *self)		{ self->cancel_timeout (); }
+void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue)
+							{ self->set_timeout (absolute_time, enqueue); }
+END_DECLS
+
+BEGIN_DECLS
+void xcpu_request_many (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3)
+{ xcpu_request (dstcpu, handler, tcb, p0, p1, p2, p3); }
+void xcpu_request7 (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3, word_t p4, word_t p5, word_t p6)
+{ xcpu_request (dstcpu, handler, tcb, p0, p1, p2, p3, p4, p5, p6); }
+void sched_schedule_current (void)		{ get_current_scheduler ()->schedule (); }
+void sched_move_tcb (tcb_t *tcb, cpuid_t cpu)	{ get_current_scheduler ()->move_tcb (tcb, cpu); }
+threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self)	{ return self->get_scheduler (); }
+void sched_schedule_interrupt (tcb_t *irq, tcb_t *handler)
+{ get_current_scheduler ()->schedule_interrupt (irq, handler); }
+void sched_remote_schedule (tcb_t *tcb)
+{ get_current_scheduler ()->remote_schedule (tcb); }
+void sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags)
+{ get_current_scheduler ()->schedule (dest1, dest2, (sched_flags_t) flags); }
+bool sched_idle_hlt (void)
+{ return get_current_scheduler ()->idle_hlt (); }
+void sched_init (bool bootcpu)
+{ get_current_scheduler ()->init (bootcpu); }
+void sched_start (cpuid_t cpu)
+{ get_current_scheduler ()->start (cpu); }
+END_DECLS

@@ -169,6 +169,39 @@ struct schedule_request_queue_t
 };
 typedef struct schedule_request_queue_t schedule_request_queue_t;
 
+#if !defined(__cplusplus)
+/* C forms of the schedule_request_queue_t methods (mirror the C++ inlines;
+   the data + spinlock are C-visible). */
+INLINE bool schedule_request_queue_is_empty (schedule_request_queue_t *self)
+{ return self->first_alloc == self->first_free; }
+
+INLINE schedule_req_t * schedule_request_queue_reserve_request (schedule_request_queue_t *self)
+{
+    spinlock_lock (&self->lock);
+    if ( ((self->first_free + 1) % SCHEDULE_QUEUE_LEN) == self->first_alloc )
+    {
+	spinlock_unlock (&self->lock);
+	return (schedule_req_t *) 0;
+    }
+    word_t idx = self->first_free;
+    self->first_free = (self->first_free + 1) % SCHEDULE_QUEUE_LEN;
+    return &self->entries[idx];
+}
+
+INLINE schedule_req_t schedule_request_queue_process_request (schedule_request_queue_t *self)
+{
+    spinlock_lock (&self->lock);
+    schedule_req_t req = self->entries[self->first_alloc];
+    self->entries[self->first_alloc].valid = false;
+    self->first_alloc = (self->first_alloc + 1) % SCHEDULE_QUEUE_LEN;
+    spinlock_unlock (&self->lock);
+    return req;
+}
+
+INLINE void schedule_request_queue_commit_request (schedule_request_queue_t *self)
+{ spinlock_unlock (&self->lock); }
+#endif /* !__cplusplus */
+
 /* current-scheduler wrappers taking schedule_req_t (defined above) by pointer;
    for the SYS_SCHEDULE path in api/v4/schedule.c.  Defined in
    api/v4/sched-rr/schedule.cc. */
