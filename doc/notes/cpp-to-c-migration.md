@@ -1791,3 +1791,41 @@ Verified: builds 359384 (warning-clean), boots, l4test region byte-identical
 (the KIP-read lock;nop path through exc_invalid_opcode is exercised). 11 .cc
 remain (schedule.cc + init.cc/debug.cc, plus the thread.cc/space.cc
 wrapper-hosts that stay C++).
+
+## 58. glue/v4-x86/debug.cc -> C: KDB glue, and converting a C++ static ctor (2026-07-26, commit 30aa92a)
+
+debug.cc (164 lines, all under CONFIG_DEBUG): the per-CPU KDB control block
+(class cpu_kdb_t), do_enter_kdebug/do_return_from_kdb, sync_debug, and the
+#BP/#DB/#NMI KDB trap handlers.
+
+The one hard part: a prioritized C++ static constructor.
+
+  cpu_kdb was `cpu_kdb_t cpu_kdb CTORPRIO(CTORPRIO_CPU, 1);`. CTORPRIO expands
+  to __attribute__((init_priority(65535-(30000+1)))) = init_priority(35534).
+  This project's ctor machinery: the linker (generic/ctors.ldi) groups
+  *(SORT(.ctors.3*)) -> __ctors_CPU__, .ctors.2* -> NODE, and .ctors.1* / .ctors
+  / .init_array.* -> __ctors_GLOBAL__; call_{cpu,node,global}_ctors() walk those
+  arrays. Modern GCC actually emits init_priority objects into
+  .init_array.NNNNN (confirmed: the C++ debug.o had .init_array.35534), so in
+  THIS build every init_priority ctor lands in __ctors_GLOBAL__ regardless of
+  the CPU/NODE class -- the class only affects the numeric priority, i.e. the
+  run order within call_global_ctors.
+
+  C has no object constructors. The fix: turn the ctor body into a function
+  cpu_kdb_ctor() with __attribute__((constructor(35534))). GCC emits a C
+  constructor-attribute function into the SAME .init_array.<prio> section with
+  the same priority number, so objdump shows cpu_kdb_ctor in
+  .init_array.35534 -- byte-for-byte the same slot the C++ object used. It
+  therefore registers into __ctors_GLOBAL__ at the identical position and runs
+  at the identical point. cpu_kdb becomes a zero-initialised cpulocal struct.
+
+  Verify empirically: objdump -h the old .cc object to read the exact
+  .init_array.<N> section, then confirm the new .c object reproduces the same N.
+  Don't trust the CTORPRIO arithmetic alone -- the section is the contract.
+
+Everything else was routine: class -> struct + free functions on the cpulocal
+global; a local debug_param_t mirror of debug.h's C++-only class (same layout,
+passed by address to the kdb entry which owns its own copy); spinlock_unlock;
+sync_debug drops extern "C" (already BEGIN_DECLS in arch/x86/sync.h). And KDB
+still fully works (renders the prompt, runs commands), which is the real
+end-to-end test of the ctor timing. 10 .cc remain.
