@@ -596,3 +596,17 @@ bool intctrl_t::is_irq_available(word_t irq)
     if (irq == 9) return false;
     return redir[irq].is_valid();
 }
+
+
+/* C entry points wrapping the intctrl_t pmtimer methods for timer-apic.c. */
+BEGIN_DECLS
+bool intctrl_has_pmtimer(void)
+{
+    return get_interrupt_ctrl()->has_pmtimer();
+}
+
+void intctrl_pmtimer_wait(word_t ms)
+{
+    get_interrupt_ctrl()->pmtimer_wait(ms);
+}
+END_DECLS

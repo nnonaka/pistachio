@@ -50,6 +50,25 @@ private:
     word_t bus_freq;
     word_t proc_freq;
 };
+#else
+/* generic_periodic_timer_t is an empty base class, so the layout is just the
+   two frequency words. */
+struct timer_t {
+    word_t bus_freq;
+    word_t proc_freq;
+};
+typedef struct timer_t timer_t;
+#endif /* __cplusplus */
+
+/* C implementations of the former timer_t methods (defined in timer-apic.c). */
+BEGIN_DECLS
+void timer_init_global(void);
+void timer_init_cpu(timer_t *self, cpuid_t cpu);
+END_DECLS
+
+#if defined(__cplusplus)
+INLINE void timer_t::init_global()		{ timer_init_global(); }
+INLINE void timer_t::init_cpu(cpuid_t cpu)	{ timer_init_cpu(this, cpu); }
 
 INLINE timer_t * get_timer()
 {

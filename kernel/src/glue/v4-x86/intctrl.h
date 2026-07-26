@@ -51,13 +51,17 @@ INLINE bool intctrl_t::is_irq_available(word_t irq)
  * @return pointer to interrupt controller
  */
 #if defined(__cplusplus)
-INLINE intctrl_t * get_interrupt_ctrl() 
+INLINE intctrl_t * get_interrupt_ctrl()
 {
     extern intctrl_t intctrl;
     return &intctrl;
 }
 #endif /* __cplusplus */
 
-
+/* C entry points for the interrupt controller (defined in intctrl-apic.cc). */
+BEGIN_DECLS
+bool intctrl_has_pmtimer(void);
+void intctrl_pmtimer_wait(word_t ms);
+END_DECLS
 
 #endif /* !__GLUE__V4_X86__INTCTRL_H__ */

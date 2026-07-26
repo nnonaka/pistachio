@@ -500,10 +500,49 @@ INLINE void local_apic_t<base>::broadcast_nmi(bool self)
 #define X86_LAPIC_EOI		0x0B0
 #define X86_LAPIC_INTR_CMD1	0x300
 #define X86_LAPIC_INTR_CMD2	0x310
+#define X86_LAPIC_LVT_TIMER	0x320
+#define X86_LAPIC_TIMER_COUNT	0x380
+#define X86_LAPIC_TIMER_CURRENT	0x390
+#define X86_LAPIC_TIMER_DIVIDE	0x3E0
 
 INLINE void local_apic_eoi (void)
 {
     *(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_EOI) = 0;
+}
+
+/* Timer register access, mirroring local_apic_t<base>::timer_* (timer-apic.c). */
+INLINE u32_t local_apic_timer_get (void)
+{
+    return *(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_TIMER_CURRENT);
+}
+
+INLINE void local_apic_timer_set (u32_t count)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_TIMER_COUNT) = count;
+}
+
+INLINE void local_apic_timer_setup (u8_t irq, bool periodic)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_LVT_TIMER) =
+	(u32_t) (((periodic ? 1 : 0) << 17) | irq);
+}
+
+INLINE void local_apic_timer_set_divisor (u32_t divisor)
+{
+    volatile u32_t *reg =
+	(volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_TIMER_DIVIDE);
+    u32_t val;
+    divisor &= 0x7;
+    val = *reg;
+    val &= ~0xfu;
+    if (divisor == 1)
+	val = val | 0xb;
+    else
+    {
+	divisor--;
+	val = val | ((divisor << 1) & 0x8) | (divisor & 0x3);
+    }
+    *reg = val;
 }
 
 INLINE void local_apic_send_ipi (u8_t apic_id, u8_t vector)

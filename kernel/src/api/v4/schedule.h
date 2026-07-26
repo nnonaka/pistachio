@@ -55,20 +55,29 @@ enum sched_flags_e
 typedef u8_t sched_flags_t;
 
 
-const sched_flags_t sched_default = FLAGFIELD2(sched_chk_flag, sched_c2r_flag);
-const sched_flags_t sched_current = FLAGFIELD2(sched_ds1_flag, sched_c2r_flag);
-const sched_flags_t sched_dest =    FLAGFIELD2(sched_ds2_flag, sched_c2r_flag); 
-const sched_flags_t sched_handoff = FLAGFIELD1(sched_ds2_flag); 
+/* 'static' keeps these at internal linkage in C too (C++ file-scope const is
+   already internal); without it, every C TU that includes this header emits an
+   external definition and they collide at link time. */
+static const sched_flags_t sched_default = FLAGFIELD2(sched_chk_flag, sched_c2r_flag);
+static const sched_flags_t sched_current = FLAGFIELD2(sched_ds1_flag, sched_c2r_flag);
+static const sched_flags_t sched_dest =    FLAGFIELD2(sched_ds2_flag, sched_c2r_flag);
+static const sched_flags_t sched_handoff = FLAGFIELD1(sched_ds2_flag);
 
 /* IPC default flags */
-const sched_flags_t sched_sndonly = FLAGFIELD3(sched_chk_flag, sched_c2r_flag, sched_timeout_flag); 
-const sched_flags_t sched_ipcblk  = FLAGFIELD3(sched_ds2_flag, rr_tsdonate_flag, pm_chk_preemption_flag);
-const sched_flags_t sched_rcverr  = FLAGFIELD3(sched_ds2_flag, rr_tsdonate_flag, pm_chk_preemption_flag); 
-const sched_flags_t sched_rplywt  = FLAGFIELD3(sched_chk_flag, rr_tsdonate_flag, sched_timeout_flag); 
+static const sched_flags_t sched_sndonly = FLAGFIELD3(sched_chk_flag, sched_c2r_flag, sched_timeout_flag);
+static const sched_flags_t sched_ipcblk  = FLAGFIELD3(sched_ds2_flag, rr_tsdonate_flag, pm_chk_preemption_flag);
+static const sched_flags_t sched_rcverr  = FLAGFIELD3(sched_ds2_flag, rr_tsdonate_flag, pm_chk_preemption_flag);
+static const sched_flags_t sched_rplywt  = FLAGFIELD3(sched_chk_flag, rr_tsdonate_flag, sched_timeout_flag);
 
+
+/* C entry point: dispatch a timer tick to the current scheduler
+   (defined in api/v4/schedule.cc). */
+BEGIN_DECLS
+void sched_handle_timer_interrupt(void);
+END_DECLS
 
 #if defined(__cplusplus)
-class schedule_req_t 
+class schedule_req_t
 {
 public:
 

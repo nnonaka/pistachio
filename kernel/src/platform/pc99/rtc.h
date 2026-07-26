@@ -79,23 +79,28 @@ public:
 	out_u8(base+1, val);
     };
 };
+#endif /* __cplusplus */
 
 /**
- * Waits for a 1 second tick of the realtime clock 
+ * Waits for a 1 second tick of the realtime clock.
+ *
+ * Written with direct port I/O (RTC index port 0x70, data port 0x71) rather
+ * than the rtc_t<0x70> template so it is callable from both C and C++.
  */
-INLINE void wait_for_second_tick()
+INLINE void wait_for_second_tick(void)
 {
-    rtc_t<0x70> rtc;
+    word_t reg;
 
     // wait that update bit is off
-    while (rtc.read(0x0a) & 0x80);
+    do { out_u8(0x70, 0x0a); reg = in_u8(0x71); } while (reg & 0x80);
 
     // read second value
-    word_t secstart = rtc.read(0);
+    out_u8(0x70, 0);
+    word_t secstart = in_u8(0x71);
 
     // now wait until seconds change
-    while (secstart == rtc.read(0));
+    word_t sec;
+    do { out_u8(0x70, 0); sec = in_u8(0x71); } while (secstart == sec);
 }
-#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__RTC_H__ */

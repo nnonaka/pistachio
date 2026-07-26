@@ -1,10 +1,10 @@
 /*********************************************************************
- *                
+ *
  * Copyright (C) 2002-2005, 2007-2010,  Karlsruhe University
- *                
+ *
  * File path:     glue/v4-x86/timer-apic.cc
  * Description:   implementation of apic timer
- *                
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -25,9 +25,11 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *                
+ *
  ********************************************************************/
 #include INC_ARCH(trapgate.h)
+#include INC_ARCH(apic.h)
+#include INC_ARCH(cpu.h)
 
 #include INC_GLUE(idt.h)
 #include INC_GLUE(intctrl.h)
@@ -42,99 +44,97 @@ DECLARE_TRACEPOINT(X86_APIC_TIMER);
 /* global instance of timer object */
 timer_t timer UNIT("cpulocal");
 
-static local_apic_t<APIC_MAPPINGS_START> local_apic;
+/* The local APIC is accessed through the fixed-mapping C API (apic.h),
+   replacing the former local_apic_t<APIC_MAPPINGS_START> instance. */
 
 
-extern "C" void timer_interrupt(void);
+EXTERN_C void timer_interrupt(void);
 X86_EXCNO_ERRORCODE(timer_interrupt, 0)
 {
-    scheduler_t *scheduler = get_current_scheduler();
-    
-    //TRACEPOINT(X86_APIC_TIMER, "APIC TIMER %d", (word_t) scheduler->get_current_time());
+    //TRACEPOINT(X86_APIC_TIMER, "APIC TIMER %d", (word_t) get_current_scheduler()->get_current_time());
 
-    local_apic.EOI();
+    local_apic_eoi();
 
     /* handle the timer */
-    scheduler->handle_timer_interrupt();
-}   
+    sched_handle_timer_interrupt();
+}
 
 
 
-void timer_t::init_global()
+void timer_init_global(void)
 {
     TRACE_INIT("\tglobal timer: trap gate %d\n", IDT_LAPIC_TIMER);
-    idt.add_gate(IDT_LAPIC_TIMER, idt_t::interrupt, timer_interrupt);
+    idt_add_gate(&idt, IDT_LAPIC_TIMER, IDT_TYPE_INTERRUPT, timer_interrupt);
 
 }
 
-void timer_t::init_cpu(cpuid_t cpu)
-{ 
-    intctrl_t *intctrl = get_interrupt_ctrl();
-    bool pmtimer = intctrl->has_pmtimer();
-    
+void timer_init_cpu(timer_t *self, cpuid_t cpu)
+{
+    bool pmtimer = intctrl_has_pmtimer();
+
     // avoid competing for the RTC
     static DEFINE_SPINLOCK(timer_lock);
 
 
 #if !defined(CONFIG_CPU_X86_SIMICS)
     TRACE_INIT("\tCalculating processor speed (CPU %d)...", cpu);
-    local_apic.timer_set_divisor(1);
-    local_apic.timer_setup(IDT_LAPIC_TIMER, false);
-    local_apic.timer_set((u32_t) -1UL);
+    local_apic_timer_set_divisor(1);
+    local_apic_timer_setup(IDT_LAPIC_TIMER, false);
+    local_apic_timer_set((u32_t) -1UL);
 
 
     word_t delay = 0;
-    
+
     /* calculate processor speed */
     if (!pmtimer)
     {
-        timer_lock.lock();
+        spinlock_lock(&timer_lock);
         delay = 1000;
         wait_for_second_tick();
     }
 
     u64_t cpu_cycles = x86_rdtsc();
-    u32_t bus_cycles = local_apic.timer_get();
-    
+    u32_t bus_cycles = local_apic_timer_get();
+
     if (pmtimer)
     {
         delay = 100;
-        intctrl->pmtimer_wait(delay);
+        intctrl_pmtimer_wait(delay);
     }
     else
     {
         wait_for_second_tick();
-        timer_lock.unlock();
+        spinlock_unlock(&timer_lock);
     }
 
     word_t local_apic_cpu_mhz;
     word_t local_apic_bus_mhz;
 
     cpu_cycles = x86_rdtsc() - cpu_cycles;
-    bus_cycles -= local_apic.timer_get();
+    bus_cycles -= local_apic_timer_get();
 
     local_apic_cpu_mhz = cpu_cycles / (delay * 1000);
     local_apic_bus_mhz = bus_cycles / (delay * 1000);
 
-    proc_freq = cpu_cycles / delay;
-    bus_freq = bus_cycles / delay;
-#else 
+    self->proc_freq = cpu_cycles / delay;
+    self->bus_freq = bus_cycles / delay;
+#else
     /*
      * Set frequencies statically on SIMICS, waiting would take ages...
      */
 
     cpu_cycles = CONFIG_CPU_X86_SIMICS_SPEED * 1000 * 1000;
-    proc_freq = cpu_cycles  / 1000;
-    bus_freq = 0;
+    self->proc_freq = cpu_cycles  / 1000;
+    self->bus_freq = 0;
 
-#endif 
+#endif
 
 
-    TRACE_INIT("\n\tspeed: %d MHz, bus speed: %d MHz (CPU %d)\n", 
+    TRACE_INIT("\n\tspeed: %d MHz, bus speed: %d MHz (CPU %d)\n",
                (word_t)(local_apic_cpu_mhz), local_apic_bus_mhz, cpu);
 
     /* now set timer IRQ to periodic timer */
-    local_apic.timer_setup(IDT_LAPIC_TIMER, true);
-    local_apic.timer_set( (u32_t) (bus_cycles / (1000 * delay / TIMER_TICK_LENGTH)) );
+    local_apic_timer_setup(IDT_LAPIC_TIMER, true);
+    local_apic_timer_set( (u32_t) (bus_cycles / (1000 * delay / TIMER_TICK_LENGTH)) );
 
 }

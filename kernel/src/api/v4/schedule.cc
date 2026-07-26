@@ -398,3 +398,13 @@ void SECTION(".init") scheduler_t::init( bool bootcpu )
     
     return;
 }
+
+
+/* C entry point wrapping the current scheduler's timer-tick handler
+   (called from the APIC timer interrupt in glue/v4-x86/timer-apic.c). */
+BEGIN_DECLS
+void sched_handle_timer_interrupt(void)
+{
+    get_current_scheduler()->handle_timer_interrupt();
+}
+END_DECLS
