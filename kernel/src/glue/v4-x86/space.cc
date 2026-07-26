@@ -1357,6 +1357,7 @@ u8_t space_get_from_user (space_t *self, addr_t addr)	{ return self->get_from_us
 bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
 bool space_is_user_area (addr_t addr)				{ return space_t::is_user_area (addr); }
 void reload_user_segregs_c (void)				{ reload_user_segregs (); }
+space_t * get_kernel_space_c (void)				{ return get_kernel_space (); }
 bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
 bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }
 END_DECLS
