@@ -1148,3 +1148,46 @@ x32comp is dead code in this config and needs no conversion.
 **State: 0 blockers.** All 29 remaining .cc files (of 40 objects; the other 11 are already-flipped
 .c + assembly) have a fully C-includable header closure.  The structural header layer is done.
 Next phase is Pass B: flipping .cc bodies to .c -- the CLEAN list is the ready queue.
+
+## 42. Pass B begins: first .cc flips -- asmsyms.c and idt.c (2026-07-26, commits 3d1da93 efe7cfb)
+
+First two .cc->.c body flips.  Boots clean.  Byte-identity NO LONGER the universal proof:
+a flip that changes the constructor mechanism necessarily changes the binary, so from here
+correctness is proven by **boot test** (+ byte-identity where it still applies, e.g. headers).
+
+**asmsyms.c** (mechanical): the body referenced class-scoped enum values
+(`thread_state_t::polling`, `queue_state_t::wakeup`) whose enums are guarded C++-only.
+Pattern for "class-scoped enumerator needed in C": hoist each value to a named macro
+(`THREAD_STATE_*`, `QUEUE_STATE_*`) as the single source of truth, and have the C++ enum
+*alias* the macros -- values byte-identical, both spellings work (`thread_state_t::polling`
+in C++, `THREAD_STATE_POLLING` in C).  Build-system gotcha: `asmsyms` is built via SYMSRCS
+in Mk/Makefile.voodoo, which globbed only `asmsyms.cc`; after the rename the flipped file was
+silently NOT compiled (stale asmsyms.h reused -> falsely "byte-identical").  Fixed the glob to
+match `asmsyms.c` too.  Lesson: after renaming a .cc that a Makefile references by explicit
+name (Makeconf `SOURCES+=`, voodoo `SYMSRCS`), update that reference and force-regenerate.
+
+**idt.c** (first CTORPRIO static-ctor flip -- user chose "explicit init"):
+- `idt_t idt CTORPRIO(CTORPRIO_GLOBAL,3)` used a C++ static constructor (emitted as
+  `.init_array.55532`, run by `call_global_ctors()`).  C has no ctors.  Chosen strategy:
+  drop the static ctor, rename the ctor body to `idt_init(idt_t*)`, and call it **explicitly**
+  from the boot path -- placed right after `call_global_ctors()/call_node_ctors()` in
+  `startup_system()`, exactly where the ctor used to run (traced: BSP builds the IDT there,
+  before the first `idt.activate()`; APs reuse the BSP-built global).
+- Class methods -> C free functions (`idt_add_gate`, `idt_activate`) declared in BEGIN_DECLS;
+  the C++ methods become INLINE **forwarders** (`void activate(){ idt_activate(this); }`) so
+  unflipped C++ callers (init.cc, intctrl-apic.cc) keep `idt.activate()` working.
+- Nested descriptor types needed C APIs: added `x86_idtdesc_set()` (x64 segdesc.h) and
+  `x86_descreg_set/setdescreg()` (segdesc.h) as `#if !defined(__cplusplus)` static inlines,
+  plus value macros (`X86_IDTDESC_*`, `X86_DESCREG_*`, `IDT_TYPE_*`).  The C++ methods are left
+  UNTOUCHED (their C++ users -- init32.cc, x64/init.cc -- stay byte-identical); only NEW C-only
+  free functions are added alongside.  Pattern: "C-only free-fn API beside the C++ methods"
+  when the type still has live C++ callers you don't want to perturb.
+- Makeconf `SOURCES+=` list updated idt.cc->idt.c.
+- Size 362168 -> 361608 (expected: the synthesized static-ctor wrapper + .init_array entry gone).
+- **-Wconversion is stricter in C than C++**: the identical bitfield/index code was clean as
+  C++ but warned as C.  Fixed faithfully: `word_t` loop index instead of `int`; cast masked
+  operands to `u64_t` (`((u64_t)ist)&0x7`) so GCC sees the value provably fits the bitfield;
+  split chained `res0=res1=0`.  Always diff warnings against the pre-flip C++ file
+  (`git show HEAD:...cc | gcc -x c++ -fsyntax-only`) to tell regressions from pre-existing.
+
+Ready queue now 27 .cc CLEAN (asmsyms/idt flipped out of the set).  0 blockers.
