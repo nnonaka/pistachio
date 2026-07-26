@@ -1529,3 +1529,46 @@ Key lessons (reusable for thread/ipc/schedule):
 
 Verified: handle_pagefault runs on every demand-paged page during boot;
 l4test "All tests" failure set identical to the pre-flip kernel. 17 .cc remain.
+
+## 52. api/v4/thread.cc -> C: the last keystone, staged over many turns (2026-07-26, commits ab27644..995b205)
+
+The largest and hardest file in the tree: 1658 lines, defines 19 tcb_t methods,
+calls ~90 distinct methods, assembly-coupled (initial stack, notify, xcpu). Done
+as a big C-API buildout (Stage A, ~8 commits) then one atomic translation.
+
+Why it had to be atomic (learned the hard way): the moment you add the __asm__
+labels the build breaks -- the asm-named methods collide with the hosted C-API
+wrappers -- and it stays broken until thread.c + wrapper-migration + linkage all
+land together. There is no partial commit. A first attempt was reverted after
+hitting this; the second did the whole coordinated change in one run.
+
+Stage A -- the C-API (reused by every api/v4 file):
+- Data types are almost all dual-repped/C-visible (tcb_t members, utcb_t,
+  arch_ktcb_t, thread_state_t, sched_ktcb_t, msg_tag_t, acceptor_t, timeout_t,
+  queue_state_t, time_t), so the C form accesses members directly and needs C
+  forms only for *methods*. Predicates on dual-repped value types reimplement as
+  C inlines (thread_state_is_*, msg_tag_*, queue_state_*, time_is_*); the
+  arithmetic-heavy or arch/utcb methods get wrappers in glue/v4-x86/thread.cc
+  (do_ipc, get/set_tag, user_ip/sp, return_from_ipc, ...).
+
+Stage B -- the translation. Key gotchas, each a reusable lesson:
+- **friend-declared free functions** (handle_ipc_error) can't be naively
+  extern-C'd: declare the extern "C" prototype *before* the class so the friend
+  decl refers to it; then C++ callers (exregs.cc) and the C definition agree.
+- **enum tags need a typedef in C** (sktcb_type_e): `typedef enum X X;` -- C,
+  unlike C++, has no implicit type name for an enum tag.
+- **enums the file uses must be hoisted to macros** (unwind_reason_e ->
+  TCB_UNWIND_*, access_e -> SPACE_ACCESS_*); watch identifier collisions
+  (`abort`/`timeout` are also std names -- word-boundary replace only).
+- **C++-only helper macros** need C forms: TID = `(x).get_raw()` -> redefine as
+  `threadid_get_raw(&(x))`; `max()` was C++-only -> inline it.
+- **C++-only inline free funcs** used bare (get_idle_tcb/get_dummy_tcb) need the
+  _c wrappers even inside their own former file.
+- **whole_tcb_t** (the padding union for KTCB allocation) had to be hoisted out
+  of the __cplusplus guard.
+- thread.c carries C prototypes for every asm-named function it defines or calls
+  (the C++ method decls are invisible to C).
+
+Verified beyond boot: creates sigma0 + root task (the full activate/create/
+schedule/arch-init lifecycle), and l4test "All tests" matches the pre-flip
+failure set exactly. Non-byte-identical; kernel 363192. 16 .cc remain.
