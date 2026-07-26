@@ -1572,3 +1572,62 @@ Stage B -- the translation. Key gotchas, each a reusable lesson:
 Verified beyond boot: creates sigma0 + root task (the full activate/create/
 schedule/arch-init lifecycle), and l4test "All tests" matches the pre-flip
 failure set exactly. Non-byte-identical; kernel 363192. 16 .cc remain.
+
+## 53. api/v4/interrupt.cc -> C: first post-keystone orchestrator (2026-07-26, commits d906962 81f0e17)
+
+interrupt.cc (360 lines: handle_interrupt, thread_control_interrupt,
+irq_thread, migrate_interrupt_start/end, init_interrupt_threads). First flip
+after the thread keystone, and notably *smooth* precisely because it defines
+only free functions -- no tcb_t methods -- so there is NO asm-name atomic-flip
+constraint. Reused the broad tcb/scheduler/threadid/thread_state/msg_tag C-API
+from thread.cc; only a thin step-A foundation was new.
+
+Step A foundation (d906962, pure additions, boots):
+  - intctrl.h + intctrl-apic.cc: 8 C entry points wrapping the intctrl_t
+    methods the interrupt path uses (get_number_irqs, is_irq_available, mask,
+    unmask, enable, disable, is_pending, set_cpu), beside the pmtimer wrappers.
+  - schedule.{h,cc}: sched_schedule_interrupt(irq, handler).
+  - tcb.h: tcb_set_partner / tcb_set_irq_handler / tcb_get_irq_handler C
+    inlines. NB: the IRQ handler tid is stored in the sched-ktcb *scheduler*
+    field (set_irq_handler == sched_state.set_scheduler), not a dedicated slot.
+  - ipc.h: msg_tag_irq_tag(); kernelinterface.h: thread_info_set_system_base()
+    (12-bit field, base & 0xfff).
+
+Step B flip (81f0e17):
+  - Mechanical method->accessor translation. by-value threadid_t returns
+    (get_global_id/get_partner/get_irq_handler) spilled to a local before
+    taking &addr for threadid_equals/threadid_get_irqno.
+  - scheduler->schedule(t) default arg is sched_default -> sched_schedule(t,
+    sched_default); the sched_handoff/sched_default consts are already
+    C-visible (u8_t, outside the __cplusplus guard).
+
+Three reusable gotchas:
+
+  (a) TRACE args are never compiled when the tracebuffer is off. TRACE_IRQ /
+      TRACEPOINT ultimately expand through tbuf_record_event(args...), which
+      CONFIG_TRACEBUFFER=off defines as an EMPTY function-like macro. A
+      function-like macro that expands to nothing discards its argument tokens
+      without rescanning them -- so C++-only args like
+      `irq_tcb->get_state().string()` inside a TRACE_IRQ are never parsed as C.
+      => keep all TRACE*/TRACEPOINT lines verbatim in the C translation; do not
+      spend effort C-ifying trace-only expressions. (Same applies to TID(x) in
+      dead trace args.)
+
+  (b) A callback defined in a still-C++ file, referenced from the new C file:
+      do_xcpu_send_irq lives in schedule.cc. Giving its schedule.h decl C
+      linkage (BEGIN_DECLS) makes the C++ *definition* C-linkage -- good -- but
+      that decl sits inside schedule.h's big `#if __cplusplus` block, so C
+      can't see it. Fix: carry a plain C forward decl in the consumer
+      (interrupt.c) after its own smp.h include (for cpu_mb_entry_t). Header
+      decl drives the definition's linkage; local decl feeds the C caller.
+
+  (c) Duplicate prototype with the wrong linkage. handle_interrupt is declared
+      in BOTH api/v4/interrupt.h and generic/intctrl.h. Flipping only the
+      former to extern "C" made ipc.cc (which pulls in intctrl.h first) see a
+      C++-linkage decl then a C-linkage one -> "conflicting declaration ... with
+      'C' linkage". Any header re-declaring a now-C symbol must also move to
+      BEGIN_DECLS. grep every header for the symbol before flipping.
+
+Verified: builds 363400, boots (interrupt threads init, KIP system_base set),
+l4test All-tests region byte-identical to the pre-flip reference (diff clean;
+only the pre-existing "Local destination Id" FAILED). 15 .cc remain.
