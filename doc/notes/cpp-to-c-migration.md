@@ -1274,3 +1274,35 @@ A static-data file (exception-frame register tables + one asm trap stub). Two re
 Non-byte-identical (table symbols change): 361816 -> 361808. Boots; the CONFIG_DEBUG dump() path
 (kdb) links against the new globals. Also mirrored the definition-header changes into the unbuilt
 x32/exception.cc for consistency. 23 .cc remain.
+
+## 46. glue/v4-x86/cpu.cc -> cpu.c: the deepest cascade yet (2026-07-26, commit a96dc75)
+
+Three foundational pieces in one flip; each is a reusable unlock:
+
+1. **EXTERN_C helper (macros.h)**: a macro that embeds `extern "C"` is a C syntax error. Added
+   `#define EXTERN_C extern "C"` (C++) / empty (C) -- the single-declaration companion to
+   BEGIN_DECLS/END_DECLS (which are block form and can't sit inside another macro). Switched the
+   shared exception-handler macros X86_EXCNO_ERRORCODE / X86_EXCWITH_ERRORCODE (x64 + x32
+   trapgate.h) to it. C++ expansion is unchanged, so all existing handlers are byte-identical.
+
+2. **Static data member used tree-wide -> global**: cpu_t::descriptors/count are read as
+   `cpu_t::count` in ~8 files (src + kdb). A C file can't define `Class::member`, so convert to
+   globals (cpu_descriptors/cpu_count) and sweep ALL callers -- including kdb/ (missed it the
+   first pass -> a compile error) and the unbuilt powerpc/sched-hs/x32 for consistency, since
+   api/v4/cpu.h is shared. Watch the constructor: cpu_t() set id=~0UL (invalid marker); the C
+   global array must reproduce that with a designated init `{[0 ... N-1] = { ~0UL }}`, else the
+   zero-initialised ids read as valid.
+   - Keep methods with NO C caller (add_cpu) as inline C++ *with their body* (using the globals),
+     NOT as a forwarder to a C function -- a forwarder would force every arch's cpu.cc to define
+     that C function (would break powerpc's link). Only give a method a C free function when a C
+     file actually calls it (get/get_id here, for cpu.c).
+
+3. **Template instance -> C API**: cpu.c used a stateless `local_apic_t<APIC_MAPPINGS_START> apic;`
+   (apic.EOI(), apic.send_ipi()). Templates can't exist in C. Added C functions (local_apic_eoi,
+   local_apic_send_ipi) in apic.h that hardcode the fixed mapping and replicate the register
+   writes (offsets/bit layout copied from the template's regno_t/command_reg_t, with a comment).
+
+Also: C exception-frame access is `frame->__base.regs[X86_EXC_*]` (the C x86_exceptionframe_t has
+a `__base` member where C++ inherits); init_xcpu_handling moved to glue smp.h's BEGIN_DECLS.
+
+Non-byte-identical (361760 -> 361728). Boots; AP startup + XCPU IPI exercised. 22 .cc remain.
