@@ -277,6 +277,33 @@ public:
 };
 typedef struct x86_idtdesc_t x86_idtdesc_t;
 
+/* C free-function API for x86_idtdesc_t (the C++ set() method above is used by
+   code still compiled as C++; segtype values mirror segtype_e). */
+#define X86_IDTDESC_INTERRUPT	0xe
+#define X86_IDTDESC_TRAP	0xf
+
+#if !defined(__cplusplus)
+static inline void x86_idtdesc_set(x86_idtdesc_t *self, u16_t selector,
+				   void (*address)(void), int type, int dpl, int ist)
+{
+    /* offset_high holds bits 16..63 of address, i.e. exactly 48 bits */
+    u64_t offset_high = (u64_t) address >> 16;
+
+    self->x.d.offset_low = ( (u64_t) address & 0xFFFF );
+    self->x.d.offset_high = offset_high & 0xFFFFFFFFFFFF;
+    self->x.d.selector   = selector;
+    self->x.d.ist = ((u64_t) ist) & 0x7;
+    self->x.d.type = ((u64_t) type) & 0xF;
+    self->x.d.dpl = ((u64_t) dpl) & 0x3;
+
+    self->x.d.p = 1;		/* present */
+    self->x.d.s = 0;		/* system segment */
+
+    self->x.d.res0 = 0;
+    self->x.d.res1 = 0;
+}
+#endif /* !__cplusplus */
+
 
 #endif /* !X64_32BIT_CODE */
 

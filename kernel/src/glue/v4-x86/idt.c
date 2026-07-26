@@ -44,91 +44,95 @@
 
 /**
  * idt: the global IDT (see: IA32 Vol 3)
+ *
+ * Formerly a CTORPRIO_GLOBAL static object; the constructor is now the
+ * explicit idt_init() below, called from the boot path (see init.cc).
  */
-idt_t idt UNIT("x86.idt") CTORPRIO(CTORPRIO_GLOBAL, 3);
+idt_t idt UNIT("x86.idt");
 
 
-void SECTION(".init.system") 
-    idt_t::init_gate(word_t index, idt_t::type_e type, void (*address)())
+static void SECTION(".init.system")
+idt_init_gate(idt_t *self, word_t index, int type, void (*address)(void))
 {
     ASSERT(index < IDT_SIZE);
-    
+
     switch (type)
     {
-    case interrupt:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::interrupt, 0);
+    case IDT_TYPE_INTERRUPT:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_INTERRUPT, 0, 0);
 	break;
-    case syscall:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::interrupt, 3);
+    case IDT_TYPE_SYSCALL:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_INTERRUPT, 3, 0);
 	break;
-    case trap:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::trap, 0);
+    case IDT_TYPE_TRAP:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_TRAP, 0, 0);
 	break;
-    }	
+    }
 }
 
-void idt_t::add_gate(word_t index, idt_t::type_e type, void (*address)())
+void idt_add_gate(idt_t *self, word_t index, int type, void (*address)(void))
 {
     ASSERT(index < IDT_SIZE);
-    
-    
+
+
     switch (type)
     {
-    case interrupt:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::interrupt, 0);
+    case IDT_TYPE_INTERRUPT:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_INTERRUPT, 0, 0);
 	break;
-    case syscall:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::interrupt, 3);
+    case IDT_TYPE_SYSCALL:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_INTERRUPT, 3, 0);
 	break;
-    case trap:
-	descriptors[index].set(X86_KCS, address, x86_idtdesc_t::trap, 0);
+    case IDT_TYPE_TRAP:
+	x86_idtdesc_set(&self->descriptors[index], X86_KCS, address, X86_IDTDESC_TRAP, 0, 0);
 	break;
-    }	
+    }
 }
 
 
 
 /**
- * idt_t::activate: activates the previously set up IDT
+ * idt_activate: activates the previously set up IDT
  */
-void idt_t::activate()
+void idt_activate(idt_t *self)
 {
-    x86_descreg_t idt((word_t) descriptors, sizeof(descriptors));
-    idt.setdescreg(x86_descreg_t::idtr);
+    x86_descreg_t reg;
+    x86_descreg_set(&reg, (word_t) self->descriptors, sizeof(self->descriptors));
+    x86_descreg_setdescreg(&reg, X86_DESCREG_IDTR);
 }
 
-idt_t::idt_t()
+void SECTION(".init.cpu") idt_init(idt_t *self)
 {
-    for (int i=0;i<IDT_SIZE;i++){
-	/* 
+    for (word_t i=0;i<IDT_SIZE;i++){
+	/*
 	 * Synthesize call to exc_catch_common
-	 * 
+	 *
 	 * idt
 	 * exc_catch_all[IDT_SIZE]
 	 * exc_catch_common
-	 *  
+	 *
 	 * e8 = Near call with 4 byte offset (5 byte)
-	 * 
+	 *
 	 */
 	exc_catch_all[i] = ( (sizeof(exc_catch_all) - i * sizeof(u64_t) - 5) << 8) | 0xe8;
-	add_gate(i, interrupt, (func_exc) &exc_catch_all[i]);
+	idt_add_gate(self, i, IDT_TYPE_INTERRUPT, (func_exc) &exc_catch_all[i]);
     }
-    
+
     /* setup the exception gates */
 #if defined(CONFIG_DEBUG)
-    init_gate(X86_EXC_DEBUG, interrupt, exc_debug);
-    init_gate(X86_EXC_NMI, interrupt, exc_nmi);
-    init_gate(X86_EXC_BREAKPOINT, syscall,exc_breakpoint);
+    idt_init_gate(self, X86_EXC_DEBUG, IDT_TYPE_INTERRUPT, exc_debug);
+    idt_init_gate(self, X86_EXC_NMI, IDT_TYPE_INTERRUPT, exc_nmi);
+    idt_init_gate(self, X86_EXC_BREAKPOINT, IDT_TYPE_SYSCALL, exc_breakpoint);
 #endif
-    init_gate(X86_EXC_INVALIDOPCODE, interrupt, exc_invalid_opcode);
-    init_gate(X86_EXC_NOMATH_COPROC, interrupt, exc_nomath_coproc);
-    init_gate(X86_EXC_GENERAL_PROTECTION, interrupt, exc_gp);
-    init_gate(X86_EXC_PAGEFAULT, interrupt, exc_pagefault);
+    idt_init_gate(self, X86_EXC_INVALIDOPCODE, IDT_TYPE_INTERRUPT, exc_invalid_opcode);
+    idt_init_gate(self, X86_EXC_NOMATH_COPROC, IDT_TYPE_INTERRUPT, exc_nomath_coproc);
+    idt_init_gate(self, X86_EXC_GENERAL_PROTECTION, IDT_TYPE_INTERRUPT, exc_gp);
+    idt_init_gate(self, X86_EXC_PAGEFAULT, IDT_TYPE_INTERRUPT, exc_pagefault);
     // 15 reserved
 
 #if defined(CONFIG_SUBARCH_X32)
     // syscalls
-    init_gate(0x30, syscall, exc_user_sysipc);
-    init_gate(0x31, syscall, exc_user_syscall);
+    idt_init_gate(self, 0x30, IDT_TYPE_SYSCALL, exc_user_sysipc);
+    idt_init_gate(self, 0x31, IDT_TYPE_SYSCALL, exc_user_syscall);
 #endif
 }

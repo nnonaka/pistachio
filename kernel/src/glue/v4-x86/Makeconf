@@ -30,7 +30,7 @@
 ######################################################################
 
 SOURCES+=$(addprefix src/glue/v4-x86/, ctors.c exception.cc space.cc \
-			 init.cc resources.cc idt.cc debug.cc cpu.cc thread.cc)
+			 init.cc resources.cc idt.c debug.cc cpu.cc thread.cc)
 
 
 ifeq ("$(CONFIG_IOAPIC)","y")

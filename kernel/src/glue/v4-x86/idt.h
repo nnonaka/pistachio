@@ -36,34 +36,52 @@
 #include INC_ARCH(segdesc.h)
 #include INC_GLUE(config.h)
 
+/* idt gate types, as macros so C (idt.c) and C++ (via type_e) share values. */
+#define IDT_TYPE_INTERRUPT	0
+#define IDT_TYPE_SYSCALL	1
+#define IDT_TYPE_TRAP		2
+
 struct idt_t
 {
 #if defined(__cplusplus)
 public:
-    enum type_e 
+    enum type_e
     {
-	interrupt = 0,
-	syscall	  = 1,
-	trap	  = 2
+	interrupt = IDT_TYPE_INTERRUPT,
+	syscall	  = IDT_TYPE_SYSCALL,
+	trap	  = IDT_TYPE_TRAP
     };
 
-    idt_t() SECTION(".init.cpu");
     x86_idtdesc_t get_descriptor(word_t index);
     void add_gate(word_t index, type_e type, void (*address)());
     void activate();
-
-private:
-    void init_gate(word_t index, type_e type, void (*address)());
 #endif /* __cplusplus */
     x86_idtdesc_t descriptors[IDT_SIZE];
 };
 typedef struct idt_t idt_t;
+
+BEGIN_DECLS
+/* C free-function API (defined in idt.c); replaces the former idt_t methods
+   and constructor. idt_init() takes the place of the static constructor and
+   is now called explicitly from the boot path. */
+void idt_init(idt_t *self);
+void idt_add_gate(idt_t *self, word_t index, int type, void (*address)(void));
+void idt_activate(idt_t *self);
+END_DECLS
 
 #if defined(__cplusplus)
 INLINE x86_idtdesc_t idt_t::get_descriptor(word_t index)
 {
     ASSERT(index < IDT_SIZE);
     return descriptors[index];
+}
+INLINE void idt_t::add_gate(word_t index, type_e type, void (*address)())
+{
+    idt_add_gate(this, index, (int) type, (void (*)(void)) address);
+}
+INLINE void idt_t::activate()
+{
+    idt_activate(this);
 }
 #endif /* __cplusplus */
 

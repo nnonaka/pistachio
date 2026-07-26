@@ -316,7 +316,7 @@ cpuid_t SECTION(".init.cpu") init_cpu (void)
     setup_gdt(tss, cpuid);
 
     /* can take exceptions from now on,
-     * idt is initialized via a constructor */
+     * idt is initialized by idt_init() in startup_system() */
     TRACE_INIT("\tActivating IDT (CPU %d)\n", cpuid);;
     idt.activate();
     
@@ -417,6 +417,10 @@ extern "C" void SECTION(".init.init64") startup_system(u32_t is_ap)
 
     call_global_ctors();
     call_node_ctors();
+
+    /* Build the IDT gate table.  This was formerly a CTORPRIO_GLOBAL static
+       constructor run by call_global_ctors(); it is now an explicit call. */
+    idt_init(&idt);
 
     init_hello();
 
