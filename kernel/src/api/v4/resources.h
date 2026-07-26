@@ -140,6 +140,22 @@ public:
 };
 typedef struct resource_bits_t resource_bits_t;
 
+#if !defined(__cplusplus)
+/* C accessors for resource_bits_t: the C++ methods (init/have_resource/+=/-=)
+   above poke bitmask_word_t::maskvalue, which is private to the C++ bitmask_t,
+   so C reaches the plain struct member directly. Semantics match bitmask.h.
+   The resource type is taken as word_t (not resource_type_e) because the glue
+   header that defines that enum includes this one *before* declaring it. */
+INLINE void resource_bits_init (resource_bits_t *self)
+    { self->resource_bits.maskvalue = 0; }
+INLINE bool resource_bits_have_resource (resource_bits_t *self, word_t t)
+    { return (self->resource_bits.maskvalue & (1UL << t)) != 0; }
+INLINE void resource_bits_add (resource_bits_t *self, word_t t)
+    { self->resource_bits.maskvalue |= (1UL << t); }
+INLINE void resource_bits_remove (resource_bits_t *self, word_t t)
+    { self->resource_bits.maskvalue &= ~(1UL << t); }
+#endif /* !__cplusplus */
+
 #endif
 
 

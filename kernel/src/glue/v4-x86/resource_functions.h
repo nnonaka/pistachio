@@ -141,47 +141,11 @@ INLINE void thread_resources_t::enable_copy_area (tcb_t * tcb,
 }
 
 
-/**
- * Release all copy areas.
- *
- * @param tcb			TCB of current thread
- * @param disable_copyarea	should copy area resource be disabled or not
+/*
+ * thread_resources_t::release_copy_area is now defined in C (resources.c,
+ * symbol tcb_resources_release_copy_area) so that the C save/purge/free paths
+ * and the C++ caller in x64/tcb.h share one implementation.
  */
-
-INLINE void thread_resources_t::release_copy_area (tcb_t * tcb,
-						   bool disable_copyarea)
-{
-    
-#if defined(CONFIG_X86_SMALL_SPACES)
-    if (tcb->resource_bits.have_resource (IPC_PAGE_TABLE))
-    {
-	if (disable_copyarea)
-	    tcb->resource_bits -= IPC_PAGE_TABLE;
-	return;
-    }
-#endif
-    if (tcb->resource_bits.have_resource (COPY_AREA))
-    {
-	for (word_t i = 0; i < COPY_AREA_COUNT; i++)
-	    tcb->space->delete_copy_area (i, tcb->get_cpu());
-
-	// Flush TLB to get rid of copy area TLB entries.  This can be
-	// optimized away if we know that we're going to switch to
-	// another address space (i.e., implicitly flush the TLB).
-	x86_mmu_t::flush_tlb
-	    (IS_SPACE_GLOBAL (tcb->get_partner_tcb ()->get_space ()));
-
-	if (disable_copyarea)
-	{
-	    tcb->resource_bits -= COPY_AREA;
-	    for (word_t i = 0; i < COPY_AREA_COUNT; i++)
-		for (word_t j = 0; j < COPY_AREA_PDIRS; j++)
-		    pdir_idx[i][j] = ~0UL;
-	    last_copy_area = 0;
-	}
-    }    
-}
-
 
 
 

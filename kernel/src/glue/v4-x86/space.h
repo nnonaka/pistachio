@@ -456,7 +456,16 @@ INLINE void align_memregion(mem_region_t & region, word_t size)
 }
 #endif /* __cplusplus */
 
-
+/* C entry points for the copy-area / per-CPU pdir methods that resources.c
+   needs (space_t stays a C++ class; these wrap the methods, defined in
+   space.cc). get_top_pdir_phys returns word_t so C need not know x86_pgent_t. */
+BEGIN_DECLS
+void   space_populate_copy_area (space_t *self, word_t n, tcb_t *tcb, space_t *partner, cpuid_t cpu);
+void   space_delete_copy_area (space_t *self, word_t n, cpuid_t cpu);
+word_t space_get_top_pdir_phys (space_t *self, cpuid_t cpu);
+void   space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu);
+bool   space_has_cpu_top_pdir (space_t *self, cpuid_t cpu);
+END_DECLS
 
 
 #endif /* !__GLUE__V4_X86__SPACE_H__ */

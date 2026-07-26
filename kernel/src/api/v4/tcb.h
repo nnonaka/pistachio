@@ -815,6 +815,15 @@ INLINE tcb_t * get_dummy_tcb()
    for C++ callers). Add more here as C files come to need them. */
 INLINE threadid_t tcb_get_local_id (const tcb_t *self) { return self->myself_local; }
 
+#if !defined(__cplusplus)
+/* Mirror of tcb_t::get_tcb (dynamic-KTCB branch; CONFIG_STATIC_TCBS is off). */
+INLINE tcb_t * tcb_get_tcb (threadid_t tid)
+{
+    return (tcb_t *) ((KTCB_AREA_START) +
+	((threadid_get_threadno (&tid) & VALID_THREADNO_MASK) * KTCB_SIZE));
+}
+#endif /* !__cplusplus */
+
 #if defined(__cplusplus)
 
 

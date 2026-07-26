@@ -256,4 +256,45 @@ INLINE word_t x86_mmu_t::get_pagefault_address(void)
 }
 #endif /* __cplusplus */
 
+#if !defined(__cplusplus)
+/* C mirror of the x86_mmu_t static methods used by resources.c. */
+INLINE void x86_mmu_set_active_pagetable (word_t root)
+{
+    __asm__ __volatile__ ("mov %0, %%cr3 \n" : : "r"(root));
+}
+
+INLINE void x86_mmu_flush_tlb (bool global)
+{
+    word_t dummy1;
+#if defined(CONFIG_X86_PGE)
+    if (!global)
+    {
+	__asm__ __volatile__(
+		"mov    %%cr3, %0   \n\t"
+		"mov    %0, %%cr3   \n\t"
+		: "=r" (dummy1));
+    }
+    else
+    {
+	word_t dummy2;
+	__asm__ __volatile__(
+		"mov    %%cr4, %0       \n"
+		"and    %2, %0          \n"
+		"mov    %0, %%cr4       \n"
+		"mov    %%cr3, %1       \n"
+		"mov    %1, %%cr3       \n"
+		"or     %3, %0          \n"
+		"mov    %0, %%cr4       \n"
+		: "=r"(dummy1), "=r"(dummy2)
+		: "i" (~X86_CR4_PGE), "i" (X86_CR4_PGE));
+    }
+#else
+    __asm__ __volatile__(
+	    "mov    %%cr3, %0   \n\t"
+	    "mov    %0, %%cr3   \n\t"
+	    : "=r" (dummy1));
+#endif
+}
+#endif /* !__cplusplus */
+
 #endif /* !__ARCH__X86__MMU_H__ */

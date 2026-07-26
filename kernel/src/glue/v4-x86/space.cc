@@ -1131,3 +1131,23 @@ void space_t::free_cpu_top_pdir(cpuid_t cpu)
 
 #endif /* defined(CONFIG_SMP) */
 
+
+
+/* C entry points wrapping the copy-area / per-CPU pdir methods for resources.c
+   (declared in glue/v4-x86/space.h). */
+BEGIN_DECLS
+void space_populate_copy_area (space_t *self, word_t n, tcb_t *tcb, space_t *partner, cpuid_t cpu)
+{ self->populate_copy_area (n, tcb, partner, cpu); }
+
+void space_delete_copy_area (space_t *self, word_t n, cpuid_t cpu)
+{ self->delete_copy_area (n, cpu); }
+
+word_t space_get_top_pdir_phys (space_t *self, cpuid_t cpu)
+{ return (word_t) self->get_top_pdir_phys (cpu); }
+
+void space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu)
+{ self->alloc_cpu_top_pdir (cpu); }
+
+bool space_has_cpu_top_pdir (space_t *self, cpuid_t cpu)
+{ return self->has_cpu_top_pdir (cpu); }
+END_DECLS
