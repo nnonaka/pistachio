@@ -1306,3 +1306,49 @@ Also: C exception-frame access is `frame->__base.regs[X86_EXC_*]` (the C x86_exc
 a `__base` member where C++ inherits); init_xcpu_handling moved to glue smp.h's BEGIN_DECLS.
 
 Non-byte-identical (361760 -> 361728). Boots; AP startup + XCPU IPI exercised. 22 .cc remain.
+
+## 47. glue/v4-x86/timer-apic.cc -> timer-apic.c: thin C entry points for big classes (2026-07-26, commit cc5e9d0)
+
+Eighth Pass-B flip. The APIC timer touches four subsystems (timer_t, the local APIC template,
+the scheduler, and the interrupt controller), but none of the big classes had to be dual-repped:
+each got one narrow C entry point instead.
+
+- **Empty-base dual-rep**: timer_t derives from generic_periodic_timer_t, which has NO data
+  members. Empty-base optimisation means the derived layout is just {bus_freq, proc_freq}, so the
+  C `struct timer_t` needs no `base` member -- unlike sync_entry_t (§44), whose base carried data.
+  init_global/init_cpu -> C free functions timer_init_global/timer_init_cpu(+self) with INLINE
+  C++ forwarders; get_timer stays C++-only (no C caller).
+
+- **Wrapper-in-.cc, not dual-rep, when the class is huge and only one method is needed**:
+  scheduler_t and intctrl_t are large orchestrator classes. Rather than dual-rep them for a
+  single call site, add a C-linkage wrapper *defined in an existing C++ TU* and declared in the
+  header's BEGIN_DECLS:
+    - sched_handle_timer_interrupt() in api/v4/schedule.cc wraps
+      get_current_scheduler()->handle_timer_interrupt().
+    - intctrl_has_pmtimer()/intctrl_pmtimer_wait() in platform/generic/intctrl-apic.cc wrap the
+      intctrl_t methods.
+  Behaviour is identical (handle_timer_interrupt was already an out-of-line call; get_current_*
+  was a trivial cpulocal-global read now folded into the wrapper). Cost: one non-inlined call on
+  the timer IRQ path -- negligible. This is the cheaper dual of "grow the header C-API": use it
+  when the class stays C++ and the C side needs just a verb, not the layout.
+
+- **Template method reuse**: the local-APIC C API from §46 (cpu.c) was extended in place with the
+  timer registers (local_apic_timer_get/set/setup/set_divisor), each replicating one
+  local_apic_t<base>::timer_* body against the fixed APIC_MAPPINGS_START. Second consumer of the
+  same C API -- the pattern compounds.
+
+- **Template-free rewrite instead of a wrapper**: wait_for_second_tick used rtc_t<0x70>. Rather
+  than wrap it (no rtc.cc exists to host a C-linkage symbol), rewrite it with direct in_u8/out_u8
+  on ports 0x70/0x71 and move it OUT of the __cplusplus guard -> a single definition valid in
+  both languages. Prefer this when the templated helper is thin and self-contained.
+
+- **file-scope const collision (the link error this flip surfaced)**: api/v4/schedule.h defines
+  `const sched_flags_t sched_default = ...` etc. at file scope. C++ gives file-scope const
+  INTERNAL linkage, so no symbol escaped; in C the same line has EXTERNAL linkage, so once TWO C
+  TUs include schedule.h (smp.c + timer-apic.c) the linker sees duplicate `sched_rplywt` &c. Fix:
+  add `static` -- a no-op for C++ (already internal), forces internal linkage in C. GCC does not
+  warn about unused static const at file scope, so no fallout. General rule for headers going
+  C-visible: any bare file-scope `const X y = ...;` must become `static const` before a second C
+  TU includes it.
+
+Non-byte-identical (361728 -> 361496). Boots (SMP, idle thread up). 21 .cc remain.
