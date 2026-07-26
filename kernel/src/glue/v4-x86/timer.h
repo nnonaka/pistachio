@@ -38,6 +38,7 @@
 extern u64_t ticks;
 #endif
 
+#if defined(__cplusplus)
 class timer_t : public generic_periodic_timer_t {
 public:
     void init_global();
@@ -55,5 +56,6 @@ INLINE timer_t * get_timer()
     extern timer_t timer;
     return &timer;
 }
+#endif /* __cplusplus */
 
 #endif /* !__GLUE__V4_X86__TIMER_H__ */

@@ -36,6 +36,7 @@
 #include INC_ARCH(ioport.h)	/* for in_u8/out_u8	*/
 #include INC_PLAT(rtc.h)	/* for rtc_t		*/
 
+#if defined(__cplusplus)
 class nmi_t {
 public:
     static void mask() 
@@ -61,5 +62,6 @@ public:
 	    rtc_t<0x70>().read(0);
 	};
 };
+#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__NMI_H__ */
