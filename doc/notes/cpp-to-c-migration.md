@@ -1749,3 +1749,45 @@ Step B (ed026bd) translation notes:
 Verified: builds 359208 (warning-clean), boots, l4test region byte-identical --
 the Simple-IPC/Send/ReplyWait/Send-timeout/Receive-timeout subtests exercise
 this state machine directly. 12 .cc remain.
+
+## 57. glue/v4-x86/exception.cc -> C: x86 exception handling, staged A/B (2026-07-26, commits be8d1c9 61c3965)
+
+exception.cc (551 lines, ~250 live): send_exception_ipc, the instruction-decode
+fault handler, and the #GP/#UD/#NM/catch-all trap handlers. First flip of an
+arch file that leans hard on the exception-frame internals -- but the plumbing
+was already done (glue/v4-x86/x64/exception.c is C; x86_exceptionframe_t is
+dual-repped; register indices are X86_EXC_* macros). Most config blocks are dead
+(IO_FLEXPAGES/SMALL_SPACES/COMPAT/SUBARCH_X32/CTRLXFER/KDB), so the live surface
+is small.
+
+Key points:
+
+  (a) Composition instead of inheritance in the C rep. The C++
+      x86_exceptionframe_t : public x86_exceptionregs_t becomes
+      `struct { x86_exceptionregs_t __base; }` in C, so every frame->regs[...] /
+      frame->error becomes frame->__base.regs[...] / frame->__base.error. The
+      register-name enums (ipreg, creg, ...) alias X86_EXC_* macros, so
+      x86_exceptionframe_t::ipreg -> X86_EXC_IPREG. Two-step rewrite: field
+      access AND enum name -- easy to do the first and forget the second.
+
+  (b) A C++ template used as a free function. readmem<T>(space, vaddr, T*) has
+      no C form; reimplemented as a local readmem_u8 over the asm-named
+      space_readmem (direct access for kernel memory, checked read + byte
+      truncate for user memory), matching the template body.
+
+  (c) A conversion operator with no .raw. api_version_t/api_flags_t are bitfield
+      structs whose only word_t form is `operator word_t()` (C++-only). Added
+      api_version_to_word/api_flags_to_word C inlines reproducing the operator
+      bodies; placed AFTER the struct typedefs in the header (a forward INLINE
+      referencing the not-yet-defined type is an "unknown type name" error).
+
+  (d) A symbol defined in the kdb subsystem. kdebug_check_interrupt lives in
+      kdb/api/v4/tcb.cc (C++, mangled). Wrapping its debug.h decl in BEGIN_DECLS
+      gives the definition C linkage (kdb tcb.cc includes debug.h) and keeps the
+      other C++ callers consistent -- the same dup-decl-linkage lesson as
+      handle_interrupt, now across the kdb boundary.
+
+Verified: builds 359384 (warning-clean), boots, l4test region byte-identical
+(the KIP-read lock;nop path through exc_invalid_opcode is exercised). 11 .cc
+remain (schedule.cc + init.cc/debug.cc, plus the thread.cc/space.cc
+wrapper-hosts that stay C++).
