@@ -29,6 +29,7 @@ tcb_t * get_idle_tcb();
  *            generic tcb functions
  *
  **********************************************************************/
+#if defined(__cplusplus)
 INLINE word_t * tcb_t::get_stack_top()
 {
     return (word_t*)addr_offset(this, KTCB_SIZE);
@@ -220,6 +221,7 @@ INLINE void tcb_t::release_copy_area (void)
 {
     resources.release_copy_area (this, true);
 }
+#endif /* __cplusplus */
 
 
 #endif /* !__GLUE__V4_X86__TCB_H__ */

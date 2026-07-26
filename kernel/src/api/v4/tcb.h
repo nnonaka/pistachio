@@ -801,12 +801,17 @@ INLINE tcb_t * get_dummy_tcb()
     extern tcb_t *__dummy_tcb;
     return (tcb_t*)__dummy_tcb;
 }
+#endif /* __cplusplus */
 
 
-/* 
- * include glue header file 
+/*
+ * include glue header file -- included in both C and C++ so that C files can
+ * reach its C-safe parts (get_current_tcb() etc.); its C++-only tcb_t methods
+ * are guarded within the glue header itself.
  */
 #include INC_GLUE(tcb.h)
+
+#if defined(__cplusplus)
 
 
 /**********************************************************************

@@ -47,6 +47,7 @@
  * @param start MR start index
  * @param count number of MRs to be copied
  */
+#if defined(__cplusplus)
 INLINE void tcb_t::copy_mrs(tcb_t * dest, word_t start, word_t count)
 {
     ASSERT(start + count <= IPC_NUM_MR);
@@ -65,6 +66,7 @@ INLINE void tcb_t::copy_mrs(tcb_t * dest, word_t start, word_t count)
 	"D"(&dest->get_utcb()->mr[start]));
 
 }
+#endif /* __cplusplus */
 
 
 #endif /* !defined(CONFIG_X86_COMPATIBILITY_MODE) */
@@ -78,7 +80,8 @@ INLINE void tcb_t::copy_mrs(tcb_t * dest, word_t start, word_t count)
  **********************************************************************/
 
 #ifndef BUILD_TCB_LAYOUT
-#include <tcb_layout.h>
+#include <tcb_layout.h>	/* C-safe: pure offset #defines */
+#if defined(__cplusplus)
 #include <kdb/tracebuffer.h>
 
 /**
@@ -329,6 +332,7 @@ INLINE addr_t tcb_t::copy_area_real_address (addr_t addr)
      return addr_offset (resources.copy_area_real_address (copyarea_num),
                          (word_t) addr & (COPY_AREA_SIZE-1));
 }
+#endif /* __cplusplus */
 
 #endif /* !defined(BUILD_TCB_LAYOUT) */
 
@@ -361,9 +365,11 @@ INLINE tcb_t * get_current_tcb()
  * @param ip the initial instruction pointer           
  * @param sp the initial stack pointer
  */
+#if defined(__cplusplus)
 INLINE void tcb_t::arch_init_root_server (space_t * space, word_t ip, word_t sp)
-{ 
+{
 	space->space_control(sp, fpage_t::nilpage(), fpage_t::nilpage(), threadid_t::nilthread());
 }
+#endif /* __cplusplus */
 
 #endif /* !__GLUE_V4_X86__X64__TCB_H__ */
