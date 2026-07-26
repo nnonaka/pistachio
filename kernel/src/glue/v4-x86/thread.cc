@@ -203,6 +203,9 @@ BEGIN_DECLS
 void tcb_set_space (tcb_t *self, space_t *space)	{ self->set_space (space); }
 void tcb_init_saved_state (tcb_t *self)			{ self->init_saved_state (); }
 void tcb_dequeue_send (tcb_t *self, tcb_t *t)		{ self->dequeue_send (t); }
+void tcb_enqueue_send (tcb_t *self, tcb_t *t)		{ self->enqueue_send (t); }
+void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count) { self->copy_mrs (dest, start, count); }
+threadid_t tcb_get_saved_partner (tcb_t *self)		{ return self->get_saved_partner (); }
 void tcb_enqueue_present (tcb_t *self)			{ self->enqueue_present (); }
 void tcb_dequeue_present (tcb_t *self)			{ self->dequeue_present (); }
 void tcb_lock_init (tcb_t *self)			{ self->tcb_lock.init (); }

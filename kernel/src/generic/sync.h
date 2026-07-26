@@ -97,6 +97,12 @@ struct lockstate_t {
 };
 typedef struct lockstate_t lockstate_t;
 
+#if !defined(__cplusplus)
+/* C forms of the lockstate_t predicates (the flags union is C-visible). */
+INLINE bool lock_state_is_enabled (lockstate_t *self)	{ return self->flags.X.enabled; }
+INLINE bool lock_state_is_active (lockstate_t *self)	{ return self->flags.raw != 0; }
+#endif
+
 
 #endif
 

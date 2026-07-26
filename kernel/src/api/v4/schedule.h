@@ -84,6 +84,8 @@ void  sched_set_accounted_tcb (tcb_t *tcb);
 void  sched_schedule_current (void);
 void  sched_move_tcb (tcb_t *tcb, cpuid_t cpu);
 void  sched_schedule_interrupt (tcb_t *irq, tcb_t *handler);
+void  sched_remote_schedule (tcb_t *tcb);
+void  sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags);
 END_DECLS
 
 #if defined(__cplusplus)

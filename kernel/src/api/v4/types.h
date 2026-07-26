@@ -166,6 +166,8 @@ typedef struct timeout_t timeout_t;
 
 #if !defined(__cplusplus)
 INLINE timeout_t timeout_never (void) { timeout_t t; t.raw = 0; return t; }
+INLINE time_t timeout_get_rcv (const timeout_t *self) { return self->x.rcv_timeout; }
+INLINE time_t timeout_get_snd (const timeout_t *self) { return self->x.snd_timeout; }
 #endif
 
 

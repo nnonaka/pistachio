@@ -461,4 +461,8 @@ void sched_move_tcb (tcb_t *tcb, cpuid_t cpu)	{ get_current_scheduler ()->move_t
 threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self)	{ return self->get_scheduler (); }
 void sched_schedule_interrupt (tcb_t *irq, tcb_t *handler)
 { get_current_scheduler ()->schedule_interrupt (irq, handler); }
+void sched_remote_schedule (tcb_t *tcb)
+{ get_current_scheduler ()->remote_schedule (tcb); }
+void sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags)
+{ get_current_scheduler ()->schedule (dest1, dest2, (sched_flags_t) flags); }
 END_DECLS

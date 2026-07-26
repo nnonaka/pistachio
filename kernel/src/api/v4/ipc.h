@@ -175,6 +175,11 @@ INLINE word_t msg_tag_get_untyped (const msg_tag_t *self)	{ return self->x.untyp
 INLINE word_t msg_tag_get_typed (const msg_tag_t *self)		{ return self->x.typed; }
 INLINE bool   msg_tag_is_error (const msg_tag_t *self)		{ return self->x.error; }
 INLINE void   msg_tag_set_error (msg_tag_t *self)		{ self->x.error = 1; }
+INLINE word_t msg_tag_get_label (const msg_tag_t *self)		{ return self->x.label; }
+INLINE bool   msg_tag_is_propagated (const msg_tag_t *self)	{ return self->x.propagated; }
+INLINE void   msg_tag_set_propagated (msg_tag_t *self, bool val){ self->x.propagated = val; }
+INLINE void   msg_tag_set_xcpu (msg_tag_t *self)		{ self->x.xcpu = 1; }
+INLINE void   msg_tag_clear_receive_flags (msg_tag_t *self)	{ self->raw &= ~(0xeUL << 12); }
 INLINE void   msg_tag_set (msg_tag_t *self, word_t typed, word_t untyped, word_t label)
 {
     self->raw = 0;
