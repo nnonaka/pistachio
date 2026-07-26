@@ -141,6 +141,10 @@ addr_t tcb_get_user_ip (tcb_t *self)			{ return self->get_user_ip (); }
 addr_t tcb_get_user_sp (tcb_t *self)			{ return self->get_user_sp (); }
 void tcb_set_user_ip (tcb_t *self, addr_t ip)		{ self->set_user_ip (ip); }
 void tcb_set_user_sp (tcb_t *self, addr_t sp)		{ self->set_user_sp (sp); }
+word_t tcb_get_user_flags (tcb_t *self)			{ return self->get_user_flags (); }
+void tcb_set_user_flags (tcb_t *self, word_t flags)	{ self->set_user_flags (flags); }
+word_t tcb_get_user_handle (tcb_t *self)		{ return self->get_user_handle (); }
+void tcb_set_user_handle (tcb_t *self, word_t handle)	{ self->set_user_handle (handle); }
 void tcb_arch_init_root_server (tcb_t *self, space_t *space, word_t ip, word_t sp)
 					{ self->arch_init_root_server (space, ip, sp); }
 void tcb_init_stack (tcb_t *self)			{ self->init_stack (); }

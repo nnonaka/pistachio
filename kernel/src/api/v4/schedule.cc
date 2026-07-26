@@ -454,6 +454,8 @@ END_DECLS
 BEGIN_DECLS
 void xcpu_request_many (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3)
 { xcpu_request (dstcpu, handler, tcb, p0, p1, p2, p3); }
+void xcpu_request7 (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3, word_t p4, word_t p5, word_t p6)
+{ xcpu_request (dstcpu, handler, tcb, p0, p1, p2, p3, p4, p5, p6); }
 void sched_schedule_current (void)		{ get_current_scheduler ()->schedule (); }
 void sched_move_tcb (tcb_t *tcb, cpuid_t cpu)	{ get_current_scheduler ()->move_tcb (tcb, cpu); }
 threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self)	{ return self->get_scheduler (); }

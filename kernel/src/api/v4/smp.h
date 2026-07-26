@@ -312,6 +312,7 @@ void sync_xcpu_request(cpuid_t dstcpu, xcpu_handler_t handler,
 /* C wrapper for xcpu_request's first overload (defined in schedule.cc). */
 void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t param0);
 void xcpu_request_many (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3);
+void xcpu_request7 (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3, word_t p4, word_t p5, word_t p6);
 END_DECLS
 
 #endif /* CONFIG_SMP_SYNC_REQUEST */

@@ -160,28 +160,44 @@ END_DECLS
  *********************************************************************/
 
 
-#if defined(__cplusplus)
-class exregs_ctrl_t {
+/* Flag bit positions, named as macros so C can reference them; the C++
+   flag_e enum below aliases these. */
+#define EXREGS_CTRL_HALT_FLAG		0
+#define EXREGS_CTRL_RECV_FLAG		1
+#define EXREGS_CTRL_SEND_FLAG		2
+#define EXREGS_CTRL_SP_FLAG		3
+#define EXREGS_CTRL_IP_FLAG		4
+#define EXREGS_CTRL_FLAGS_FLAG		5
+#define EXREGS_CTRL_UHANDLE_FLAG	6
+#define EXREGS_CTRL_PAGER_FLAG		7
+#define EXREGS_CTRL_HALTFLAG_FLAG	8
+#define EXREGS_CTRL_CTRLXFER_CONF_FLAG	9
+#define EXREGS_CTRL_CTRLXFER_READ_FLAG	10
+#define EXREGS_CTRL_CTRLXFER_WRITE_FLAG	11
+#define EXREGS_CTRL_EXCHANDLER_FLAG	12
+#define EXREGS_CTRL_SCHEDULER_FLAG	13
 
-public:
+struct exregs_ctrl_t {
+#if defined(__cplusplus)
     enum flag_e {
-	halt_flag        	= 0,
-	recv_flag	 	= 1,
-	send_flag	 	= 2,
-	sp_flag	         	= 3,
-	ip_flag	         	= 4,
-	flags_flag	 	= 5,
-	uhandle_flag	 	= 6,
-	pager_flag	 	= 7,
-	haltflag_flag    	= 8,
-	ctrlxfer_conf_flag    	= 9,
-	ctrlxfer_read_flag    	= 10,
-	ctrlxfer_write_flag    	= 11,
-	exchandler_flag  	= 12,
-	scheduler_flag   	= 13,
+	halt_flag        	= EXREGS_CTRL_HALT_FLAG,
+	recv_flag	 	= EXREGS_CTRL_RECV_FLAG,
+	send_flag	 	= EXREGS_CTRL_SEND_FLAG,
+	sp_flag	         	= EXREGS_CTRL_SP_FLAG,
+	ip_flag	         	= EXREGS_CTRL_IP_FLAG,
+	flags_flag	 	= EXREGS_CTRL_FLAGS_FLAG,
+	uhandle_flag	 	= EXREGS_CTRL_UHANDLE_FLAG,
+	pager_flag	 	= EXREGS_CTRL_PAGER_FLAG,
+	haltflag_flag    	= EXREGS_CTRL_HALTFLAG_FLAG,
+	ctrlxfer_conf_flag    	= EXREGS_CTRL_CTRLXFER_CONF_FLAG,
+	ctrlxfer_read_flag    	= EXREGS_CTRL_CTRLXFER_READ_FLAG,
+	ctrlxfer_write_flag    	= EXREGS_CTRL_CTRLXFER_WRITE_FLAG,
+	exchandler_flag  	= EXREGS_CTRL_EXCHANDLER_FLAG,
+	scheduler_flag   	= EXREGS_CTRL_SCHEDULER_FLAG,
 
     };
-    
+#endif
+
     union {
 	struct {
 	    word_t halt			: 1;
@@ -203,16 +219,17 @@ public:
 	word_t raw;
     };
 
+#if defined(__cplusplus)
     exregs_ctrl_t (void) {}
     exregs_ctrl_t (word_t r) { raw = r; }
-    
-    bool is_set(flag_e flag) { return raw  & (1UL << flag); } 
-    void set(flag_e flag) { raw  |= (1UL << flag); } 
+
+    bool is_set(flag_e flag) { return raw  & (1UL << flag); }
+    void set(flag_e flag) { raw  |= (1UL << flag); }
 
     char *string()
 	{
 	    static char s[] =  "~~~~~~~~~~~~~~";
-	    
+
 	    s[0]  =  halt    		? 'h' : '~';
 	    s[1]  =  recv    		? 'r' : '~';
 	    s[2]  =  send    		? 's' : '~';
@@ -225,12 +242,25 @@ public:
 	    s[9]  =  ctrlxfer_conf	? 'C' : '~';
 	    s[10] =  ctrlxfer_read	? 'R' : '~';
 	    s[11] =  ctrlxfer_write	? 'W' : '~';
-	    s[12] =  exchandler		? 'e' : '~';	
+	    s[12] =  exchandler		? 'e' : '~';
 	    s[13] =  scheduler		? 's' : '~';
-	    
+
 	    return s;
 	}
+#endif /* __cplusplus */
 };
+typedef struct exregs_ctrl_t exregs_ctrl_t;
+
+#if !defined(__cplusplus)
+INLINE bool exregs_ctrl_is_set (const exregs_ctrl_t *self, word_t flag)
+{ return (self->raw & (1UL << flag)) != 0; }
+INLINE void exregs_ctrl_set (exregs_ctrl_t *self, word_t flag)
+{ self->raw |= (1UL << flag); }
+#endif /* !__cplusplus */
+
+/* Remaining syscall-control types stay C++-only (matched by the #endif far
+   below); only exregs_ctrl_t above needed a C form. */
+#if defined(__cplusplus)
 
 struct schedule_ctrl_t {
     union {
