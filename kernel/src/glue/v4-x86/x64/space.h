@@ -125,6 +125,13 @@ struct x86_top_pdir_t {
 };
 typedef struct x86_top_pdir_t x86_top_pdir_t;
 
+/* C forms of the x86_top_pdir_t kernel-pdp accessors (defined in space.cc,
+   which stays C++); used by glue/v4-x86/x64/space.c's pgent_smp_sync. */
+BEGIN_DECLS
+pgent_t *          x86_top_pdir_get_kernel_pdp_pgent (x86_top_pdir_t *self);
+x86_kernel_pdp_t * x86_top_pdir_get_kernel_pdp       (x86_top_pdir_t *self);
+END_DECLS
+
 /**
  * The address space representation
  */

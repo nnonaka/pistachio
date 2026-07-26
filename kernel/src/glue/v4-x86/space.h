@@ -468,6 +468,7 @@ BEGIN_DECLS
 void   space_populate_copy_area (space_t *self, word_t n, tcb_t *tcb, space_t *partner, cpuid_t cpu);
 void   space_delete_copy_area (space_t *self, word_t n, cpuid_t cpu);
 word_t space_get_top_pdir_phys (space_t *self, cpuid_t cpu);
+struct x86_top_pdir_t * space_get_top_pdir (space_t *self, cpuid_t cpu);
 void   space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu);
 bool   space_has_cpu_top_pdir (space_t *self, cpuid_t cpu);
 END_DECLS

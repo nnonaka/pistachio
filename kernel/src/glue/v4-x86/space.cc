@@ -1145,6 +1145,15 @@ void space_delete_copy_area (space_t *self, word_t n, cpuid_t cpu)
 word_t space_get_top_pdir_phys (space_t *self, cpuid_t cpu)
 { return (word_t) self->get_top_pdir_phys (cpu); }
 
+x86_top_pdir_t * space_get_top_pdir (space_t *self, cpuid_t cpu)
+{ return self->get_top_pdir (cpu); }
+
+pgent_t * x86_top_pdir_get_kernel_pdp_pgent (x86_top_pdir_t *self)
+{ return self->get_kernel_pdp_pgent (); }
+
+x86_kernel_pdp_t * x86_top_pdir_get_kernel_pdp (x86_top_pdir_t *self)
+{ return self->get_kernel_pdp (); }
+
 void space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu)
 { self->alloc_cpu_top_pdir (cpu); }
 
@@ -1222,6 +1231,12 @@ void pgent_revoke_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_
 
 void pgent_flush (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr)
 { self->flush (s, (pgent_t::pgsize_e) pgsize, kernel, vaddr); }
+
+word_t pgent_idx (pgent_t *self)
+{ return self->idx (); }
+
+bool pgent_is_cpulocal (pgent_t *self, struct space_t *s, word_t pgsize)
+{ return self->is_cpulocal (s, (pgent_t::pgsize_e) pgsize); }
 END_DECLS
 
 
