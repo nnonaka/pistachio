@@ -1870,3 +1870,52 @@ Four things specific to a broad boot orchestrator:
 Verified: builds 359952 (warning-clean, zero implicit declarations kernel-wide),
 boots (full init sequence), boottest PASS, l4test region byte-identical. 9 .cc
 remain (schedule.cc + the thread.cc/space.cc wrapper-hosts).
+
+## 60. api/v4/schedule.cc -> C: the scheduler, staged A1-A4 + B (2026-07-26, commits 03350bc c474a19 9230d40 6c673d1 da13b30)
+
+schedule.cc (474 -> 401 lines after wrapper migration): the scheduler
+orchestrator -- SYS_SCHEDULE, SYS_THREAD_SWITCH, the request queue, idle_thread,
+scheduler_t::init/start.  The last real keystone, and the one whose difficulty
+was most over-estimated.
+
+The pivotal finding (Step-A planning): schedule.cc reads NO scheduler_t
+instance data -- only the static request queue and method calls.  So
+scheduler_t : public policy_scheduler_t (= rr_scheduler_t) stays an opaque C++
+class with its inheritance intact; this is a normal opaque-class wrapper/asm-name
+flip like tcb.cc/space.cc, NOT the inheritance-flattening de-classing first
+feared.  Lesson: before assuming a C++ inheritance hierarchy must be flattened,
+check whether the file being flipped actually touches instance data or only
+calls methods / uses statics.
+
+Staged: A1 request/control data types dual-repped; A2 storage types
+(prio_queue_t/rr_scheduler_t/scheduler_t) dual-repped so the `scheduler` global
+can be *defined* in C -- scheduler_t's C rep is struct { policy_scheduler_t
+__base; } (empty derived class has the base layout); A3 the 6 policy-method
+wrappers in the permanent C++ host sched-rr/schedule.cc; A4 migrated the 24
+sched_* wrappers there too and added the request-queue C forms; B the flip.
+
+Flip-specific points:
+  - Only the two methods with external callers (init/start, reached via
+    sched_init/sched_start) got asm-names; add/process_schedule_requests have no
+    external callers and became plain file-static C functions -- no asm-name
+    needed.
+  - static class member -> global: scheduler_t::schedule_request_queue became a
+    plain extern global; the C++ schedule_requests_pending inline still finds it
+    by unqualified name.  Its zero-only ctor => C zero-init.
+  - protected method inlined: policy_scheduler_init (2 lines) inlined into
+    init() against the C-visible __base rather than exposed.
+  - a class value type with no C ctor (schedule_req_t): set the fields that the
+    C++ default ctor would have (req.valid = false), since C won't run it.
+  - a method defined in the flipped file but used elsewhere (time_t::operator<):
+    move its definition to a C++ host (glue thread.cc, beside its time_lt
+    wrapper) rather than trying to express operator< in C.
+
+Verified: builds 355888 (warning-clean, zero implicit declarations kernel-wide),
+boots (scheduler init/start/idle all run), boottest PASS, l4test byte-identical
+-- every subtest exercises the scheduler.
+
+MILESTONE: the entire api/v4 layer is now C (thread, ipc, ipcx, exregs,
+interrupt, schedule, space, mapping, kernelinterface, smp, processor).  The only
+built C++ that remains is glue/v4-x86/x64/init.cc (sub-arch GDT/TSS init) and the
+two wrapper-hosts glue/v4-x86/thread.cc + space.cc, which bridge the still-C++
+tcb_t/space_t/scheduler_t methods and would flip only by de-classing those types.
