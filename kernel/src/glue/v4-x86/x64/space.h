@@ -58,10 +58,17 @@ struct utcb_t;
 typedef struct utcb_t utcb_t;
 #endif
 
+#if defined(__cplusplus)
 #define PGSIZE_UTCB	(pgent_t::size_4k)
 #define PGSIZE_KTCB	(pgent_t::size_4k)
 #define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? pgent_t::size_2m : pgent_t::size_4k)
 #define PGSIZE_SIGMA    pgent_t::size_2m
+#else /* C: the pgsize_e values are the X86_PGSIZE_* macros. */
+#define PGSIZE_UTCB	X86_PGSIZE_4K
+#define PGSIZE_KTCB	X86_PGSIZE_4K
+#define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? X86_PGSIZE_2M : X86_PGSIZE_4K)
+#define PGSIZE_SIGMA    X86_PGSIZE_2M
+#endif
 
 //translation table (actual declaration in space.cc)
 #define TRANSLATION_TABLE_ENTRIES 32

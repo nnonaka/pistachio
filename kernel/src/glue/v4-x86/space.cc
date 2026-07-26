@@ -1358,6 +1358,12 @@ bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
 bool space_is_user_area (addr_t addr)				{ return space_t::is_user_area (addr); }
 void reload_user_segregs_c (void)				{ reload_user_segregs (); }
 space_t * get_kernel_space_c (void)				{ return get_kernel_space (); }
+void space_init_kernel_space (void)				{ space_t::init_kernel_space (); }
+void space_init_cpu_mappings (space_t *self, cpuid_t cpu)	{ self->init_cpu_mappings (cpu); }
+void space_remap_area (space_t *self, addr_t vaddr, addr_t paddr, word_t pgsize, word_t len, bool writable, bool kernel, bool global)
+			{ self->remap_area (vaddr, paddr, (pgent_t::pgsize_e) pgsize, len, writable, kernel, global); }
+void space_add_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t size, bool writable, bool kernel, bool global, bool cacheable)
+			{ self->add_mapping (vaddr, paddr, (pgent_t::pgsize_e) size, writable, kernel, global, cacheable); }
 bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
 bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }
 END_DECLS

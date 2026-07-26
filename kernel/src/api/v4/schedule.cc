@@ -467,4 +467,8 @@ void sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags)
 { get_current_scheduler ()->schedule (dest1, dest2, (sched_flags_t) flags); }
 bool sched_idle_hlt (void)
 { return get_current_scheduler ()->idle_hlt (); }
+void sched_init (bool bootcpu)
+{ get_current_scheduler ()->init (bootcpu); }
+void sched_start (cpuid_t cpu)
+{ get_current_scheduler ()->start (cpu); }
 END_DECLS

@@ -87,6 +87,8 @@ void  sched_schedule_interrupt (tcb_t *irq, tcb_t *handler);
 void  sched_remote_schedule (tcb_t *tcb);
 void  sched_schedule_two (tcb_t *dest1, tcb_t *dest2, word_t flags);
 bool  sched_idle_hlt (void);
+void  sched_init (bool bootcpu);
+void  sched_start (cpuid_t cpu);
 END_DECLS
 
 #if defined(__cplusplus)

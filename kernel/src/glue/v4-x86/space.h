@@ -512,6 +512,10 @@ bool      space_is_tcb_area (addr_t addr);
 bool      space_is_user_area (addr_t addr);
 void      reload_user_segregs_c (void);
 space_t * get_kernel_space_c (void);
+void      space_init_kernel_space (void);
+void      space_init_cpu_mappings (space_t *self, cpuid_t cpu);
+void      space_remap_area (space_t *self, addr_t vaddr, addr_t paddr, word_t pgsize, word_t len, bool writable, bool kernel, bool global);
+void      space_add_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t size, bool writable, bool kernel, bool global, bool cacheable);
 /* space_readmem is the asm-name of space_t::readmem (no wrapper needed). */
 bool      space_readmem (space_t *self, addr_t vaddr, word_t *contents);
 bool      space_is_copy_area (addr_t addr);
