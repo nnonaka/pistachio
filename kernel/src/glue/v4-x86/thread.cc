@@ -32,6 +32,9 @@
 #include INC_API(thread.h)
 #include INC_API(tcb.h)
 #include INC_API(interrupt.h)
+#include INC_API(space.h)
+#include INC_API(generic-archmap.h)
+#include INC_API(schedule.h)
 #include INC_ARCH_SA(tss.h)
 
 #if defined(CONFIG_IS_64BIT)
@@ -155,9 +158,61 @@ word_t tcb_get_utcb_location (tcb_t *self)		{ return self->get_utcb_location ();
 void tcb_set_global_id (tcb_t *self, threadid_t tid)	{ self->set_global_id (tid); }
 word_t tcb_get_error_code (tcb_t *self)			{ return self->get_error_code (); }
 void tcb_set_cpu (tcb_t *self, cpuid_t cpu)		{ self->set_cpu (cpu); }
+void tcb_set_utcb_location (tcb_t *self, word_t loc)	{ self->set_utcb_location (loc); }
 END_DECLS
 
 BEGIN_DECLS
 bool thread_control_interrupt_c (threadid_t irq_tid, threadid_t handler_tid)
 { return thread_control_interrupt (irq_tid, handler_tid); }
+END_DECLS
+
+
+/* C wrappers migrated from api/v4/thread.cc when it became C: they wrap tcb_t
+   methods defined in glue headers, or free functions, for the C api/v4 files. */
+BEGIN_DECLS
+word_t tcb_get_mr (tcb_t *self, word_t index)			{ return self->get_mr (index); }
+void   tcb_set_mr (tcb_t *self, word_t index, word_t value)	{ self->set_mr (index, value); }
+void   tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg) { self->notify (func, arg); }
+addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)	{ return self->copy_area_real_address (addr); }
+void   tcb_set_error_code (tcb_t *self, word_t err)		{ self->set_error_code (err); }
+bool   tcb_is_local_cpu (tcb_t *self)				{ return self->is_local_cpu (); }
+time_t tcb_get_xfer_timeout_snd (tcb_t *self)			{ return self->get_xfer_timeout_snd (); }
+time_t tcb_get_xfer_timeout_rcv (tcb_t *self)			{ return self->get_xfer_timeout_rcv (); }
+void   tcb_sched_set_timeout (tcb_t *self, time_t t)		{ self->sched_state.set_timeout (t); }
+u64_t  time_get_microseconds (time_t *self)			{ return self->get_microseconds (); }
+bool   time_lt (time_t a, time_t b)				{ return a < b; }
+tcb_t * get_idle_tcb_c (void)					{ return get_idle_tcb (); }
+tcb_t * get_dummy_tcb_c (void)					{ return get_dummy_tcb (); }
+void   handle_ipc_timeout_c (word_t state)			{ handle_ipc_timeout (state); }
+bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
+void   spin_forever_c (int pos)					{ spin_forever (pos); }
+void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush) { arch_unmap_fpage (from, fpage, flush); }
+END_DECLS
+
+BEGIN_DECLS
+void tcb_set_space (tcb_t *self, space_t *space)	{ self->set_space (space); }
+void tcb_init_saved_state (tcb_t *self)			{ self->init_saved_state (); }
+void tcb_dequeue_send (tcb_t *self, tcb_t *t)		{ self->dequeue_send (t); }
+void tcb_enqueue_present (tcb_t *self)			{ self->enqueue_present (); }
+void tcb_dequeue_present (tcb_t *self)			{ self->dequeue_present (); }
+void tcb_lock_init (tcb_t *self)			{ self->tcb_lock.init (); }
+void tcb_lock_state_init (tcb_t *self)
+{
+#if defined(CONFIG_SMP)
+    self->lock_state.init (true);
+#endif
+}
+void tcb_lock (tcb_t *self)				{ self->lock (); }
+void tcb_unlock (tcb_t *self)				{ self->unlock (); }
+END_DECLS
+
+BEGIN_DECLS
+void tcb_notify (tcb_t *self, void (*func)(void))	{ self->notify (func); }
+void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t a1, word_t a2)
+							{ self->notify (func, a1, a2); }
+END_DECLS
+
+BEGIN_DECLS
+void tcb_release_copy_area (tcb_t *self)		{ self->release_copy_area (); }
+void migrate_interrupt_start_c (tcb_t *tcb)		{ migrate_interrupt_start (tcb); }
 END_DECLS

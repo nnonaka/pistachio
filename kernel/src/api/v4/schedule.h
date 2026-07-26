@@ -81,6 +81,8 @@ u64_t sched_get_current_time (void);
 void  sched_deschedule (tcb_t *tcb);
 tcb_t * sched_get_accounted_tcb (void);
 void  sched_set_accounted_tcb (tcb_t *tcb);
+void  sched_schedule_current (void);
+void  sched_move_tcb (tcb_t *tcb, cpuid_t cpu);
 END_DECLS
 
 #if defined(__cplusplus)

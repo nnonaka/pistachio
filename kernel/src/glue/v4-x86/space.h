@@ -512,6 +512,11 @@ void      space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
 bool      space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
 void      space_move_tcb (space_t *self, tcb_t *tcb, cpuid_t src_cpu, cpuid_t dst_cpu);
 utcb_t *  space_allocate_utcb (space_t *self, tcb_t *tcb);
+void      space_switch_to_kernel_space (cpuid_t cpu);
+space_t * space_allocate_space (void);
+void      space_free_space (space_t *space);
+bool      mem_region_is_empty (struct mem_region_t *self);
+bool      fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end);
 /* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
    C symbol would corrupt the many external callers). This wrapper bridges it for
    linear_ptab_walker.c's readmem, writing the page size as a word_t. */

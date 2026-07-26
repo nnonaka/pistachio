@@ -450,3 +450,11 @@ void sched_ktcb_cancel_timeout (sched_ktcb_t *self)		{ self->cancel_timeout (); 
 void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue)
 							{ self->set_timeout (absolute_time, enqueue); }
 END_DECLS
+
+BEGIN_DECLS
+void xcpu_request_many (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t * tcb, word_t p0, word_t p1, word_t p2, word_t p3)
+{ xcpu_request (dstcpu, handler, tcb, p0, p1, p2, p3); }
+void sched_schedule_current (void)		{ get_current_scheduler ()->schedule (); }
+void sched_move_tcb (tcb_t *tcb, cpuid_t cpu)	{ get_current_scheduler ()->move_tcb (tcb, cpu); }
+threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self)	{ return self->get_scheduler (); }
+END_DECLS

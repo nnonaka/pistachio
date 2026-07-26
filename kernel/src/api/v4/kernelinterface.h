@@ -130,6 +130,7 @@ typedef struct utcb_info_t utcb_info_t;
 #if !defined(__cplusplus)
 INLINE word_t utcb_info_get_minimal_size (const utcb_info_t *self) { return 1 << self->size; }
 INLINE word_t utcb_info_get_utcb_size (const utcb_info_t *self) { return (1 << self->alignment) * self->multiplier; }
+INLINE bool utcb_info_is_valid_utcb_location (const utcb_info_t *self, word_t loc) { return (((1 << self->alignment) - 1) & loc) == 0; }
 #endif
 
 /**

@@ -103,6 +103,12 @@ typedef union {
 	} exregs;
 } misc_tcb_t;
 
+/* handle_ipc_error is defined in C (thread.c) and called from C++ (exregs.cc)
+   + used as a tcb_t friend below, so declare it with C linkage first. */
+BEGIN_DECLS
+void handle_ipc_error (void);
+END_DECLS
+
 /**
  * tcb_t: kernel thread control block
  */
@@ -114,6 +120,10 @@ public:
 	abort		= 1,
 	timeout		= 2,
     };
+#endif
+#define TCB_UNWIND_ABORT	1
+#define TCB_UNWIND_TIMEOUT	2
+#if defined(__cplusplus)
 
     /*
      * Generic flags go from bit zero and upwards.  Architecture
@@ -129,21 +139,21 @@ public:
     };
 
     /* public functions */
-    bool activate(void (*startup_func)(), threadid_t pager);
+    bool activate(void (*startup_func)(), threadid_t pager) __asm__("tcb_activate");
     
-    void create_inactive(threadid_t dest, threadid_t scheduler, sktcb_type_e type);
-    void create_kernel_thread(threadid_t dest, utcb_t * utcb, sktcb_type_e type);
+    void create_inactive(threadid_t dest, threadid_t scheduler, sktcb_type_e type) __asm__("tcb_create_inactive");
+    void create_kernel_thread(threadid_t dest, utcb_t * utcb, sktcb_type_e type) __asm__("tcb_create_kernel_thread");
     
-    void delete_tcb();
-    bool migrate_to_space(space_t * space);
-    bool migrate_to_processor(cpuid_t processor);
+    void delete_tcb() __asm__("tcb_delete_tcb");
+    bool migrate_to_space(space_t * space) __asm__("tcb_migrate_to_space");
+    bool migrate_to_processor(cpuid_t processor) __asm__("tcb_migrate_to_processor");
     
     bool exists() 
 	{ return space != NULL; }
     bool is_activated()
 	{ return utcb != NULL; }
 
-    void unwind (unwind_reason_e reason);
+    void unwind (unwind_reason_e reason) __asm__("tcb_unwind");
     
     /* queue manipulations */
     void enqueue_send(tcb_t * tcb, const bool head=false);
@@ -168,8 +178,8 @@ public:
     void set_state(thread_state_t state);
     thread_state_t get_state();
     arch_ktcb_t * get_arch();
-    void save_state (void);
-    void restore_state (void);
+    void save_state (void) __asm__("tcb_save_state");
+    void restore_state (void) __asm__("tcb_restore_state");
 
     /* ipc */
     void set_partner(threadid_t tid);
@@ -191,8 +201,8 @@ public:
     void set_br(word_t index, word_t value);
 
     msg_tag_t do_ipc(threadid_t to_tid, threadid_t from_tid, timeout_t timeout);
-    void send_pagefault_ipc(addr_t addr, addr_t ip, space_t::access_e access);
-    bool send_preemption_ipc();
+    void send_pagefault_ipc(addr_t addr, addr_t ip, space_t::access_e access) __asm__("tcb_send_pagefault_ipc");
+    bool send_preemption_ipc() __asm__("tcb_send_preemption_ipc");
     void return_from_ipc (void);
     void return_from_user_interruption (void);
 
@@ -270,7 +280,7 @@ public:
     /* interrupt management */
     void set_irq_handler(const threadid_t tid);
     threadid_t get_irq_handler();
-    bool is_interrupt_thread();
+    bool is_interrupt_thread() __asm__("tcb_is_interrupt_thread");
 
 public:
     static tcb_t *allocate(const threadid_t dest);
@@ -393,13 +403,12 @@ private:
 #endif /* __cplusplus */
 };
 
-#if defined(__cplusplus)
-
 /* union to allow allocation of tcb including stack */
 typedef union _whole_tcb_t {
     u8_t pad[KTCB_SIZE];
 } whole_tcb_t __attribute__((aligned(KTCB_SIZE)));
-    
+
+#if defined(__cplusplus)
 
 /**********************************************************************
  *
@@ -846,6 +855,10 @@ INLINE bool tcb_flags_is_set (const tcb_t *self, word_t bit)
     { return (self->flags.maskvalue & (1UL << bit)) != 0; }
 INLINE void tcb_flags_add (tcb_t *self, word_t bit)
     { self->flags.maskvalue |= (1UL << bit); }
+INLINE void tcb_flags_remove (tcb_t *self, word_t bit)
+    { self->flags.maskvalue &= ~(1UL << bit); }
+INLINE bool tcb_is_activated (const tcb_t *self)		{ return self->utcb != 0; }
+INLINE bool tcb_exists (const tcb_t *self)			{ return self->space != 0; }
 #endif /* !__cplusplus */
 
 /* Wrappers for the non-trivial tcb_t methods (defined in thread.cc), so C
@@ -895,6 +908,20 @@ void       tcb_set_global_id (tcb_t *self, threadid_t tid);
 word_t     tcb_get_error_code (tcb_t *self);
 bool       thread_control_interrupt_c (threadid_t irq_tid, threadid_t handler_tid);
 void       tcb_set_cpu (tcb_t *self, cpuid_t cpu);
+void       tcb_set_utcb_location (tcb_t *self, word_t loc);
+void       tcb_set_space (tcb_t *self, space_t *space);
+void       tcb_init_saved_state (tcb_t *self);
+void       tcb_dequeue_send (tcb_t *self, tcb_t *t);
+void       tcb_enqueue_present (tcb_t *self);
+void       tcb_dequeue_present (tcb_t *self);
+void       tcb_lock_init (tcb_t *self);
+void       tcb_lock_state_init (tcb_t *self);
+void       tcb_lock (tcb_t *self);
+void       tcb_unlock (tcb_t *self);
+void       tcb_notify (tcb_t *self, void (*func)(void));
+void       tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t a1, word_t a2);
+void       tcb_release_copy_area (tcb_t *self);
+void       migrate_interrupt_start_c (tcb_t *tcb);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);
 END_DECLS
@@ -926,36 +953,17 @@ INLINE bool tcb_t::is_local_cpu()
     return (get_current_cpu() == get_cpu());
 }
 
-void handle_ipc_timeout (word_t state);
-
-
-/**
- * creates a root server thread and a fresh space, if the 
- * creation fails the function does not return (assuming that root 
- * servers are functional necessary for the system)
- * 
- * @param dest_tid id of the thread to be created
- * @param scheduler_tid thread id of the scheduler
- * @param pager_tid thread id of the pager
- * @param utcb_area fpage describing the UTCB area
- * @param kip_area fpage describing the kernel interface page area
- * @return the newly created tcb
- */
-tcb_t * create_root_server(threadid_t dest_tid, threadid_t scheduler_tid, 
-			   threadid_t pager_tid, fpage_t utcb_area, fpage_t kip_area);
-
-/**
- * initializes the root servers
- */
-void init_root_servers();
-
-/**
- * initializes the kernel threads
- */
-void init_kernel_threads();
-
-
 #endif /* __cplusplus */
+
+/* Defined in C (api/v4/thread.c) but called from C++ (init.cc) or used as
+   function pointers, so they need C linkage.  handle_ipc_error keeps its
+   friend declaration above (it is used only within thread.c). */
+BEGIN_DECLS
+void handle_ipc_timeout (word_t state);
+void thread_return (void);
+void init_root_servers (void);
+void init_kernel_threads (void);
+END_DECLS
 
 #endif /* !__API__V4__TCB_H__ */
 

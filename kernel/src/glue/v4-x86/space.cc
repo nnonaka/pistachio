@@ -1365,3 +1365,12 @@ void space_move_tcb (space_t *self, tcb_t *tcb, cpuid_t src_cpu, cpuid_t dst_cpu
 					{ self->move_tcb (tcb, src_cpu, dst_cpu); }
 utcb_t * space_allocate_utcb (space_t *self, tcb_t *tcb)	{ return self->allocate_utcb (tcb); }
 END_DECLS
+
+BEGIN_DECLS
+void space_switch_to_kernel_space (cpuid_t cpu)	{ space_t::switch_to_kernel_space (cpu); }
+space_t * space_allocate_space (void)		{ return space_t::allocate_space (); }
+void space_free_space (space_t *space)		{ space_t::free_space (space); }
+bool mem_region_is_empty (mem_region_t *self)	{ return self->is_empty (); }
+bool fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end)
+						{ return self->is_range_in_fpage (start, end); }
+END_DECLS
