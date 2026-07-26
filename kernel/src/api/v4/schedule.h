@@ -74,6 +74,10 @@ static const sched_flags_t sched_rplywt  = FLAGFIELD3(sched_chk_flag, rr_tsdonat
    (defined in api/v4/schedule.cc). */
 BEGIN_DECLS
 void sched_handle_timer_interrupt(void);
+/* Current scheduler wrappers for C callers (defined in schedule.cc). flags is
+   a sched_flags_t value (sched_default/sched_handoff/...). */
+void  sched_schedule (tcb_t *dest, word_t flags);
+u64_t sched_get_current_time (void);
 END_DECLS
 
 #if defined(__cplusplus)

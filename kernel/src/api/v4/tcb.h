@@ -822,7 +822,38 @@ INLINE tcb_t * tcb_get_tcb (threadid_t tid)
     return (tcb_t *) ((KTCB_AREA_START) +
 	((threadid_get_threadno (&tid) & VALID_THREADNO_MASK) * KTCB_SIZE));
 }
+
+/* C accessors for tcb_t data members (private in C++, but plain fields in C).
+   The non-trivial methods (get_mr, notify, send_pagefault_ipc, ...) are wrapped
+   in thread.cc; scheduler/xcpu wrappers live in schedule.cc/smp.h. */
+INLINE cpuid_t    tcb_get_cpu (const tcb_t *self)		{ return self->cpu; }
+INLINE threadid_t tcb_get_global_id (const tcb_t *self)		{ return self->myself_global; }
+INLINE threadid_t tcb_get_partner (const tcb_t *self)		{ return self->partner; }
+INLINE space_t *  tcb_get_space (const tcb_t *self)		{ return self->space; }
+INLINE word_t     tcb_get_state (const tcb_t *self)		{ return self->thread_state.state; }
+INLINE void       tcb_set_state (tcb_t *self, word_t s)		{ self->thread_state.state = s; }
+INLINE tcb_t *    tcb_get_partner_tcb (const tcb_t *self)	{ return tcb_get_tcb (self->partner); }
+
+/* flags is a bitmask_word_t; poke its maskvalue directly (see bitmask.h). */
+#define TCB_FLAG_HAS_XFER_TIMEOUT	0	/* tcb_t::has_xfer_timeout */
+INLINE bool tcb_flags_is_set (const tcb_t *self, word_t bit)
+    { return (self->flags.maskvalue & (1UL << bit)) != 0; }
+INLINE void tcb_flags_add (tcb_t *self, word_t bit)
+    { self->flags.maskvalue |= (1UL << bit); }
 #endif /* !__cplusplus */
+
+/* Wrappers for the non-trivial tcb_t methods (defined in thread.cc), so C
+   files (api/v4/space.c, ...) can drive them. access is space_t::access_e
+   (a signed int enum), passed as int. */
+BEGIN_DECLS
+word_t tcb_get_mr (tcb_t *self, word_t index);
+void   tcb_set_mr (tcb_t *self, word_t index, word_t value);
+void   tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg);
+void   tcb_send_pagefault_ipc (tcb_t *self, addr_t addr, addr_t ip, int access);
+addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr);
+void   tcb_set_error_code (tcb_t *self, word_t err);
+bool   tcb_is_local_cpu (tcb_t *self);
+END_DECLS
 
 #if defined(__cplusplus)
 

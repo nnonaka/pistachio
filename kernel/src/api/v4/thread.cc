@@ -1625,3 +1625,17 @@ void SECTION(".init") init_root_servers()
 	roottask_space = tcb->get_space();
     }
 }
+
+
+/* C wrappers for the non-trivial tcb_t methods (declared in api/v4/tcb.h), so
+   C files such as api/v4/space.c can drive them. */
+BEGIN_DECLS
+word_t tcb_get_mr (tcb_t *self, word_t index)			{ return self->get_mr (index); }
+void   tcb_set_mr (tcb_t *self, word_t index, word_t value)	{ self->set_mr (index, value); }
+void   tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg) { self->notify (func, arg); }
+void   tcb_send_pagefault_ipc (tcb_t *self, addr_t addr, addr_t ip, int access)
+	{ self->send_pagefault_ipc (addr, ip, (space_t::access_e) access); }
+addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)	{ return self->copy_area_real_address (addr); }
+void   tcb_set_error_code (tcb_t *self, word_t err)		{ self->set_error_code (err); }
+bool   tcb_is_local_cpu (tcb_t *self)				{ return self->is_local_cpu (); }
+END_DECLS

@@ -408,3 +408,17 @@ void sched_handle_timer_interrupt(void)
     get_current_scheduler()->handle_timer_interrupt();
 }
 END_DECLS
+
+
+/* C wrappers for the current scheduler (declared in api/v4/schedule.h). */
+BEGIN_DECLS
+void sched_schedule (tcb_t *dest, word_t flags)
+{
+    get_current_scheduler ()->schedule (dest, (sched_flags_t) flags);
+}
+
+u64_t sched_get_current_time (void)
+{
+    return get_current_scheduler ()->get_current_time ();
+}
+END_DECLS

@@ -122,13 +122,20 @@ typedef struct x86_top_pdir_t x86_top_pdir_t;
  * The address space representation
  */
 struct x86_space_t {
+/* Hoisted so C (api/v4/space.c) can name the access kinds; the access_e enum
+   below aliases these.  access_e is a signed enum (readwrite = -1). */
+#define SPACE_ACCESS_READ	0
+#define SPACE_ACCESS_WRITE	2
+#define SPACE_ACCESS_READWRITE	(-1)
+#define SPACE_ACCESS_EXECUTE	16
+
 #if defined(__cplusplus)
 public:
     enum access_e {
-	read		= 0,
-	write		= 2,
-	readwrite	= -1,
-	execute		= 16
+	read		= SPACE_ACCESS_READ,
+	write		= SPACE_ACCESS_WRITE,
+	readwrite	= SPACE_ACCESS_READWRITE,
+	execute		= SPACE_ACCESS_EXECUTE
     };
 
     typedef x86_kernel_pdp_t kernel_pdp_t;
