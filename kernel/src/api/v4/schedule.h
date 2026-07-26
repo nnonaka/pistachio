@@ -356,7 +356,10 @@ extern void init_all_threads(void);
 
 #if defined(CONFIG_SMP)
 #include INC_API(smp.h)
+/* C linkage: referenced as a callback pointer from api/v4/interrupt.c. */
+BEGIN_DECLS
 extern void do_xcpu_send_irq(cpu_mb_entry_t * entry);
+END_DECLS
 #endif
 
 #if defined(CONFIG_DEBUG)

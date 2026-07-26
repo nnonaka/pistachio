@@ -66,8 +66,10 @@ class generic_intctrl_t {
     void handle_irq(word_t irq)		 { UNIMPLEMENTED(); }
 };
 
-/* callback function */
+/* callback function (defined in api/v4/interrupt.c with C linkage) */
+BEGIN_DECLS
 void handle_interrupt(word_t irq);
+END_DECLS
 
 #endif /* __cplusplus */
 #endif /* !__GENERIC__INTCTRL_H__ */

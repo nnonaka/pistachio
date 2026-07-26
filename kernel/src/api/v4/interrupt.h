@@ -34,6 +34,10 @@
 
 #include INC_GLUE(intctrl.h)
 
+/* api/v4/interrupt.c is C; these entry points keep C linkage so the C++
+   callers (init.cc, glue thread.cc wrappers) and the C definitions agree. */
+BEGIN_DECLS
+
 /**
  * handle_interrupt: callback function for interrupt handling in V4
  * param irq: IRQ number
@@ -43,7 +47,7 @@ void handle_interrupt(word_t irq);
 /**
  * initializes interrupt threads
  */
-void init_interrupt_threads();
+void init_interrupt_threads(void);
 
 /**
  * thread control for interrupt threads, sets handler function
@@ -58,5 +62,7 @@ bool thread_control_interrupt(threadid_t irq_tid, threadid_t handler_tid);
 void migrate_interrupt_start (tcb_t * tcb);
 void migrate_interrupt_end (tcb_t * tcb);
 #endif
+
+END_DECLS
 
 #endif /* __API__V4__INTERRUPT_H__ */
