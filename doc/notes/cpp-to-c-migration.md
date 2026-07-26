@@ -1446,3 +1446,45 @@ each was independently verifiable -- the pattern to reuse for any high-risk flip
   failure set against the pre-flip build" is the right bar for risky flips.
 
 Non-byte-identical (367864 -> 363752). Boots + mapping suites pass. 19 .cc remain.
+
+## 50. mapping.cc -> C: the mapping database, staged (2026-07-26, commits b425449 b405766)
+
+The old MDB (mapping-database) core -- the other half of the mapping engine
+(linear_ptab_walker §49 is the page-table half). Same silent-corruption risk,
+same staged approach.
+
+- **Self-contained flip.** mapping.cc is the ONLY built consumer of the
+  mapnode_t/rootnode_t methods -- mdb.cc/mdb_mem.cc are CONFIG_NEW_MDB (off,
+  unbuilt) and mdb_io.cc is CONFIG_X86_IO_FLEXPAGES (off). And its external
+  entry points (mdb_map/mdb_flush/init_mdb/sigma0_mapnode) were already bridged
+  by the walker work. So the whole flip touches only mapping.{cc,h} plus a
+  handful of new pgent/fpage wrappers.
+
+- **Step A (b425449) -- node methods as C inlines.** The ~34 mapnode_t/
+  rootnode_t methods are small bit/pointer ops on C-visible packed bitfields,
+  reimplemented in mapping.h's !__cplusplus branch. Byte-identical for C++
+  (mapping.o unchanged vs HEAD). The C++ overloads (get_pgent, set_backlink,
+  set_next, set_ptr) become distinctly-named C functions. **Critical trap:**
+  the packed pointers live in wide bitfields (prev_ptr:63, next_ptr:62,
+  space:53); in C, GCC promotes those to a *narrower int* before the shift and
+  truncates the pointer (C++ integral promotion keeps the 64-bit declared
+  type). Fix: cast the bitfield to word_t before shifting -- caught by
+  -Wint-to-pointer-cast, which is exactly the review signal to watch for on any
+  wide-bitfield-to-pointer reimplementation.
+
+- **Step B (b405766) -- the translation.** init_mdb/mdb_map/mdb_flush/helpers/
+  remove_map/create_* to C. mdb_map/mdb_flush become file-static; the 2a
+  mdb_map_c/mdb_flush_c wrappers become trivial pass-throughs (keeps the
+  verified walker.c untouched). init_mdb moves to BEGIN_DECLS so init.cc (C++)
+  resolves the C symbol (a C++ mangled-name link error flagged this). Overloads
+  are chosen by argument type at each call site. New wrappers: pgent_vaddr/
+  reference_bits/reset_reference_bits/update_reference_bits/revoke_rights/flush,
+  fpage_is_rwx.
+
+- **Verification.** mapping.c -Wconversion clean; boots; l4test Memory + Sigma0
+  pass; and "All tests" yields a failure set byte-identical to the pre-flip
+  build (same pre-existing, page-table-unrelated "Local destination Id"
+  failure on both). Diffing the test-suite failure set against the pre-flip
+  kernel is the standing bar for these mapping-engine flips.
+
+Non-byte-identical (363752 -> 363712). 18 .cc remain.
