@@ -304,6 +304,12 @@ public:
 };
 typedef struct acceptor_t acceptor_t;
 
+#if !defined(__cplusplus)
+/* C form of acceptor_t::set_rcv_window (the raw/x union is C-visible). */
+INLINE void acceptor_set_rcv_window (acceptor_t *self, fpage_t fpage)
+{ word_t window = fpage.raw >> 4; self->x.rcv_window = window & (~0UL >> 4); }
+#endif
+
 #if !defined(CONFIG_X_CTRLXFER_MSG)
 #define IPC_NUM_SAVED_MRS	3
 #else

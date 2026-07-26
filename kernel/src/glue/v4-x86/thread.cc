@@ -125,3 +125,33 @@ void tcb_t::create_startup_stack(void (*func)())
     push(stack, (word_t)func);
 }
 
+
+
+/* arch/utcb accessor wrappers for api/v4/thread.c (declared in api/v4/tcb.h). */
+BEGIN_DECLS
+msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t timeout)
+					{ return self->do_ipc (to, from, timeout); }
+void tcb_return_from_ipc (tcb_t *self)			{ self->return_from_ipc (); }
+void tcb_return_from_user_interruption (tcb_t *self)	{ self->return_from_user_interruption (); }
+addr_t tcb_get_user_ip (tcb_t *self)			{ return self->get_user_ip (); }
+addr_t tcb_get_user_sp (tcb_t *self)			{ return self->get_user_sp (); }
+void tcb_set_user_ip (tcb_t *self, addr_t ip)		{ self->set_user_ip (ip); }
+void tcb_set_user_sp (tcb_t *self, addr_t sp)		{ self->set_user_sp (sp); }
+void tcb_arch_init_root_server (tcb_t *self, space_t *space, word_t ip, word_t sp)
+					{ self->arch_init_root_server (space, ip, sp); }
+void tcb_init_stack (tcb_t *self)			{ self->init_stack (); }
+void tcb_create_startup_stack (tcb_t *self, void (*func)(void)) { self->create_startup_stack (func); }
+msg_tag_t tcb_get_tag (tcb_t *self)			{ return self->get_tag (); }
+void tcb_set_tag (tcb_t *self, msg_tag_t tag)		{ self->set_tag (tag); }
+word_t tcb_get_br (tcb_t *self, word_t index)		{ return self->get_br (index); }
+void tcb_set_br (tcb_t *self, word_t index, word_t value) { self->set_br (index, value); }
+threadid_t tcb_get_pager (tcb_t *self)			{ return self->get_pager (); }
+void tcb_set_pager (tcb_t *self, threadid_t tid)	{ self->set_pager (tid); }
+void tcb_set_exception_handler (tcb_t *self, threadid_t tid) { self->set_exception_handler (tid); }
+threadid_t tcb_get_virtual_sender (tcb_t *self)		{ return self->get_virtual_sender (); }
+void tcb_set_actual_sender (tcb_t *self, threadid_t tid)	{ self->set_actual_sender (tid); }
+word_t tcb_get_utcb_location (tcb_t *self)		{ return self->get_utcb_location (); }
+void tcb_set_global_id (tcb_t *self, threadid_t tid)	{ self->set_global_id (tid); }
+word_t tcb_get_error_code (tcb_t *self)			{ return self->get_error_code (); }
+void tcb_set_cpu (tcb_t *self, cpuid_t cpu)		{ self->set_cpu (cpu); }
+END_DECLS

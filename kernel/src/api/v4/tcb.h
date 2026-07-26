@@ -863,6 +863,31 @@ bool   time_lt (time_t a, time_t b);
 tcb_t * get_idle_tcb_c (void);
 tcb_t * get_dummy_tcb_c (void);
 void   handle_ipc_timeout_c (word_t state);
+/* arch/utcb accessor wrappers for api/v4/thread.c (defined in
+   glue/v4-x86/thread.cc, which stays C++). */
+msg_tag_t  tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t timeout);
+void       tcb_return_from_ipc (tcb_t *self);
+void       tcb_return_from_user_interruption (tcb_t *self);
+addr_t     tcb_get_user_ip (tcb_t *self);
+addr_t     tcb_get_user_sp (tcb_t *self);
+void       tcb_set_user_ip (tcb_t *self, addr_t ip);
+void       tcb_set_user_sp (tcb_t *self, addr_t sp);
+void       tcb_arch_init_root_server (tcb_t *self, space_t *space, word_t ip, word_t sp);
+void       tcb_init_stack (tcb_t *self);
+void       tcb_create_startup_stack (tcb_t *self, void (*func)(void));
+msg_tag_t  tcb_get_tag (tcb_t *self);
+void       tcb_set_tag (tcb_t *self, msg_tag_t tag);
+word_t     tcb_get_br (tcb_t *self, word_t index);
+void       tcb_set_br (tcb_t *self, word_t index, word_t value);
+threadid_t tcb_get_pager (tcb_t *self);
+void       tcb_set_pager (tcb_t *self, threadid_t tid);
+void       tcb_set_exception_handler (tcb_t *self, threadid_t tid);
+threadid_t tcb_get_virtual_sender (tcb_t *self);
+void       tcb_set_actual_sender (tcb_t *self, threadid_t tid);
+word_t     tcb_get_utcb_location (tcb_t *self);
+void       tcb_set_global_id (tcb_t *self, threadid_t tid);
+word_t     tcb_get_error_code (tcb_t *self);
+void       tcb_set_cpu (tcb_t *self, cpuid_t cpu);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);
 END_DECLS
