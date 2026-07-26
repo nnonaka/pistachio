@@ -1709,3 +1709,43 @@ warning check.
 
 Verified: builds 359168 (warning-clean), boots, l4test region byte-identical.
 13 .cc remain.
+
+## 56. api/v4/ipc.cc -> C: the IPC fast path (SYS_IPC), staged A/B (2026-07-26, commits 555c4d5 ed026bd)
+
+ipc.cc (724 lines): transfer_message + 4 SMP xcpu handlers + the SYS_IPC
+send/receive state machine -- the hottest path in the kernel (every IPC).
+Mostly free functions, so no atomic asm-name constraint; the biggest foundation
+so far but all one-liner forms.
+
+Step A (555c4d5): msg_tag C inlines (get_label, is_propagated, set_propagated,
+set_xcpu, clear_receive_flags); timeout_get_rcv/snd; lock_state_is_enabled/
+is_active (over lockstate_t's C-visible flags union, generic/sync.h); tcb
+wrappers (enqueue_send, copy_mrs, get_saved_partner); scheduler wrappers
+(sched_remote_schedule, sched_schedule_two). tcb_sched_set_timeout(time_t)
+already existed.
+
+Step B (ed026bd) translation notes:
+
+  (a) Cached-scheduler local dropped. The C++ cached `scheduler =
+      get_current_scheduler()` and called `scheduler->schedule(...)` many times.
+      The current scheduler never changes mid-syscall, so every use became the
+      sched_* current-scheduler wrapper (schedule/schedule_two/remote_schedule/
+      get_current_time) -- behavior-identical, no local needed.
+
+  (b) Repeated by-value getters -> spill once. get_partner()/get_global_id()
+      appear several times per condition; each returns threadid_t by value and
+      C can't take &(rvalue) for threadid_equals. Spill to a local once before
+      the condition. Two conditions needed a small `{ ... }` brace scope purely
+      to hold the spill locals (gnu99 would allow mid-block decls without them,
+      but the brace keeps the spill's lifetime obvious). Balance carefully --
+      the fall-through send-completion code lives after the block.
+
+  (c) return_ipc macro, rvalue args. Used only by ipc, so made language-neutral,
+      but several call sites pass rvalues -- return_ipc(from_tcb->get_local_id())
+      , return_ipc(current->get_partner()), return_ipc(NILTHREAD). The macro
+      takes &from, so spill `from` to a local threadid_t inside the macro body
+      first; that also collapses the original's double-evaluation of `from`.
+
+Verified: builds 359208 (warning-clean), boots, l4test region byte-identical --
+the Simple-IPC/Send/ReplyWait/Send-timeout/Receive-timeout subtests exercise
+this state machine directly. 12 .cc remain.
