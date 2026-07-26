@@ -55,6 +55,10 @@ DECLARE_TRACEPOINT(SYSCALL_THREAD_CONTROL_IRQ);
 static utcb_t *irq_utcb;
 static word_t irq_utcb_count;
 
+/* asm-named tcb_t methods (their C++ decls in tcb.h are invisible to C). */
+void tcb_create_kernel_thread (tcb_t *, threadid_t, utcb_t *, sktcb_type_e);
+bool tcb_is_interrupt_thread (tcb_t *);
+
 /* handler for dedicated irq threads (forward decl for notify() below) */
 static void irq_thread(void);
 
