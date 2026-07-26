@@ -589,3 +589,7 @@ void sched_init (bool bootcpu)
 void sched_start (cpuid_t cpu)
 { get_current_scheduler ()->start (cpu); }
 END_DECLS
+
+BEGIN_DECLS
+void sched_ktcb_sys_thread_switch (sched_ktcb_t *self) { self->sys_thread_switch (); }
+END_DECLS

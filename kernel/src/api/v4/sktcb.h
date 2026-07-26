@@ -152,6 +152,7 @@ void sched_ktcb_delete_tcb (sched_ktcb_t *self);
 void sched_ktcb_cancel_timeout (sched_ktcb_t *self);
 void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue);
 threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self);
+void sched_ktcb_sys_thread_switch (sched_ktcb_t *self);
 END_DECLS
 
 #endif /* !__API__V4__SKTCB_H__ */

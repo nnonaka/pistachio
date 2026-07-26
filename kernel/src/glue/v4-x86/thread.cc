@@ -185,11 +185,38 @@ time_t tcb_get_xfer_timeout_rcv (tcb_t *self)			{ return self->get_xfer_timeout_
 void   tcb_sched_set_timeout (tcb_t *self, time_t t)		{ self->sched_state.set_timeout (t); }
 u64_t  time_get_microseconds (time_t *self)			{ return self->get_microseconds (); }
 bool   time_lt (time_t a, time_t b)				{ return a < b; }
+
+/* time_t::operator< -- moved here (a C++ time_t method) when api/v4/schedule.cc
+   was flipped to C; time_lt above is its C entry point. */
+bool time_t::operator< (time_t & r)
+{
+    u64_t curtime = get_current_scheduler ()->get_current_time ();
+    u64_t l_to, r_to;
+
+    // Calculate absolute time of current time value
+    if (this->is_point ())
+	UNIMPLEMENTED ();
+    else if (this->is_never ())
+	l_to = ~0UL;
+    else
+	l_to = curtime + this->get_microseconds ();
+
+    // Calculate absolute time of right time value.
+    if (r.is_point ())
+	UNIMPLEMENTED ();
+    else if (r.is_never ())
+	r_to = ~0UL;
+    else
+	r_to = curtime + r.get_microseconds ();
+
+    return l_to < r_to;
+}
 tcb_t * get_idle_tcb_c (void)					{ return get_idle_tcb (); }
 tcb_t * get_dummy_tcb_c (void)					{ return get_dummy_tcb (); }
 void   handle_ipc_timeout_c (word_t state)			{ handle_ipc_timeout (state); }
 bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
 void   spin_forever_c (int pos)					{ spin_forever (pos); }
+void   initial_switch_to_c (tcb_t *tcb)				{ initial_switch_to (tcb); }
 void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush) { arch_unmap_fpage (from, fpage, flush); }
 void   arch_map_fpage_c (tcb_t *src, fpage_t snd_fpage, word_t snd_base, tcb_t *dst, fpage_t rcv_fpage, bool grant)
 					{ arch_map_fpage (src, snd_fpage, snd_base, dst, rcv_fpage, grant); }

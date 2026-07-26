@@ -169,6 +169,10 @@ struct schedule_request_queue_t
 };
 typedef struct schedule_request_queue_t schedule_request_queue_t;
 
+/* Was a scheduler_t static member; now a plain global (defined in
+   api/v4/schedule.c) so C and the C++ schedule_requests_pending inline agree. */
+extern schedule_request_queue_t schedule_request_queue[CONFIG_SMP_MAX_CPUS];
+
 #if !defined(__cplusplus)
 /* C forms of the schedule_request_queue_t methods (mirror the C++ inlines;
    the data + spinlock are C-visible). */
@@ -229,13 +233,13 @@ public:
     /**
      * initializes the scheduler, must be called before init
      */
-    void init(bool bootcpu = true );
+    void init(bool bootcpu = true ) __asm__ ("scheduler_init");
 
     /**
      * starts the scheduling, does not return
      * @param cpu processor the scheduler starts on
      */
-    void start(cpuid_t cpu = 0);
+    void start(cpuid_t cpu = 0) __asm__ ("scheduler_start");
 
     /**
      * dispatches a thread 
@@ -403,8 +407,6 @@ private:
      * @return next thread to be scheduled
      */
     tcb_t * find_next_thread(policy_sched_next_thread_t *p=NULL);
-
-    static schedule_request_queue_t schedule_request_queue[CONFIG_SMP_MAX_CPUS];
 };
 
 /**

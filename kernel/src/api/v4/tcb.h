@@ -855,6 +855,7 @@ INLINE void tcb_deallocate (threadid_t dest)			{ (void) dest; }
 
 /* flags is a bitmask_word_t; poke its maskvalue directly (see bitmask.h). */
 #define TCB_FLAG_HAS_XFER_TIMEOUT	0	/* tcb_t::has_xfer_timeout */
+#define TCB_FLAG_SCHEDULE_IN_PROGRESS	1	/* tcb_t::schedule_in_progress */
 INLINE bool tcb_flags_is_set (const tcb_t *self, word_t bit)
     { return (self->flags.maskvalue & (1UL << bit)) != 0; }
 INLINE void tcb_flags_add (tcb_t *self, word_t bit)

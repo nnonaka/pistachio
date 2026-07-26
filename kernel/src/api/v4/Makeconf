@@ -30,9 +30,9 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/api/v4/, exregs.c ipc.c ipcx.c kernelinterface.c thread.c schedule.cc space.c interrupt.c smp.c processor.c)
+SOURCES += $(addprefix src/api/v4/, exregs.c ipc.c ipcx.c kernelinterface.c thread.c schedule.c space.c interrupt.c smp.c processor.c)
 
-SOURCES += $(addprefix src/api/v4/sched-$(SCHED)/, schedule.cc)
+SOURCES += $(addprefix src/api/v4/sched-$(SCHED)/, schedule.c)
 
 ifeq ("$(CONFIG_X_CTRLXFER_MSG)","y")
 SOURCES+=	src/glue/$(API)-$(ARCH)/ipc.cc
