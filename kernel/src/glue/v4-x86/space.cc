@@ -1354,3 +1354,13 @@ bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
 bool space_is_copy_area (addr_t addr)				{ return space_t::is_copy_area (addr); }
 bool space_is_user_area_fpage (fpage_t fpage)			{ return space_t::is_user_area (fpage); }
 END_DECLS
+
+
+/* tcb reference-counting / utcb allocation wrappers for api/v4/thread.c. */
+BEGIN_DECLS
+void space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)	{ self->add_tcb (tcb, cpu); }
+bool space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)	{ return self->remove_tcb (tcb, cpu); }
+void space_move_tcb (space_t *self, tcb_t *tcb, cpuid_t src_cpu, cpuid_t dst_cpu)
+					{ self->move_tcb (tcb, src_cpu, dst_cpu); }
+utcb_t * space_allocate_utcb (space_t *self, tcb_t *tcb)	{ return self->allocate_utcb (tcb); }
+END_DECLS

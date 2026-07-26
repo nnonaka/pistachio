@@ -1656,3 +1656,8 @@ bool   is_privileged_space_c (space_t *space)	{ return is_privileged_space (spac
 void   spin_forever_c (int pos)			{ spin_forever (pos); }
 void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush) { arch_unmap_fpage (from, fpage, flush); }
 END_DECLS
+
+
+BEGIN_DECLS
+tcb_t * get_dummy_tcb_c (void)	{ return get_dummy_tcb (); }
+END_DECLS

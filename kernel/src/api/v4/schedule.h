@@ -78,6 +78,9 @@ void sched_handle_timer_interrupt(void);
    a sched_flags_t value (sched_default/sched_handoff/...). */
 void  sched_schedule (tcb_t *dest, word_t flags);
 u64_t sched_get_current_time (void);
+void  sched_deschedule (tcb_t *tcb);
+tcb_t * sched_get_accounted_tcb (void);
+void  sched_set_accounted_tcb (tcb_t *tcb);
 END_DECLS
 
 #if defined(__cplusplus)

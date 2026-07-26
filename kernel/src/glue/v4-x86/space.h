@@ -507,6 +507,11 @@ fpage_t   space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unma
 bool      space_is_tcb_area (addr_t addr);
 bool      space_is_copy_area (addr_t addr);
 bool      space_is_user_area_fpage (fpage_t fpage);
+/* tcb reference-counting / utcb allocation for api/v4/thread.c. */
+void      space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
+bool      space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
+void      space_move_tcb (space_t *self, tcb_t *tcb, cpuid_t src_cpu, cpuid_t dst_cpu);
+utcb_t *  space_allocate_utcb (space_t *self, tcb_t *tcb);
 /* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
    C symbol would corrupt the many external callers). This wrapper bridges it for
    linear_ptab_walker.c's readmem, writing the page size as a word_t. */

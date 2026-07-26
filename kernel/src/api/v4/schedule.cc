@@ -431,3 +431,11 @@ void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t *tcb, word_t 
     xcpu_request (dstcpu, handler, tcb, param0);
 }
 END_DECLS
+
+
+/* More current-scheduler wrappers for api/v4/thread.c (declared in schedule.h). */
+BEGIN_DECLS
+void sched_deschedule (tcb_t *tcb)		{ get_current_scheduler ()->deschedule (tcb); }
+tcb_t * sched_get_accounted_tcb (void)		{ return get_current_scheduler ()->get_accounted_tcb (); }
+void sched_set_accounted_tcb (tcb_t *tcb)	{ get_current_scheduler ()->set_accounted_tcb (tcb); }
+END_DECLS

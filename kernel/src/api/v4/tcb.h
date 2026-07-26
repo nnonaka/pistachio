@@ -861,6 +861,7 @@ void   tcb_sched_set_timeout (tcb_t *self, time_t t);
 u64_t  time_get_microseconds (time_t *self);
 bool   time_lt (time_t a, time_t b);
 tcb_t * get_idle_tcb_c (void);
+tcb_t * get_dummy_tcb_c (void);
 void   handle_ipc_timeout_c (word_t state);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);
