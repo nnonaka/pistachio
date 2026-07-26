@@ -40,18 +40,27 @@
 
 #define IS_CONSISTENT (true)
 
+/* Enumerator values, named as macros so C (and assembly via asmsyms) can
+   reference them; the C++ state_e enum below aliases these. */
+#define QUEUE_STATE_READY	1
+#define QUEUE_STATE_WAKEUP	2
+#define QUEUE_STATE_LATE_WAKEUP	4
+#define QUEUE_STATE_WAIT	8
+#define QUEUE_STATE_SEND	16
+#define QUEUE_STATE_XCPU	32
+
 struct queue_state_t
 {
     word_t state;
 #if defined(__cplusplus)
     enum state_e
     {
-	ready		= 1,
-	wakeup		= 2,
-	late_wakeup	= 4,
-	wait		= 8,
-	send		= 16,
-	xcpu		= 32,
+	ready		= QUEUE_STATE_READY,
+	wakeup		= QUEUE_STATE_WAKEUP,
+	late_wakeup	= QUEUE_STATE_LATE_WAKEUP,
+	wait		= QUEUE_STATE_WAIT,
+	send		= QUEUE_STATE_SEND,
+	xcpu		= QUEUE_STATE_XCPU,
     };
     void init();
     void clear(state_e state);

@@ -41,6 +41,22 @@
 #define RUNNABLE_STATE(id)	((id << 1) | 0)
 #define BLOCKED_STATE(id)	((id << 1) | 1)
 
+/* Enumerator values, named as macros so C (and assembly via asmsyms) can
+   reference them; the C++ thread_state_e enum below aliases these. */
+#define THREAD_STATE_RUNNING			RUNNABLE_STATE(1)
+#define THREAD_STATE_WAITING_FOREVER		BLOCKED_STATE(~0UL)
+#define THREAD_STATE_WAITING_TIMEOUT		BLOCKED_STATE(2)
+#define THREAD_STATE_WAITING_TUNNELED_PF	BLOCKED_STATE(10)
+#define THREAD_STATE_LOCKED_WAITING		BLOCKED_STATE(3)
+#define THREAD_STATE_LOCKED_RUNNING		RUNNABLE_STATE(4)
+#define THREAD_STATE_LOCKED_RUNNING_IPC_DONE	RUNNABLE_STATE(9)
+#define THREAD_STATE_LOCKED_RUNNING_NESTED	RUNNABLE_STATE(11)
+#define THREAD_STATE_POLLING			BLOCKED_STATE(5)
+#define THREAD_STATE_HALTED			BLOCKED_STATE(6)
+#define THREAD_STATE_ABORTED			BLOCKED_STATE(7)
+#define THREAD_STATE_XCPU_WAITING_DELTCB	BLOCKED_STATE(8)
+#define THREAD_STATE_XCPU_WAITING_EXREGS	BLOCKED_STATE(12)
+
 /**
  * thread_state_t: current thread state
  */
@@ -53,19 +69,19 @@ struct thread_state_t
 public:
     enum thread_state_e
     {
-	running			= RUNNABLE_STATE(1),
-	waiting_forever		= BLOCKED_STATE(~0UL),
-	waiting_timeout		= BLOCKED_STATE(2),
-	waiting_tunneled_pf	= BLOCKED_STATE(10),
-	locked_waiting		= BLOCKED_STATE(3),
-	locked_running		= RUNNABLE_STATE(4),
-	locked_running_ipc_done	= RUNNABLE_STATE(9),
-	locked_running_nested	= RUNNABLE_STATE(11),
-	polling			= BLOCKED_STATE(5),
-	halted			= BLOCKED_STATE(6),
-	aborted			= BLOCKED_STATE(7),
-	xcpu_waiting_deltcb    	= BLOCKED_STATE(8),
-	xcpu_waiting_exregs    	= BLOCKED_STATE(12),
+	running			= THREAD_STATE_RUNNING,
+	waiting_forever		= THREAD_STATE_WAITING_FOREVER,
+	waiting_timeout		= THREAD_STATE_WAITING_TIMEOUT,
+	waiting_tunneled_pf	= THREAD_STATE_WAITING_TUNNELED_PF,
+	locked_waiting		= THREAD_STATE_LOCKED_WAITING,
+	locked_running		= THREAD_STATE_LOCKED_RUNNING,
+	locked_running_ipc_done	= THREAD_STATE_LOCKED_RUNNING_IPC_DONE,
+	locked_running_nested	= THREAD_STATE_LOCKED_RUNNING_NESTED,
+	polling			= THREAD_STATE_POLLING,
+	halted			= THREAD_STATE_HALTED,
+	aborted			= THREAD_STATE_ABORTED,
+	xcpu_waiting_deltcb    	= THREAD_STATE_XCPU_WAITING_DELTCB,
+	xcpu_waiting_exregs    	= THREAD_STATE_XCPU_WAITING_EXREGS,
     };
 
     /* constructors */

@@ -100,11 +100,12 @@ void make_offsets()						\n\
 # Temporary object file
 ASMSYMS=	$(BUILDDIR)/asmsyms.o
 
-# Find all asmsyms.cc files
+# Find all asmsyms.c / asmsyms.cc files
 SYMSRCS=	$(subst $(SRCDIR)/,,\
 		  $(wildcard \
 		    $(addprefix $(SRCDIR)/, \
-		      $(addsuffix /asmsyms.cc, $(SRCSRC)))))
+		      $(addsuffix /asmsyms.cc, $(SRCSRC)) \
+		      $(addsuffix /asmsyms.c, $(SRCSRC)))))
 
 SYMOBJS=	$(patsubst %.cc, %.o, \
 		  $(patsubst %.c, %.o, \

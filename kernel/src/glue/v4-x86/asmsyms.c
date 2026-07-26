@@ -36,12 +36,12 @@
 #include INC_API(kernelinterface.h)
 #include INC_API(queuestate.h)
 
-MKASMSYM (TSTATE_POLLING, (word_t) thread_state_t::polling);
-MKASMSYM (TSTATE_WAITING_FOREVER, (word_t) thread_state_t::waiting_forever);
-MKASMSYM (TSTATE_RUNNING, (word_t) thread_state_t::running);
+MKASMSYM (TSTATE_POLLING, (word_t) THREAD_STATE_POLLING);
+MKASMSYM (TSTATE_WAITING_FOREVER, (word_t) THREAD_STATE_WAITING_FOREVER);
+MKASMSYM (TSTATE_RUNNING, (word_t) THREAD_STATE_RUNNING);
 
-MKASMSYM (QSTATE_WAKEUP, (word_t) queue_state_t::wakeup);
-MKASMSYM (QSTATE_LATE_WAKEUP, (word_t) queue_state_t::late_wakeup);
+MKASMSYM (QSTATE_WAKEUP, (word_t) QUEUE_STATE_WAKEUP);
+MKASMSYM (QSTATE_LATE_WAKEUP, (word_t) QUEUE_STATE_LATE_WAKEUP);
 
 MKASMSYM (OFS_KIP_PROCDESC, offsetof(kernel_interface_page_t, proc_desc_ptr));
 MKASMSYM (OFS_PROCDESC_INTFREQ, offsetof(procdesc_t, internal_freq));
