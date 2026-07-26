@@ -834,6 +834,12 @@ INLINE word_t     tcb_get_state (const tcb_t *self)		{ return self->thread_state
 INLINE void       tcb_set_state (tcb_t *self, word_t s)		{ self->thread_state.state = s; }
 INLINE tcb_t *    tcb_get_partner_tcb (const tcb_t *self)	{ return tcb_get_tcb (self->partner); }
 
+/* Dynamic-KTCB allocate/deallocate (CONFIG_STATIC_TCBS off): the TCB area is
+   demand-paged, so allocation just touches the page and clears the stack. */
+INLINE tcb_t * tcb_allocate (threadid_t dest)
+    { tcb_t *tcb = tcb_get_tcb (dest); tcb->kernel_stack[0] = 0; return tcb; }
+INLINE void tcb_deallocate (threadid_t dest)			{ (void) dest; }
+
 /* flags is a bitmask_word_t; poke its maskvalue directly (see bitmask.h). */
 #define TCB_FLAG_HAS_XFER_TIMEOUT	0	/* tcb_t::has_xfer_timeout */
 INLINE bool tcb_flags_is_set (const tcb_t *self, word_t bit)
@@ -887,6 +893,7 @@ void       tcb_set_actual_sender (tcb_t *self, threadid_t tid);
 word_t     tcb_get_utcb_location (tcb_t *self);
 void       tcb_set_global_id (tcb_t *self, threadid_t tid);
 word_t     tcb_get_error_code (tcb_t *self);
+bool       thread_control_interrupt_c (threadid_t irq_tid, threadid_t handler_tid);
 void       tcb_set_cpu (tcb_t *self, cpuid_t cpu);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);

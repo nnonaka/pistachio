@@ -129,6 +129,7 @@ typedef struct utcb_info_t utcb_info_t;
 
 #if !defined(__cplusplus)
 INLINE word_t utcb_info_get_minimal_size (const utcb_info_t *self) { return 1 << self->size; }
+INLINE word_t utcb_info_get_utcb_size (const utcb_info_t *self) { return (1 << self->alignment) * self->multiplier; }
 #endif
 
 /**
@@ -150,6 +151,7 @@ typedef struct kip_area_info_t kip_area_info_t;
 
 #if !defined(__cplusplus)
 INLINE word_t kip_area_info_get_size (const kip_area_info_t *self) { return 1 << self->size; }
+INLINE word_t kip_area_info_get_size_log2 (const kip_area_info_t *self) { return self->size; }
 #endif
 
 /**
@@ -191,6 +193,12 @@ struct thread_info_t
 #endif
 };
 typedef struct thread_info_t thread_info_t;
+
+#if !defined(__cplusplus)
+INLINE word_t thread_info_get_user_base (const thread_info_t *self)	{ return self->user_base; }
+INLINE word_t thread_info_get_system_base (const thread_info_t *self)	{ return self->system_base; }
+INLINE void   thread_info_set_user_base (thread_info_t *self, word_t base) { self->user_base = base & 0xfff; }
+#endif
 
 /**
  * info for supported page access rights and page sizes

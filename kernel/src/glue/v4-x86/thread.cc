@@ -31,6 +31,7 @@
 #include INC_GLUE(config.h)
 #include INC_API(thread.h)
 #include INC_API(tcb.h)
+#include INC_API(interrupt.h)
 #include INC_ARCH_SA(tss.h)
 
 #if defined(CONFIG_IS_64BIT)
@@ -154,4 +155,9 @@ word_t tcb_get_utcb_location (tcb_t *self)		{ return self->get_utcb_location ();
 void tcb_set_global_id (tcb_t *self, threadid_t tid)	{ self->set_global_id (tid); }
 word_t tcb_get_error_code (tcb_t *self)			{ return self->get_error_code (); }
 void tcb_set_cpu (tcb_t *self, cpuid_t cpu)		{ self->set_cpu (cpu); }
+END_DECLS
+
+BEGIN_DECLS
+bool thread_control_interrupt_c (threadid_t irq_tid, threadid_t handler_tid)
+{ return thread_control_interrupt (irq_tid, handler_tid); }
 END_DECLS

@@ -1253,6 +1253,7 @@ bool   fpage_is_overlapping (fpage_t *self, fpage_t other)	{ return self->is_ove
 word_t fpage_get_size (fpage_t *self)				{ return self->get_size (); }
 fpage_t fpage_complete_mem (void)				{ return fpage_t::complete_mem (); }
 void   fpage_set_rwx_all (fpage_t *self)			{ self->set_rwx (); }
+fpage_t fpage_nilpage (void)					{ return fpage_t::nilpage (); }
 
 /* space_t */
 pgent_t * space_pgent (space_t *self, word_t num)		{ return self->pgent (num); }
