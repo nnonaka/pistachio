@@ -1488,3 +1488,44 @@ same staged approach.
   kernel is the standing bar for these mapping-engine flips.
 
 Non-byte-identical (363752 -> 363712). 18 .cc remain.
+
+## 51. api/v4/space.cc -> C: the first orchestrator, staged A/B1/B2 (2026-07-26, commits 1ccc1fd ffb549a 19bad20)
+
+The first tcb-coupled orchestrator. Unlike the self-contained mapping files, it
+drives ~18 tcb_t methods, the scheduler, xcpu, time_t, the KIP and the syscall
+machinery -- so it needed a real accessor batch first. Three commits.
+
+- **Step A (1ccc1fd) -- reusable tcb_t + scheduler C-API.** tcb_t data members
+  are private in C++ but plain fields in C, so member reads (cpu, myself_global,
+  partner, space, thread_state.state, flags) become C-only INLINE accessors in
+  tcb.h; the non-trivial methods (get_mr, notify, send_pagefault_ipc, ...) are
+  wrappers in thread.cc (the tcb implementation file, still C++). scheduler ->
+  sched_schedule/sched_get_current_time in schedule.cc. This batch is what
+  thread.cc/ipc.cc/schedule.cc will all reuse.
+
+- **Step B1 (ffb549a) -- the space-specific glue.** ~12 space_t method wrappers,
+  fpage extras, xcpu_request_c, time_t C-forms (is_zero/is_never inline;
+  get_microseconds/operator< wrapped in C++), KIP size accessors. All additive
+  and byte-identical for C++ (space.o unchanged vs HEAD).
+
+- **Step B2 (19bad20) -- the translation.** handle_pagefault/free via __asm__
+  labels; the two syscalls stay syscall-shaped because SYSCALL_ATTR is empty on
+  x64 and sys_space_control/sys_unmap are ALREADY called from the C syscall
+  dispatch (x64/syscalls.c) -- flipping the definitions to C aligns the linkage
+  rather than breaking it.
+
+Key lessons (reusable for thread/ipc/schedule):
+- **enum out-params / enum-typed params need the exact width.** access_e is a
+  *signed* enum (readwrite=-1); handle_pagefault takes it as `int`, not word_t,
+  so the ABI matches its C++ callers -- same trap as lookup_mapping's pgsize_e.
+- **hoist the C++ enums the file names.** access_e -> SPACE_ACCESS_*,
+  thread_state_t::X was already THREAD_STATE_* (asmsyms era); the C side uses the
+  macros.
+- **overloaded no-arg vs word_t methods** need distinct wrappers: fpage set_rwx()
+  (sets mem.x.r/w/x bits) is NOT set_rwx(7), so fpage_set_rwx_all is separate.
+- **dual-repped value types pay off:** time_t/mdb_ctrl_t/thread_state_t all carry
+  C-visible data, so predicates reimplement in C and only the arithmetic-heavy
+  methods (time_t::get_microseconds/operator<) need C++ wrappers.
+
+Verified: handle_pagefault runs on every demand-paged page during boot;
+l4test "All tests" failure set identical to the pre-flip kernel. 17 .cc remain.
