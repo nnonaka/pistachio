@@ -1352,3 +1352,53 @@ each got one narrow C entry point instead.
   TU includes it.
 
 Non-byte-identical (361728 -> 361496). Boots (SMP, idle thread up). 21 .cc remain.
+
+## 48. glue/v4-x86/resources.cc -> resources.c: __asm__-label method flip + accessor batch (2026-07-26, commit b9e41a4)
+
+Ninth Pass-B flip. thread_resources_t (FPU state + IPC copy areas) was already
+dual-repped and save/load already carried __asm__("tcb_resources_save"/"...load")
+labels because trap.S calls them by name. Two lessons stand out.
+
+- **__asm__ label = zero-forwarder method->C conversion.** For a non-virtual
+  method with C++ callers, give its *declaration* an __asm__("c_symbol") label,
+  then define a plain C function `c_symbol(ClassT *self, ...args)`. Every C++
+  `obj.method(args)` compiles to a call of `c_symbol` with `&obj` as the leading
+  argument -- which is exactly the C function's first parameter. No forwarder, no
+  mangled-name mismatch, and asm callers (trap.S) resolve to the same symbol. Did
+  this for all six methods here (save/load already had labels; added purge/init/
+  free/x86_no_math_exception/release_copy_area). Cheaper than the inline-forwarder
+  pattern when the class is dual-repped and the method leaves the header anyway.
+  Caveat: it de-inlines (release_copy_area was INLINE) -- kernel grew 361496->361720.
+
+- **tcb_t data members are already C-visible; only its methods are guarded.** The
+  keystone tcb_t isn't flipped, but its struct body declares all data members
+  outside `#if __cplusplus` (only methods/enums/friends are inside). So a C file
+  reads tcb->resource_bits, ->partner, ->misc.saved_state[l].partner, ->space,
+  ->cpu, ->pdir_cache, ->resources.fpu_state directly -- no accessor needed for
+  plain field reads. Only *behaviour* (get_tcb address math, space_t methods)
+  needs C entry points. This is why "flip a leaf that uses tcb_t" is tractable
+  well before tcb_t itself flips.
+
+- **Accessor batch (reused by the coming thread.cc/space.cc):** resource_bits_*
+  (poke bitmask_word_t::maskvalue, param typed word_t not resource_type_e to
+  dodge the api<->glue resources.h include cycle that defines the enum *after*
+  including the accessors); x86_fpu_* and x86_mmu_* (C mirrors of the static-only
+  holder classes, same asm bodies); tcb_get_tcb (INLINE, dynamic-KTCB branch);
+  and space_{populate,delete}_copy_area / {get_top_pdir_phys,alloc_cpu_top_pdir,
+  has_cpu_top_pdir} as BEGIN_DECLS wrappers in space.cc (space_t stays C++;
+  get_top_pdir_phys returns word_t so C needn't know x86_pgent_t).
+
+- **Include-cycle gotcha:** api/v4/resources.h includes glue resources.h, which
+  includes api/v4/resources.h *before* defining `enum resource_type_e`. So an
+  INLINE in api/v4/resources.h must not name resource_type_e (it isn't defined on
+  the glue-first include path). Typing the param word_t sidesteps it -- the enum
+  constants (FPU/COPY_AREA/...) pass through as ints fine.
+
+- **Dead-branch discipline:** CONFIG_X86_SMALL_SPACES / FPU_REENABLE /
+  CONFIG_X_X86_HVM are off here; their bodies are dropped-with-a-note rather than
+  ported (HVM's tcb->get_arch()->disable_hvm() has no C form yet). IS_SPACE_GLOBAL
+  is a C++-only macro that is `false` in this config, so release_copy_area flushes
+  the TLB with a literal false and a comment.
+
+Non-byte-identical (361496 -> 361720; de-inlining). Boots; save/load exercised on
+every context switch via trap.S. 20 .cc remain.
