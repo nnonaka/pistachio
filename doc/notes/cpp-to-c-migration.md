@@ -1829,3 +1829,44 @@ passed by address to the kdb entry which owns its own copy); spinlock_unlock;
 sync_debug drops extern "C" (already BEGIN_DECLS in arch/x86/sync.h). And KDB
 still fully works (renders the prompt, runs commands), which is the real
 end-to-end test of the ctor timing. 10 .cc remain.
+
+## 59. glue/v4-x86/init.cc -> C: the boot orchestrator, staged A1-A3 + B (2026-07-26, commits b1fc872 055faf1 d07d4b7 2e6235c)
+
+init.cc (578 lines): startup_system + init_cpu + the SMP AP-startup path -- the
+boot code that drives every subsystem. The largest foundation of the migration
+(~30 C forms across ~12 subsystems), so it was staged: A1 KIP value types, A2
+space/scheduler/tcb, A3 arch (mmu/cpu/timer/intctrl/apic/tss/gdt/meminfo), then
+B the flip. Most config blocks are dead here.
+
+Four things specific to a broad boot orchestrator:
+
+  (a) Choose the wrapper-host by what's still C++. Many subsystems are already C
+      (cpu.c/timer-apic.c/resources.c/idt.c/kernelinterface.c), so their method
+      wrappers can't live there. The C++ hosts are the remaining .cc: the
+      local_apic_t<> TEMPLATE wrappers went in intctrl-apic.cc (which already
+      instantiates it), and the tss-global + setup_gdt(x86_tss_t&) REFERENCE
+      wrappers went in x64/init.cc (which owns both). A C++ template/reference
+      never has to appear in the C file -- it's hidden behind a C wrapper in a
+      file that still has the C++ type in scope.
+
+  (b) The C-overload trap. C++ overloaded glue init_cpu(void) and api/v4
+      init_cpu(cpuid,freq,freq); the latter is already C (processor.c), so once
+      the glue one becomes C they collide on the symbol `init_cpu`. Renamed the
+      file-internal glue one to static init_cpu_local(). Always scan a
+      to-be-flipped file's own function names against existing C symbols.
+
+  (c) Cross-file callee linkage is atomic with the flip. init.c calls several
+      boot functions defined in x64/init.cc + kdb console.cc that were
+      C++-mangled; giving them C linkage (BEGIN_DECLS) breaks the still-C++
+      init.cc immediately, so the linkage edits + the .cc->.c rename + Makeconf
+      must land in one build (same lesson as thread.cc's asm-name flip).
+
+  (d) -Warray-bounds on absolute-address MMIO. The BIOS warm-reset-vector writes
+      `*((volatile unsigned short*)0x469)` trip a GCC false positive in C
+      (0-length array at a constant address) that C++ didn't emit; pointer
+      variables don't help (constant-folded), so a targeted
+      `#pragma GCC diagnostic ignored "-Warray-bounds"` around the two writes.
+
+Verified: builds 359952 (warning-clean, zero implicit declarations kernel-wide),
+boots (full init sequence), boottest PASS, l4test region byte-identical. 9 .cc
+remain (schedule.cc + the thread.cc/space.cc wrapper-hosts).
