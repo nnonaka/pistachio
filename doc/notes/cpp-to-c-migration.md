@@ -1919,3 +1919,40 @@ interrupt, schedule, space, mapping, kernelinterface, smp, processor).  The only
 built C++ that remains is glue/v4-x86/x64/init.cc (sub-arch GDT/TSS init) and the
 two wrapper-hosts glue/v4-x86/thread.cc + space.cc, which bridge the still-C++
 tcb_t/space_t/scheduler_t methods and would flip only by de-classing those types.
+
+## 61. glue/v4-x86/x64/init.cc -> C: sub-arch GDT/TSS init, staged A1/A2/B (2026-07-26, commits 817244e cdad54e 99d041d)
+
+x64/init.cc (301 lines): x86-64 segment-descriptor / GDT / TSS init + CPU
+features + MSRs.  Dense arch C++ (segdesc/tssdesc/descreg methods) but the
+descriptor types were already dual-repped (unions C-visible), so only their
+methods needed C forms.
+
+Foundation: A1 x64/segdesc.h -- X86_SEGDESC_* enum macros + x86_segdesc_set_seg
+(5-arg u64) + x86_tssdesc_set_seg + arch/x86/segdesc.h x86_descreg_set_sel /
+setselreg; A2 x86_tss_setup (tss.h) + x86_fpu_enable_osfxsr (fpu.h).
+
+Flip points specific to arch/descriptor code:
+  - descriptor "local ctors" -> declare + init-call: `x86_descreg_t r(a,b)`
+    becomes `x86_descreg_t r; x86_descreg_set(&r, a, b);`.  set_seg's default
+    args have no C equivalent, so the 4-arg calls pass X86_SEGDESC_MSR_NONE
+    explicitly.
+  - a reference parameter defined-and-used only locally: setup_gdt(x86_tss_t&)
+    -> (x86_tss_t*); its only caller (setup_gdt_c) passes &tss.
+  - the second of two CTORPRIO objects was a no-op: objdump showed only ONE
+    .init_array entry (boot_cpu_ft), because x86_x64_tss_t has no constructor --
+    so tss just becomes zero-init and only boot_cpu_ft needed the
+    __attribute__((constructor(55534))) conversion (same slot, verified).
+  - member read instead of getter: boot_cpu_ft.get_l1_cache().d... -> the
+    C-visible boot_cpu_ft.l1_cache.d... directly (the getter only returned it).
+  - C++ function-style cast unsigned(x) -> (unsigned)(x).
+
+Verified: builds 355864 (warning-clean, zero implicit declarations kernel-wide),
+boots through GDT/TSS setup + the segment reload (a wrong descriptor field would
+triple-fault at the lretq), boottest PASS, l4test byte-identical.
+
+MILESTONE: this was the last genuinely-flippable standalone file.  The only
+built C++ that remains is the three wrapper-hosts -- glue/v4-x86/thread.cc,
+glue/v4-x86/space.cc, glue/v4-x86/x64/space.cc -- which hold the C wrappers /
+asm-named bodies bridging the still-C++ tcb_t / space_t / scheduler_t methods.
+Flipping them is the final "de-classing" phase: converting those class methods
+themselves to C.  (io_space/mdb_io/timer/vrt_io.cc are not built in this config.)
