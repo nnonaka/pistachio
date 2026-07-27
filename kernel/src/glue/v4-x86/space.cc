@@ -1282,7 +1282,7 @@ bool      space_does_tlbflush_pay (word_t log2size)		{ return space_t::does_tlbf
 fpage_t   space_get_kip_page_area (space_t *self)		{ return self->get_kip_page_area (); }
 fpage_t   space_get_utcb_page_area (space_t *self)		{ return self->get_utcb_page_area (); }
 paddr_t   space_sigma0_translate (addr_t addr, word_t size)
-					{ return space_t::sigma0_translate (addr, (pgent_t::pgsize_e) size); }
+					{ return space_t::sigma0_translate (addr, size); }
 word_t    space_sigma0_attributes (pgent_t *pg, addr_t addr, word_t size)
 					{ return space_t::sigma0_attributes (pg, addr, (pgent_t::pgsize_e) size); }
 word_t    space_readmem_phys (addr_t paddr)			{ return space_t::readmem_phys (paddr); }

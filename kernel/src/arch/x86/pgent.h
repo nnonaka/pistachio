@@ -77,8 +77,10 @@ private:
 		return (word_t *) ((word_t) this + X86_PAGE_SIZE);
 	}
 
-    void smp_sync(space_t * s, pgsize_e pgsize);
-    word_t smp_reference_bits(space_t * s, pgsize_e pgsize, addr_t vaddr);
+    /* Defined in C (glue/v4-x86/x64/space.c); the pgsize_e args widen to
+       word_t at the C++ call sites so the C word_t params match by ABI. */
+    void smp_sync(space_t * s, word_t pgsize) __asm__ ("pgent_smp_sync");
+    word_t smp_reference_bits(space_t * s, word_t pgsize, addr_t vaddr) __asm__ ("pgent_smp_reference_bits");
 
 public:
 

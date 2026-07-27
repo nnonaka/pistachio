@@ -55,48 +55,48 @@
 struct transTable_t transTable[TRANSLATION_TABLE_ENTRIES];
 
 
-word_t space_t::readmem_phys(addr_t paddr)
+word_t space_t_readmem_phys(addr_t paddr)
 {
     ASSERT( (word_t) paddr < (1ULL << 32));
-        return * (word_t *) ( (word_t) paddr + REMAP_32BIT_START); 
+        return * (word_t *) ( (word_t) paddr + REMAP_32BIT_START);
 }
 
 
 
 #if defined(CONFIG_SMP)
-void pgent_t::smp_sync(space_t * space, pgsize_e pgsize)
+void pgent_smp_sync(pgent_t * self, space_t * space, word_t pgsize)
 {
-    ASSERT(pgsize >= size_sync);
-    
+    ASSERT(pgsize >= X86_PGSIZE_SYNC);
+
     switch (pgsize)
     {
-    case size_512g: 
+    case X86_PGSIZE_512G:
 	for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
-	    if (cpu != space->data.reference_ptab && space->get_top_pdir(cpu))
+	    if (cpu != space->base.data.reference_ptab && space_get_top_pdir(space, cpu))
 
 	    {
 		//TRACEF("smp sync pml4 %d / %x -> %d / %x\n",
-		//     space->data.reference_ptab, space->pgent(idx()),
-		//     cpu, space->pgent(idx(), cpu));
-		*space->pgent(idx(), cpu) = *space->pgent(idx());
+		//     space->base.data.reference_ptab, space_pgent(space, pgent_idx(self)),
+		//     cpu, space_pgent_cpu(space, pgent_idx(self), cpu));
+		*space_pgent_cpu(space, pgent_idx(self), cpu) = *space_pgent(space, pgent_idx(self));
 	    }
 	break;
-    case size_1g: 
-	ASSERT(space->get_top_pdir()->get_kernel_pdp());
-	if (!is_cpulocal(space, size_1g) && 
-	    (this - idx() == space->get_top_pdir((cpuid_t) space->data.reference_ptab)->get_kernel_pdp_pgent()))
+    case X86_PGSIZE_1G:
+	ASSERT(x86_top_pdir_get_kernel_pdp(space_get_top_pdir(space, current_cpu)));
+	if (!pgent_is_cpulocal(self, space, X86_PGSIZE_1G) &&
+	    (self - pgent_idx(self) == x86_top_pdir_get_kernel_pdp_pgent(space_get_top_pdir(space, (cpuid_t) space->base.data.reference_ptab))))
 	{
-	    ASSERT(space->get_top_pdir((cpuid_t) space->data.reference_ptab)->get_kernel_pdp());
-	    
+	    ASSERT(x86_top_pdir_get_kernel_pdp(space_get_top_pdir(space, (cpuid_t) space->base.data.reference_ptab)));
+
 	    for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
-		if (cpu != space->data.reference_ptab && space->get_top_pdir(cpu) &&
-		    space->get_top_pdir(cpu)->get_kernel_pdp_pgent())
+		if (cpu != space->base.data.reference_ptab && space_get_top_pdir(space, cpu) &&
+		    x86_top_pdir_get_kernel_pdp_pgent(space_get_top_pdir(space, cpu)))
 		{
-		    //TRACEF("smp sync kernel pdp %x idx %d cpu %d cpulocal = %s\n", 
-		    // this - idx(), idx(), cpu, (is_cpulocal(space, size_2m) ? "cpulocal" : "global"));
-		    
-		    *space->get_top_pdir(cpu)->get_kernel_pdp_pgent()->next(space, size_2m, idx()) =
-			*space->get_top_pdir((cpuid_t) space->data.reference_ptab)->get_kernel_pdp_pgent()->next(space, size_2m, idx());
+		    //TRACEF("smp sync kernel pdp %x idx %d cpu %d cpulocal = %s\n",
+		    // self - pgent_idx(self), pgent_idx(self), cpu, ...);
+
+		    *pgent_next(x86_top_pdir_get_kernel_pdp_pgent(space_get_top_pdir(space, cpu)), space, X86_PGSIZE_2M, pgent_idx(self)) =
+			*pgent_next(x86_top_pdir_get_kernel_pdp_pgent(space_get_top_pdir(space, (cpuid_t) space->base.data.reference_ptab)), space, X86_PGSIZE_2M, pgent_idx(self));
 		}
 	    break;
 	}
@@ -105,7 +105,7 @@ void pgent_t::smp_sync(space_t * space, pgsize_e pgsize)
     }
 }
 
-word_t pgent_t::smp_reference_bits(space_t * space, pgsize_e pgsize, addr_t vaddr)
+word_t pgent_smp_reference_bits(pgent_t * self, space_t * space, word_t pgsize, addr_t vaddr)
 {
     printf("L4 Kernel BUG: X64 shouldn't have non-global superpages");
     UNIMPLEMENTED();
@@ -166,13 +166,13 @@ word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area,
 
 #else /* !defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
-word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
+word_t space_t_space_control (space_t * self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
 {
     return 0;
 }
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
-paddr_t space_t::sigma0_translate(addr_t addr, pgent_t::pgsize_e size) {
+paddr_t space_t_sigma0_translate(addr_t addr, word_t size) {
 	return (paddr_t)addr;
 }
 

@@ -78,7 +78,7 @@ public:
     void move_tcb(tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu);
 
     /* space control */
-    word_t space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid);
+    word_t space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid) __asm__ ("space_t_space_control");
 
     /* x86 specific functions */
     static void init_kernel_space();
@@ -106,7 +106,7 @@ public:
     static void end_update();
 
     /* sigma0 translation hooks */
-    static paddr_t sigma0_translate(addr_t addr, pgent_t::pgsize_e size);
+    static paddr_t sigma0_translate(addr_t addr, word_t size) __asm__ ("space_t_sigma0_translate");
     static word_t sigma0_attributes(pgent_t *pg, addr_t addr, pgent_t::pgsize_e size) { return 0; };
 
     /* generic page table walker */
@@ -127,7 +127,7 @@ public:
 	{ return log2size >= 28; }
 
     bool readmem (addr_t vaddr, word_t * contents) __asm__ ("space_readmem");
-    static word_t readmem_phys (addr_t paddr);
+    static word_t readmem_phys (addr_t paddr) __asm__ ("space_t_readmem_phys");
 
     /* kip and utcb handling */
     fpage_t get_kip_page_area()

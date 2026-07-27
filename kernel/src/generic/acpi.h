@@ -38,8 +38,12 @@
 #define ACPI_MEM_SPACE	0
 #define ACPI_IO_SPACE	1
 
+/* Defined in C (glue/v4-x86/x64/space.c); C linkage so the C++ callers
+   (platform/generic/intctrl-apic.cc) reference the unmangled symbols. */
+BEGIN_DECLS
 extern addr_t acpi_remap(addr_t addr);
 extern void acpi_unmap(addr_t addr);
+END_DECLS
 
 
 #if defined(__cplusplus)
