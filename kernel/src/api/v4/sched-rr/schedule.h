@@ -136,6 +136,48 @@ INLINE tcb_t * smp_requeue_dequeue_head (smp_requeue_t *self)
     return tcb;
 }
 #endif /* defined(CONFIG_SMP) */
+
+/* C forms of the prio_queue_t methods (the struct above mirrors the layout). */
+INLINE tcb_t * prio_queue_get (prio_queue_t *self, prio_t prio)
+{ return self->prio_queue[prio]; }
+INLINE void prio_queue_set (prio_queue_t *self, prio_t prio, tcb_t *tcb)
+{ self->prio_queue[prio] = tcb; }
+INLINE void prio_queue_set_timeslice_tcb (prio_queue_t *self, tcb_t *tcb)
+{ self->timeslice_tcb = tcb; }
+INLINE tcb_t * prio_queue_get_timeslice_tcb (prio_queue_t *self)
+{ return self->timeslice_tcb; }
+
+INLINE void prio_queue_enqueue (prio_queue_t *self, tcb_t *tcb, bool head)
+{
+    ASSERT (tcb);
+    ASSERT (tcb != get_idle_tcb_c ());
+
+    if (queue_state_is_set (&tcb->queue_state, QUEUE_STATE_READY))
+	return;
+
+    prio_t prio = rr_sched_get_priority (&tcb->sched_state.base);
+
+    if (head)
+	ENQUEUE_LIST_HEAD (self->prio_queue[prio], tcb, sched_state.base.ready_list);
+    else
+	ENQUEUE_LIST_TAIL (self->prio_queue[prio], tcb, sched_state.base.ready_list);
+
+    queue_state_set (&tcb->queue_state, QUEUE_STATE_READY);
+    if ((s16_t) prio > self->max_prio)
+	self->max_prio = (s16_t) prio;
+}
+
+INLINE void prio_queue_dequeue (prio_queue_t *self, tcb_t *tcb)
+{
+    ASSERT (tcb);
+    ASSERT (tcb != get_idle_tcb_c ());
+    if (!queue_state_is_set (&tcb->queue_state, QUEUE_STATE_READY))
+	return;
+
+    prio_t prio = rr_sched_get_priority (&tcb->sched_state.base);
+    DEQUEUE_LIST (self->prio_queue[prio], tcb, sched_state.base.ready_list);
+    queue_state_clear (&tcb->queue_state, QUEUE_STATE_READY);
+}
 #else /* __cplusplus: the C++ scheduler classes + inline methods */
 
 #if defined(CONFIG_SMP)

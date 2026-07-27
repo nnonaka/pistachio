@@ -233,6 +233,32 @@ protected:
 };
 typedef struct rr_sched_ktcb_t rr_sched_ktcb_t;
 
+#if !defined(__cplusplus)
+/* C forms of the rr_sched_ktcb_t accessors (the data above is C-visible; only
+   the methods are __cplusplus-guarded).  Used by api/v4/sched-rr/schedule.c.
+   `self' is the policy base -- reach it as &tcb->sched_state.base. */
+INLINE u64_t rr_sched_get_total_quantum (rr_sched_ktcb_t *self)		{ return self->total_quantum; }
+INLINE void  rr_sched_set_total_quantum (rr_sched_ktcb_t *self, u64_t q){ self->total_quantum = q; }
+INLINE u64_t rr_sched_account_quantum (rr_sched_ktcb_t *self, u32_t t)
+{ self->total_quantum -= t; return self->total_quantum; }
+
+INLINE s64_t rr_sched_get_timeslice (rr_sched_ktcb_t *self)		{ return self->current_timeslice; }
+INLINE s64_t rr_sched_account_timeslice (rr_sched_ktcb_t *self, u32_t t)
+{ self->current_timeslice -= t; return self->current_timeslice; }
+INLINE void  rr_sched_renew_timeslice (rr_sched_ktcb_t *self, u32_t t)	{ self->current_timeslice += t; }
+INLINE u64_t rr_sched_get_timeslice_length (rr_sched_ktcb_t *self)	{ return self->timeslice_length; }
+
+INLINE prio_t rr_sched_get_priority (rr_sched_ktcb_t *self)		{ return self->priority; }
+INLINE prio_t rr_sched_get_sensitive_prio (rr_sched_ktcb_t *self)	{ return self->sensitive_prio; }
+
+INLINE u64_t rr_sched_get_timeout (rr_sched_ktcb_t *self)		{ return self->absolute_timeout; }
+INLINE bool  rr_sched_has_timeout_expired (rr_sched_ktcb_t *self, u64_t time)
+{ return self->absolute_timeout <= time; }
+
+INLINE void   rr_sched_set_maximum_delay (rr_sched_ktcb_t *self, u16_t usec) { self->current_max_delay = usec; }
+INLINE u16_t  rr_sched_get_maximum_delay (rr_sched_ktcb_t *self)	{ return self->current_max_delay; }
+#endif /* !__cplusplus */
+
 typedef rr_sched_ktcb_t policy_sched_ktcb_t;
 
 #endif /* !__API__V4__SCHED_RR__SCHED_KTCB_H__ */
