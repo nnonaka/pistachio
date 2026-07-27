@@ -114,16 +114,26 @@ typedef struct debug_param_t debug_param_t;
 
 #if defined(__cplusplus)
 extern void do_enter_kdebug(x86_exceptionframe_t *frame, const word_t exception);
+#endif
 
+/* Common to both languages: a plain enum, and x86_set_kdb_dr, whose only
+   definition now lives in C (kdb/arch/x86/breakpoints.c).  BEGIN_DECLS gives
+   it C linkage so the remaining C++ callers bind to the same symbol. */
 enum x86_breakpoint_type_e {
     x86_bp_instr =  0x00000000,
     x86_bp_write =  0x00010000,
     x86_bp_port  =  0x00020000,
     x86_bp_access = 0x00030000
 };
+#if !defined(__cplusplus)
+typedef enum x86_breakpoint_type_e x86_breakpoint_type_e;
+#endif
 
+BEGIN_DECLS
 extern void x86_set_kdb_dr(word_t num, x86_breakpoint_type_e type, word_t addr, bool enable, bool kdb);
+END_DECLS
 
+#if defined(__cplusplus)
 extern "C" void x86_reset(void);
 extern bool x86_reboot_scheduled;
 #endif /* defined(__cplusplus) */

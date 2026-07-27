@@ -2422,3 +2422,27 @@ Verification: 337976 bytes, warning-clean, 0 implicit declarations, boottest
 PASS. Drove `p` over the *user* area against a pre-flip kernel: 22 lines
 identical, covering subtree recursion in both directions, valid mappings,
 reference bits, `mapnode`, and the `dump_misc` cacheability suffix.
+
+## §71 — kdb/arch/x86/breakpoints.cc → .c
+
+The file itself was already valid C apart from four `get_hex ("...")` calls
+needing their default arguments spelled out. (`case '0'...'3':` is a GCC range
+extension that C accepts fine.)
+
+The work was in `glue/v4-x86/debug.h`, where `enum x86_breakpoint_type_e` and
+`x86_set_kdb_dr` were both trapped inside a `#if defined(__cplusplus)` block
+along with `do_enter_kdebug` and `x86_reset`. Split the block: the enum is
+plain C-compatible so it moves out unguarded (with a C-only typedef for the
+tag name), `x86_set_kdb_dr` moves under BEGIN_DECLS, and `do_enter_kdebug`
+(x86_exceptionframe_t) plus the `extern "C"` bits stay C++-only.
+
+`x86_set_kdb_dr` thereby goes from C++-mangled to C linkage. The only other
+reference in the tree is `glue/v4-x86/x32/hvm-vmx.cc`, which is not built in
+this config and whose call is commented out, so nothing else had to change.
+
+Verification: 337912 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. Drove `b` three times against a pre-flip kernel — dump DRs, set DR0 to
+an instruction breakpoint at 0x1000628, dump again — output identical, with
+DR7 going 0x400 -> 0x402 and DR0 taking the address, so both the read path
+(X86_GET_DR) and the write path (get_choice/get_hex/x86_dr_write/X86_SET_DR)
+are covered.

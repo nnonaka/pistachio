@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/arch/x86/breakpoints.cc
+ * File path:     kdb/arch/x86/breakpoints.c
  * Description:   Hardware breakpoints for IA-32
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -139,25 +139,25 @@ CMD(cmd_breakpoint, cg)
 	num = -1;
 	break;
     case 'i': /* instruction execution */
-	addr = get_hex("Address");
+	addr = get_hex("Address", 0, NULL);
 	db7 &= ~(0x000F0000 << (num * 4));
 	db7 |= (0x00000000 << (num * 4));
 	db7 |= (2 << (num * 2)); /* enable */
 	break;
     case 'w': /* data write */
-	addr = get_hex("Address");
+	addr = get_hex("Address", 0, NULL);
 	db7 &= ~(0x000F0000 << (num * 4));
 	db7 |= (0x00010000 << (num * 4));
 	db7 |= (2 << (num * 2)); /* enable */
 	break;
     case 'o': /* I/O */
-	addr = get_hex("Port");
+	addr = get_hex("Port", 0, NULL);
 	db7 &= ~(0x000F0000 << (num * 4));
 	db7 |= (0x00020000 << (num * 4));
 	db7 |= (2 << (num * 2)); /* enable */
 	break;
     case 'a': /* read/write */
-	addr = get_hex("Address");
+	addr = get_hex("Address", 0, NULL);
 	db7 &= ~(0x000F0000 << (num * 4));
 	db7 |= (0x00030000 << (num * 4));
 	db7 |= (2 << (num * 2)); /* enable */
