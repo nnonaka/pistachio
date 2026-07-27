@@ -2088,3 +2088,62 @@ wrapper-host.  It defines ~30 space_t out-of-line methods, hosts the
 pgent_*/space_* C wrapper definitions every flipped file depends on, and now also
 hosts the tcb_t/time_t wrappers relocated here from thread.cc.  Flipping it (and
 de-classing space_t/tcb_t/time_t's residual methods) is the final step.
+
+
+## 64. glue/v4-x86/space.cc -> C: SCOPING of the final flip (2026-07-27, foundation commit 043d717)
+
+space.cc (1446 lines, ~92 function/method definitions) is the last built C++ TU
+and the largest single flip.  Fully scoped; no infrastructure blockers -- every
+external dependency already has a C form -- but it is a THREE-LAYER de-classing
+(space_t -> pgent_t -> x86_pgent_t) plus mmu/fpage helpers, so it needs a
+dedicated focused effort.  Map for whoever executes it:
+
+Contents:
+  - ~30 space_t out-of-line methods (init, allocate_tcb/utcb/space, remap_area,
+    add_mapping, release_kernel_mapping, map_dummy_tcb, switch_to_kernel_space,
+    sync_kernel_space, populate_copy_area, delete_copy_area, get/install/free/
+    sync_io_bitmap, arch_free, init_kernel_mappings, init_cpu_mappings,
+    init_kernel_space, flush_tlb, flush_tlbent, end_update, move_tcb,
+    alloc/free_cpu_top_pdir, lookup_mapping) -- the hard part; intricate
+    page-table walking where a wrong translation = boot crash.
+  - the pgent_* / space_* / fpage_* / mem_region_* C wrapper DEFINITIONS (every
+    other flipped file links against these).
+  - the tcb_t/time_t wrappers relocated here from thread.cc (§63):
+    tcb_copy_area_real_address, tcb_adjust_for_copy_area, tcb_sched_set_timeout,
+    tcb_init_saved_state, is_privileged_space_c, acceptor_get_arch_specific_
+    rcvwindow, time_lt.
+
+Method-call inventory of the space_t bodies (what they invoke):
+  pgent_t methods: subtree(11) next(9) is_valid(9) set_global(5) set_entry(5)
+    set_cpulocal(4) address(3) is_subtree(2) set_cacheability(1) make_subtree(1)
+    make_cpu_subtree(1).  Existing pgent_* C wrappers cover subtree/next/is_valid/
+    set_entry/address/is_subtree/make_subtree.  MISSING -> add: pgent_set_global,
+    pgent_set_cpulocal, pgent_set_cacheability, pgent_make_cpu_subtree.  These
+    cascade: set_global = x86_pgent_t::set_global(bitfield) + pgent sync;
+    set_cacheability likewise + sync; set_cpulocal = bitfield only; make_cpu_subtree
+    = set_ptab_entry(kmem_alloc,...).  So x86_pgent_t's set_global/set_cpulocal/
+    set_cacheability/set_ptab_entry need C forms too (bitfields ARE C-visible --
+    the pg4k/pg2m union is outside x86_pgent_t's #if __cplusplus in ptab.h -- so
+    translate to direct bitfield ops or add x86_pgent_* C accessors).  pgent_t::sync
+    -> smp_sync is already asm-named pgent_smp_sync (§62).
+  statics: get_kernel_space (C form get_kernel_space_c EXISTS), get_current_cpu
+    (C form exists), x86_mmu set_active_pagetable/flush_tlb/get_active_pagetable/
+    get_pagefault_address/flush_tlbent (ALL C forms now exist -- the last three
+    added in 043d717), fpage_t::complete_arch (MISSING -> add fpage_complete_arch;
+    used 2x), space page-area get_kip/utcb_page_area (C forms EXIST) but
+    set_kip_page_area/set_utcb_page_area (MISSING -> add).
+
+Flip mechanics (same as x64/space.cc §62): each space_t method -> C function
+asm-named to a stable symbol (space_t_* or reuse the existing space_* wrapper
+name), the class decl in space.h/x64/space.h annotated __asm__.  space_t methods
+call each other by their C names; `this->` -> `self->`; space->data ->
+space->base.data (struct space_t wraps x86_space_t base); pgsize_e -> word_t
+(X86_PGSIZE_*).  Then rename space.cc -> space.c, update x86 Makeconf, rm .depend.
+
+Suggested staging: (F1) add the missing C forms -- pgent_set_global/set_cpulocal/
+set_cacheability/make_cpu_subtree (+ their x86_pgent_t bitfield deps),
+fpage_complete_arch, space_set_kip/utcb_page_area -- as byte-identical header/
+space.cc additions; (B) the flip.  Verify: build warning-clean + 0 implicit-decl,
+boottest PASS, l4test test-region byte-identical (KIP/memtest/IPC, same
+Local-destination-Id fault eip=0000000001000295).  Completing this drops the C++
+toolchain entirely -- the migration goal.
