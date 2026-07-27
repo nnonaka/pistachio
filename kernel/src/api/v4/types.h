@@ -111,6 +111,7 @@ typedef struct time_t time_t;
    C++ is_never/is_zero.  get_microseconds and operator< are wrapped in C++
    (time_get_microseconds/time_lt, declared in api/v4/tcb.h). */
 INLINE bool time_is_never (const time_t *self) { return self->raw == 0; }
+INLINE bool time_is_period (const time_t *self) { return self->time.type == 0; }
 INLINE bool time_is_zero (const time_t *self)
 {
     time_t z;

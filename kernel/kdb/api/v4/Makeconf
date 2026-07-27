@@ -29,4 +29,4 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES+=	$(addprefix kdb/api/v4/, input.c kernelinterface.c tcb.cc thread.c schedule-$(SCHED).c sigma0.c)
+SOURCES+=	$(addprefix kdb/api/v4/, input.c kernelinterface.c tcb.c thread.c schedule-$(SCHED).c sigma0.c)

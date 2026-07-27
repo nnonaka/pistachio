@@ -223,6 +223,13 @@ protected:
     prio_t		sensitive_prio;
     u16_t		current_max_delay;
     u16_t		max_delay;
+
+    /* Explicit tail padding.  Without it this struct ends at offset 86 with
+       two bytes of padding, and C++ reuses that padding for the first member
+       of the derived sched_ktcb_t (placing `scheduler` at 86) while the C
+       rep, which embeds this struct by value, cannot -- putting `scheduler`
+       at 88.  Filling the hole makes both languages agree.  See notes §78. */
+    u16_t		__tail_pad;
     
 #if defined(__cplusplus)
     friend class prio_queue_t;

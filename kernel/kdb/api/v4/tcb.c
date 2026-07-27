@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2004,  Karlsruhe University
  *
- * File path:     kdb/api/v4/tcb.cc
+ * File path:     kdb/api/v4/tcb.c
  * Description:   tcb dumping
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,12 +43,12 @@
 #define __PADSTRING__ ""
 #endif
 
-u16_t dbg_get_current_cpu()
+u16_t dbg_get_current_cpu(void)
 {
     return get_current_cpu();
 }
 
-word_t dbg_get_current_tcb()
+word_t dbg_get_current_tcb(void)
 {
     return (word_t) get_current_tcb();
 }
@@ -57,7 +57,7 @@ word_t dbg_get_current_tcb()
 DECLARE_TRACEPOINT(ENERGY_TIMER);
 #endif
 
-bool kdebug_check_interrupt()
+bool kdebug_check_interrupt(void)
 {
 
 #if defined(CONFIG_TBUF_PERFMON_ENERGY)
@@ -101,7 +101,8 @@ DECLARE_CMD(cmd_show_tcbext, root, 'T', "showtcbext", "shows thread control bloc
 
 static inline msg_tag_t SECTION(SEC_KDEBUG) get_msgtag(tcb_t* tcb)
 {
-    msg_tag_t tag = tcb->get_mr(0);
+    msg_tag_t tag;
+    tag.raw = tcb_get_mr (tcb, 0);
     return tag;
 }
 
@@ -110,38 +111,38 @@ void SECTION(SEC_KDEBUG) dump_tcb(tcb_t * tcb, bool extended)
     sched_ktcb_t *sched_state = &tcb->sched_state;
     
     printf("=== TCB: %p === ID: %p = %p/%p",
-	   tcb, tcb->get_global_id().get_raw(),
-	   tcb->get_local_id().get_raw(), tcb->get_utcb());
-    sched_state->dump_priority();
+	   tcb, tcb_get_global_id (tcb).raw,
+	   tcb_get_local_id (tcb).raw, tcb_get_utcb (tcb));
+    sched_ktcb_dump_priority (sched_state);
 #if !defined(CONFIG_SMP)
     printf("=====");
 #else
-    printf(" CPU: %d ===", tcb->get_cpu());
+    printf(" CPU: %d ===", tcb_get_cpu (tcb));
 #endif
     printf(" ===\n");
 
     printf("UIP: %p   queues: %c%c%c%c%s      ",
-	   tcb->get_user_ip(),
-	   tcb->queue_state.is_set(queue_state_t::ready )	? 'R' : 'r',
-	   tcb->queue_state.is_set(queue_state_t::send)		? 'S' : 's',
-	   tcb->queue_state.is_set(queue_state_t::wakeup)	? 'W' : 'w',
-	   tcb->queue_state.is_set(queue_state_t::late_wakeup)	? 'L' : 'l',
+	   tcb_get_user_ip (tcb),
+	   queue_state_is_set (&tcb->queue_state, QUEUE_STATE_READY)	? 'R' : 'r',
+	   queue_state_is_set (&tcb->queue_state, QUEUE_STATE_SEND)	? 'S' : 's',
+	   queue_state_is_set (&tcb->queue_state, QUEUE_STATE_WAKEUP)	? 'W' : 'w',
+	   queue_state_is_set (&tcb->queue_state, QUEUE_STATE_LATE_WAKEUP)	? 'L' : 'l',
 	   __PADSTRING__);
-    sched_state->dump_list1();
-    printf("space: %p\n", tcb->get_space());
-    printf("USP: %p   tstate: %ws  ", tcb->get_user_sp(), tcb->get_state().string());
-    sched_state->dump_list2();
+    sched_ktcb_dump_list1 (sched_state);
+    printf("space: %p\n", tcb_get_space (tcb));
+    printf("USP: %p   tstate: %ws  ", tcb_get_user_sp (tcb), thread_state_string (tcb_get_state (tcb)));
+    sched_ktcb_dump_list2 (sched_state);
     printf("pdir : %p\n", tcb->pdir_cache);
     printf("KSP: %p   sndhd : %-wt  send : %wt:%-wt   pager: %t\n",
 	   tcb->stack, tcb->send_head, tcb->send_list.next, tcb->send_list.prev,
-	   TID(tcb->get_utcb() ? tcb->get_pager() : threadid_t::nilthread()));
-    sched_state->dump(get_current_scheduler()->get_current_time());
-    printf("resources: %p [", (word_t) tcb->resource_bits);
-    tcb->resources.dump (tcb);
+	   TID(tcb_get_utcb (tcb) ? tcb_get_pager (tcb) : threadid_nilthread ()));
+    sched_ktcb_dump (sched_state, sched_get_current_time ());
+    printf("resources: %p [", tcb->resource_bits.resource_bits.maskvalue);
+    tcb_resources_dump (&tcb->resources, tcb);
     printf("]");
-    printf("   flags: %p [", (word_t) tcb->flags);
-    printf("%c", (tcb->flags.is_set (tcb_t::has_xfer_timeout)) 		? 'T' : 't');
-    printf("%c", (tcb->flags.is_set (tcb_t::schedule_in_progress))      ? 'S' : 's');
+    printf("   flags: %p [", tcb->flags.maskvalue);
+    printf("%c", tcb_flags_is_set (tcb, TCB_FLAG_HAS_XFER_TIMEOUT)	? 'T' : 't');
+    printf("%c", tcb_flags_is_set (tcb, TCB_FLAG_SCHEDULE_IN_PROGRESS) ? 'S' : 's');
 #if defined(CONFIG_X_CTRLXFER_MSG)
     printf("%c", (tcb->flags.is_set (tcb_t::kernel_ctrlxfer_msg))      ? 'K' : 'k');
 #endif
@@ -150,39 +151,42 @@ void SECTION(SEC_KDEBUG) dump_tcb(tcb_t * tcb, bool extended)
     tcb->dump_ctrlxfer_state(extended);
 #endif
     printf("partner: %t, saved partner: %t, saved state: %s, scheduler: %t\n",
-	   TID(tcb->get_partner()), TID(tcb->get_saved_partner ()),
-	   tcb->get_saved_state ().string (), TID(tcb->sched_state.get_scheduler()));
+	   TID(tcb_get_partner (tcb)), TID(tcb_get_saved_partner (tcb)),
+	   thread_state_string (tcb_get_saved_state (tcb)),
+	   TID(sched_ktcb_get_scheduler (&tcb->sched_state)));
 }
 
 
 void SECTION (SEC_KDEBUG) dump_utcb (tcb_t * tcb)
 {
+    preempt_flags_t pflags = tcb_get_preempt_flags (tcb);
+
     printf ("\nuser handle:       %p  "
 	    "cop flags:      %02x%s  "
 	    "preempt flags:     %02x [%c%c%c]\n"
 	    "exception handler: %t  "
 	    "virtual sender: %t  "
 	    "intended receiver: %t\n",
-	    tcb->get_user_handle (), tcb->get_cop_flags (),
+	    tcb_get_user_handle (tcb), tcb_get_cop_flags (tcb),
 	    sizeof (word_t) == 8 ? "              " : "      ",
-	    tcb->get_preempt_flags ().raw,
-	    tcb->get_preempt_flags ().is_pending()  ? 'I' : '~',
-	    tcb->get_preempt_flags ().is_delayed()  ? 'd' : '~',
-	    tcb->get_preempt_flags ().is_signaled() ? 's' : '~',
-	    TID (tcb->get_exception_handler ()),
-	    TID (tcb->get_virtual_sender ()),
-	    TID (tcb->get_intended_receiver ()));
+	    tcb_get_preempt_flags (tcb).raw,
+	    preempt_flags_is_pending (&pflags)  ? 'I' : '~',
+	    preempt_flags_is_delayed (&pflags)  ? 'd' : '~',
+	    preempt_flags_is_signaled (&pflags) ? 's' : '~',
+	    TID (tcb_get_exception_handler (tcb)),
+	    TID (tcb_get_virtual_sender (tcb)),
+	    TID (tcb_get_intended_receiver (tcb)));
 
     printf ("xfer timeouts:     snd (");
-    time_t xfer = tcb->get_xfer_timeout_snd ();
-    printf (xfer.is_never () ? "never" : "%s: %12dus",
-	    xfer.is_period () ? "rel" : "abs",
-	    xfer.get_microseconds ());
+    time_t xfer = tcb_get_xfer_timeout_snd (tcb);
+    printf (time_is_never (&xfer) ? "never" : "%s: %12dus",
+	    time_is_period (&xfer) ? "rel" : "abs",
+	    time_get_microseconds (&xfer));
     printf (")\n                   rcv (");
-    xfer = tcb->get_xfer_timeout_rcv ();
-    printf (xfer.is_never () ? "never" : "%s: %12dus",
-	    xfer.is_period () ? "rel" : "abs",
-	    xfer.get_microseconds ());
+    xfer = tcb_get_xfer_timeout_rcv (tcb);
+    printf (time_is_never (&xfer) ? "never" : "%s: %12dus",
+	    time_is_period (&xfer) ? "rel" : "abs",
+	    time_get_microseconds (&xfer));
     printf (")\n");
 }
 
@@ -193,48 +197,51 @@ void SECTION (SEC_KDEBUG) dump_utcb (tcb_t * tcb)
  */
 static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
 {
+    msg_tag_t tag = get_msgtag (tcb);
+
     for (int i = 0; i < IPC_NUM_MR; i++)
     {
 	if (!(i % 8)) printf("\nmr(%02d):", i);
-	printf(" %p", tcb->get_mr(i));
+	printf(" %p", tcb_get_mr (tcb, i));
     }
 
     printf("\nMessage Tag: %d untyped, %d typed, label = %x, flags = %c%c%c%c\n",
-           get_msgtag(tcb).get_untyped(), get_msgtag(tcb).get_typed(),
-           get_msgtag(tcb).x.label,
-           get_msgtag(tcb).is_error() ? 'E' : '-',
-           get_msgtag(tcb).is_xcpu() ? 'X' : '-',
-           get_msgtag(tcb).is_redirected() ? 'r' : '-',
-           get_msgtag(tcb).is_propagated() ? 'p' : '-'
+           msg_tag_get_untyped (&tag), msg_tag_get_typed (&tag),
+           tag.x.label,
+           msg_tag_is_error (&tag) ? 'E' : '-',
+           msg_tag_is_xcpu (&tag) ? 'X' : '-',
+           msg_tag_is_redirected (&tag) ? 'r' : '-',
+           msg_tag_is_propagated (&tag) ? 'p' : '-'
         );
 
-    for (word_t i = 0; i < get_msgtag(tcb).get_typed();)
+    for (word_t i = 0; i < msg_tag_get_typed (&tag);)
     {
-	word_t offset = get_msgtag(tcb).get_untyped() + 1;
+	word_t offset = msg_tag_get_untyped (&tag) + 1;
 	msg_item_t item;
 
-	item = tcb->get_mr(offset + i);
-	if (item.is_map_item() || item.is_grant_item())
+	item.raw = tcb_get_mr (tcb, offset + i);
+	if (msg_item_is_map_item (&item) || msg_item_is_grant_item (&item))
 	{
-	    fpage_t fpage ((fpage_t) {{ raw: tcb->get_mr(offset + i + 1)}} );
+	    fpage_t fpage;
+	    fpage.raw = tcb_get_mr (tcb, offset + i + 1);
 	    printf("%s item: snd base=%p, fpage=%p (addr=%p, sz=%x), %c%c%c\n",
-                   item.is_map_item() ? "map" : "grant",
-                   item.get_snd_base(),
-                   fpage.raw, fpage.get_base(), fpage.get_size(),
+                   msg_item_is_map_item (&item) ? "map" : "grant",
+                   msg_item_get_snd_base (&item),
+                   fpage.raw, fpage_get_base (&fpage), fpage_get_size (&fpage),
                    fpage.mem.x.write	? 'W' : 'w',
                    fpage.mem.x.read	? 'R' : 'r',
                    fpage.mem.x.execute	? 'X' : 'x');
 	    i+=2;
 	}
-	else if (item.is_string_item())
+	else if (msg_item_is_string_item (&item))
 	{
 	    printf("string item: len=%x, num=%d, cont=%d, cache=%d\n  ( ",
-                   item.get_string_length(), item.get_string_ptr_count(),
-                   item.is_string_compound(), item.get_string_cache_hints());
+                   msg_item_get_string_length (&item), msg_item_get_string_ptr_count (&item),
+                   msg_item_is_string_compound (&item), msg_item_get_string_cache_hints (&item));
 	    i++;
 
-	    for (word_t j = 0; j < item.get_string_ptr_count(); j++, i++)
-                printf("%p ", tcb->get_mr(offset + i));
+	    for (word_t j = 0; j < msg_item_get_string_ptr_count (&item); j++, i++)
+                printf("%p ", tcb_get_mr (tcb, offset + i));
 	    printf(")\n");
 	}
 #if defined(CONFIG_X_CTRLXFER_MSG)
@@ -294,43 +301,43 @@ static void SECTION(SEC_KDEBUG) dump_buffer_registers(tcb_t * tcb)
     fpage_t fpage;
     msg_item_t item;
 
-    acc = tcb->get_br(0);
-    fpage.raw = tcb->get_br(0);
+    acc.raw = tcb_get_br (tcb, 0);
+    fpage.raw = tcb_get_br (tcb, 0);
     fpage.raw &= ~0xf; // mask out lowermost bits.
 
     for (word_t i = 0; i < IPC_NUM_BR; i++)
     {
 	if (!(i % 8)) printf("\nbr(%02d):", i);
-	printf(" %p", tcb->get_br(i));
+	printf(" %p", tcb_get_br (tcb, i));
     }
 
-    printf("\nAcceptor: %p (%c)\n", acc.raw, acc.accept_strings() ? 'S' : 's');
+    printf("\nAcceptor: %p (%c)\n", acc.raw, acceptor_accept_strings (&acc) ? 'S' : 's');
     printf("  fpage :");
-    if (fpage.is_nil_fpage())
+    if (fpage_is_nil_fpage (&fpage))
 	printf(" (NIL-FPAGE)\n");
-    else if (fpage.is_complete_fpage())
+    else if (fpage_is_complete_fpage (&fpage))
 	printf(" (COMPLETE-FPAGE)\n");
     else
 	printf("  fpage=%p (addr=%p, sz=%p)\n",
-	    fpage.raw, fpage.get_base(), fpage.get_size());
+	    fpage.raw, fpage_get_base (&fpage), fpage_get_size (&fpage));
 
-    if (acc.accept_strings())
+    if (acceptor_accept_strings (&acc))
     {
 	word_t idx = 1;
 	do
 	{
-	    item = tcb->get_br(idx);
+	    item.raw = tcb_get_br (tcb, idx);
 	    printf("string item: len=%x, num=%d, compound=%d, "
 		   "cache=%d, more_strings=%d\n  ( ",
-		   item.get_string_length(), item.get_string_ptr_count(),
-		   item.is_string_compound(), item.get_string_cache_hints(),
-		   item.more_strings());
+		   msg_item_get_string_length (&item), msg_item_get_string_ptr_count (&item),
+		   msg_item_is_string_compound (&item), msg_item_get_string_cache_hints (&item),
+		   msg_item_more_strings (&item));
 	    idx++;
 
-	    for (word_t j = 0; j < item.get_string_ptr_count(); j++, idx++)
-		    printf("%p ", tcb->get_br(idx));
+	    for (word_t j = 0; j < msg_item_get_string_ptr_count (&item); j++, idx++)
+		    printf("%p ", tcb_get_br (tcb, idx));
 	    printf(")\n");
-	} while(item.more_strings() || item.is_string_compound());
+	} while(msg_item_more_strings (&item) || msg_item_is_string_compound (&item));
     }
 }
 
@@ -338,17 +345,17 @@ tcb_t SECTION(SEC_KDEBUG) * kdb_get_tcb()
 {
     debug_param_t * param = (debug_param_t*)kdb.kdb_param;
     space_t *space = param->space;
-    word_t val = get_hex("tcb/tid", (word_t) space, "current");
+    word_t val = get_hex ("tcb/tid", (word_t) space, "current");
 
     if (val == ABORT_MAGIC)
 	return NULL;
 
-    if (!tcb_t::is_tcb((addr_t)val) &&
-	(val != (word_t)get_idle_tcb()))
+    if (!tcb_is_tcb ((addr_t)val) &&
+	(val != (word_t)get_idle_tcb_c()))
     {
 	threadid_t tid;
-	tid.set_raw(val);
-	val = (word_t)tcb_t::get_tcb(tid);
+	threadid_set_raw (&tid, val);
+	val = (word_t)tcb_get_tcb (tid);
     }
     return (tcb_t*) addr_to_tcb ((addr_t) val);
 
@@ -370,7 +377,7 @@ CMD(cmd_show_tcbext, cg)
     if (tcb)
     {
 	dump_tcb(tcb, true);
-	if (tcb->get_utcb())
+	if (tcb_get_utcb (tcb))
 	{
 	    dump_utcb(tcb);
 	    dump_message_registers(tcb);

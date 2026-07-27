@@ -177,6 +177,8 @@ INLINE bool   msg_tag_is_error (const msg_tag_t *self)		{ return self->x.error; 
 INLINE void   msg_tag_set_error (msg_tag_t *self)		{ self->x.error = 1; }
 INLINE word_t msg_tag_get_label (const msg_tag_t *self)		{ return self->x.label; }
 INLINE bool   msg_tag_is_propagated (const msg_tag_t *self)	{ return self->x.propagated; }
+INLINE bool   msg_tag_is_redirected (const msg_tag_t *self)	{ return self->x.redirected; }
+INLINE bool   msg_tag_is_xcpu (const msg_tag_t *self)		{ return self->x.xcpu; }
 INLINE void   msg_tag_set_propagated (msg_tag_t *self, bool val){ self->x.propagated = val; }
 INLINE void   msg_tag_set_xcpu (msg_tag_t *self)		{ self->x.xcpu = 1; }
 INLINE void   msg_tag_clear_receive_flags (msg_tag_t *self)	{ self->raw &= ~(0xeUL << 12); }
@@ -280,6 +282,7 @@ INLINE bool   msg_item_more_strings (const msg_item_t *self)	{ return self->cont
 INLINE word_t msg_item_get_string_length (const msg_item_t *self)   { return self->length; }
 INLINE word_t msg_item_get_string_ptr_count (const msg_item_t *self){ return self->num_ptrs + 1; }
 INLINE bool   msg_item_is_string_compound (const msg_item_t *self)  { return self->continuation; }
+INLINE word_t msg_item_get_string_cache_hints (const msg_item_t *self) { return self->type & 3; }
 INLINE word_t msg_item_get_snd_base (const msg_item_t *self)	{ return self->raw & (~0x3ffUL); }
 #endif /* !__cplusplus */
 

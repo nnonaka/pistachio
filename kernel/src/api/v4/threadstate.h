@@ -148,29 +148,38 @@ public:
 	}
 
     /* debugging */
-    const char * string (void)
-	{
-	    switch (state) {
-	    case running:			return "RUNNING ";
-	    case waiting_forever:		return "WAIT_FE ";
-	    case waiting_timeout:		return "WAIT_TO ";
-	    case waiting_tunneled_pf:		return "WAIT_TP ";
-	    case locked_waiting:		return "LOCK_WT ";
-	    case locked_running:		return "LOCK_RU ";
-	    case locked_running_ipc_done: 	return "LOCK_RD ";
-	    case locked_running_nested:		return "LOCK_RN ";
-	    case polling:			return "POLLING ";
-	    case halted:			return "HALTED  ";
-	    case aborted:			return "ABORTED ";
-	    case xcpu_waiting_deltcb:		return "XCPU_DT ";
-	    case xcpu_waiting_exregs:		return "XCPU_EX ";
-	    default:				return "UNKNOWN ";
-	    }
-	}
+    const char * string (void);
 
 #endif /* __cplusplus */
 };
 typedef struct thread_state_t thread_state_t;
+
+/* Single implementation of the state->name mapping, usable from both
+   languages; thread_state_t::string() below forwards to it. */
+INLINE const char * thread_state_string (word_t state)
+{
+    switch (state) {
+    case THREAD_STATE_RUNNING:			return "RUNNING ";
+    case THREAD_STATE_WAITING_FOREVER:		return "WAIT_FE ";
+    case THREAD_STATE_WAITING_TIMEOUT:		return "WAIT_TO ";
+    case THREAD_STATE_WAITING_TUNNELED_PF:	return "WAIT_TP ";
+    case THREAD_STATE_LOCKED_WAITING:		return "LOCK_WT ";
+    case THREAD_STATE_LOCKED_RUNNING:		return "LOCK_RU ";
+    case THREAD_STATE_LOCKED_RUNNING_IPC_DONE:	return "LOCK_RD ";
+    case THREAD_STATE_LOCKED_RUNNING_NESTED:	return "LOCK_RN ";
+    case THREAD_STATE_POLLING:			return "POLLING ";
+    case THREAD_STATE_HALTED:			return "HALTED  ";
+    case THREAD_STATE_ABORTED:			return "ABORTED ";
+    case THREAD_STATE_XCPU_WAITING_DELTCB:	return "XCPU_DT ";
+    case THREAD_STATE_XCPU_WAITING_EXREGS:	return "XCPU_EX ";
+    default:					return "UNKNOWN ";
+    }
+}
+
+#if defined(__cplusplus)
+INLINE const char * thread_state_t::string (void)
+{ return thread_state_string ((word_t) state); }
+#endif
 
 #if defined(__cplusplus)
 INLINE bool thread_state_t::is_runnable()

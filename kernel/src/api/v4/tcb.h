@@ -852,6 +852,18 @@ INLINE cpuid_t    tcb_get_cpu (const tcb_t *self)		{ return self->cpu; }
 INLINE threadid_t tcb_get_global_id (const tcb_t *self)		{ return self->myself_global; }
 INLINE threadid_t tcb_get_partner (const tcb_t *self)		{ return self->partner; }
 INLINE space_t *  tcb_get_space (const tcb_t *self)		{ return self->space; }
+INLINE utcb_t *   tcb_get_utcb (const tcb_t *self)		{ return self->utcb; }
+/* get_saved_state's default argument was level 0. */
+INLINE word_t     tcb_get_saved_state (const tcb_t *self)	{ return self->misc.saved_state[0].state; }
+/* preempt_flags/cop_flags are plain data members of the UTCB. */
+INLINE word_t     tcb_get_cop_flags (const tcb_t *self)		{ return self->utcb->cop_flags; }
+INLINE threadid_t tcb_get_intended_receiver (const tcb_t *self)	{ return self->utcb->intended_receiver; }
+INLINE preempt_flags_t tcb_get_preempt_flags (const tcb_t *self)
+{
+    preempt_flags_t flags;
+    flags.raw = self->utcb->preempt_flags;
+    return flags;
+}
 INLINE word_t     tcb_get_state (const tcb_t *self)		{ return self->thread_state.state; }
 INLINE void       tcb_set_state (tcb_t *self, word_t s)		{ self->thread_state.state = s; }
 INLINE tcb_t *    tcb_get_partner_tcb (const tcb_t *self)	{ return tcb_get_tcb (self->partner); }

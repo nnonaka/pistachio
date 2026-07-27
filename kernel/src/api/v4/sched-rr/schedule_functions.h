@@ -125,40 +125,10 @@ INLINE void sched_ktcb_t::delete_tcb()
     
 }
 
-#if defined(CONFIG_DEBUG)
-INLINE void sched_ktcb_t::dump_priority() 
-{ 
-    printf("=== PRIO: %2d ===", priority); 
-#if defined(CONFIG_X_EVT_LOGGING)
-    printf("= L: %2d =", logid);
-#endif
-}
-
-INLINE void sched_ktcb_t::dump_list1() 
-{ 
-    printf("wait : %wt:%-wt   ", wait_list.next, wait_list.prev); 
-}
-
-INLINE void sched_ktcb_t::dump_list2() 
-{ 
-    printf("ready: %wt:%-wt   ", ready_list.next, ready_list.prev); 
-}
-
-INLINE void sched_ktcb_t::dump(u64_t current_time)
-{
-    printf("total quant:    %wdus, ts length  :       %wdus, curr ts: %wdus\n",
-           (word_t)total_quantum, (word_t)timeslice_length,
-           (word_t)current_timeslice);
-    printf("abs timeout:    %wdus, rel timeout:       %wdus\n",
-           (word_t)absolute_timeout,
-           absolute_timeout == 0 ? 0 :
-           (word_t)(absolute_timeout -  current_time));
-    printf("sens prio: %d, delay: max=%dus, curr=%dus\n",
-           sensitive_prio, max_delay, current_max_delay);
-
-}
-
-#endif
+/* The four debug dump methods that lived here are now C functions in
+   sched-rr/schedule.c (declared in sktcb.h).  They were header inlines whose
+   only caller was kdb/api/v4/tcb.cc; once that became C, nothing would have
+   emitted them. */
 
   
 INLINE u64_t scheduler_t::get_current_time() 

@@ -980,3 +980,42 @@ void scheduler_start (scheduler_t *self, cpuid_t cpuid);
 
 void sched_init (bool bootcpu)		{ scheduler_init (cur_sched (), bootcpu); }
 void sched_start (cpuid_t cpu)		{ scheduler_start (cur_sched (), cpu); }
+
+#if defined(CONFIG_DEBUG)
+/*
+ *  Debug dumps for the kdb showtcb commands.  These were INLINEs in
+ *  sched-rr/schedule_functions.h; their only caller (kdb/api/v4/tcb.c) is now
+ *  C, so the bodies live here rather than in a C++-only header.
+ */
+
+void sched_ktcb_dump_priority (sched_ktcb_t *self)
+{
+    printf("=== PRIO: %2d ===", self->base.priority);
+#if defined(CONFIG_X_EVT_LOGGING)
+    printf("= L: %2d =", self->logid);
+#endif
+}
+
+void sched_ktcb_dump_list1 (sched_ktcb_t *self)
+{
+    printf("wait : %wt:%-wt   ", self->base.wait_list.next, self->base.wait_list.prev);
+}
+
+void sched_ktcb_dump_list2 (sched_ktcb_t *self)
+{
+    printf("ready: %wt:%-wt   ", self->base.ready_list.next, self->base.ready_list.prev);
+}
+
+void sched_ktcb_dump (sched_ktcb_t *self, u64_t current_time)
+{
+    printf("total quant:    %wdus, ts length  :       %wdus, curr ts: %wdus\n",
+           (word_t)self->base.total_quantum, (word_t)self->base.timeslice_length,
+           (word_t)self->base.current_timeslice);
+    printf("abs timeout:    %wdus, rel timeout:       %wdus\n",
+           (word_t)self->base.absolute_timeout,
+           self->base.absolute_timeout == 0 ? 0 :
+           (word_t)(self->base.absolute_timeout -  current_time));
+    printf("sens prio: %d, delay: max=%dus, curr=%dus\n",
+           self->base.sensitive_prio, self->base.max_delay, self->base.current_max_delay);
+}
+#endif /* CONFIG_DEBUG */

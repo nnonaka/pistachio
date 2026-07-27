@@ -2661,3 +2661,58 @@ PASS, and the `B` command run twice against a pre-flip kernel
 (scratchpad/birun.sh) — identical. Running it twice matters: the first call
 takes the validate-and-copy path (`bootinfo_is_valid`, `bootinfo_size_safe`,
 the `space_readmem_phys` loop), the second uses the cached copy.
+
+## §78 — kdb/api/v4/tcb.cc → .c, and a REAL ABI DIVERGENCE in sched_ktcb_t
+
+The flip needed a lot of new C forms: `tcb_get_utcb/_saved_state/_cop_flags/
+_preempt_flags/_intended_receiver`, `thread_state_string`,
+`msg_tag_is_redirected/_is_xcpu`, `msg_item_get_string_cache_hints`,
+`time_is_period`, `fpage_is_complete_fpage`, and a C branch for the `TID()`
+macro (it used `.get_raw()`).
+
+The four `sched_ktcb_t` debug dumps (`dump_priority`, `dump_list1`,
+`dump_list2`, `dump`) were **header inlines** in the C++-only
+`sched-rr/schedule_functions.h` whose *only* caller was this file. Per the
+emission rule, they were moved out to real C functions in
+`sched-rr/schedule.c`, declared in `sktcb.h`.
+
+### THE FINDING: C and C++ placed `sched_ktcb_t::scheduler` 2 bytes apart
+
+Comparing `t`/`T` against the pre-flip kernel showed the `scheduler:` field
+differing — old printed raw `003a000000010000`, new printed `ROOTTASK`. That
+raw value is roottask's real tid `0000003a00000001` shifted left exactly 16
+bits, i.e. a read 2 bytes early. Measured with conflicting-declaration probes
+compiled *inside the real build* (a standalone probe TU gives wrong numbers —
+the headers are not configured the same way):
+
+    sizeof(policy_sched_ktcb_t)            88   both languages
+    offsetof(rr_sched_ktcb_t, max_delay)   84   both languages
+    offsetof(sched_ktcb_t, scheduler)      88 in C, 86 in C++   <-- diverges
+    sizeof(sched_ktcb_t)                   96   both languages
+
+`rr_sched_ktcb_t` ends with `u16_t max_delay` at 84, so it occupies 86 bytes
+and pads to 88. C++ derives (`class sched_ktcb_t : public policy_sched_ktcb_t`)
+and, because the class is non-standard-layout, **reuses the base's tail
+padding** — putting `scheduler` at 86. The C rep models inheritance as an
+embedded member (`policy_sched_ktcb_t base;`), which cannot reuse tail padding,
+so C puts it at 88.
+
+This was introduced when sktcb.h was dual-repped, i.e. **the migration silently
+moved a field by 2 bytes**. It went unnoticed because sizeof still matches (so
+nothing after `sched_state` in `tcb_t` shifted) and because by then every
+writer *and* reader of the field was C — self-consistent. kdb's `scheduler:`
+display was the last C++ reader and the only visible symptom.
+
+Fixed by adding an explicit `u16_t __tail_pad` to `rr_sched_ktcb_t`, leaving no
+tail padding for C++ to reuse. Both languages now report offset 88, sizeof
+unchanged at 96. Verified decisively: rebuilding the **pre-flip C++** kernel
+with *only* the padding fix makes it print `ROOTTASK` too.
+
+**Lesson: `struct X { Base base; }` is not equivalent to `class X : public Base`
+whenever Base has tail padding and the derived type is non-standard-layout.**
+Every `__base`/`base` composition in this migration should be probed the same
+way — `space_t`, `scheduler_t`, `x86_exceptionframe_t` are the other three.
+
+Verification: 333152 bytes, warning-clean, 0 implicit declarations, boottest
+PASS, and `t`/`T` driven three ways (basic dump, extended with UTCB + MRs +
+BRs, and a thread with no UTCB) identical to the corrected C++ baseline.

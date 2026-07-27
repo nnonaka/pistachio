@@ -153,6 +153,13 @@ void sched_ktcb_cancel_timeout (sched_ktcb_t *self);
 void sched_ktcb_set_timeout_abs (sched_ktcb_t *self, u64_t absolute_time, bool enqueue);
 threadid_t sched_ktcb_get_scheduler (sched_ktcb_t *self);
 void sched_ktcb_sys_thread_switch (sched_ktcb_t *self);
+#if defined(CONFIG_DEBUG)
+/* Debug dumps used by the kdb showtcb commands (sched-rr/schedule.c). */
+void sched_ktcb_dump_priority (sched_ktcb_t *self);
+void sched_ktcb_dump_list1 (sched_ktcb_t *self);
+void sched_ktcb_dump_list2 (sched_ktcb_t *self);
+void sched_ktcb_dump (sched_ktcb_t *self, u64_t current_time);
+#endif
 END_DECLS
 
 #endif /* !__API__V4__SKTCB_H__ */

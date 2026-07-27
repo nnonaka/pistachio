@@ -896,6 +896,10 @@ END_DECLS
    off => arch_fpage always invalid); mem.x / raw are C-visible. */
 BEGIN_DECLS
 bool   fpage_is_nil_fpage (fpage_t *self)			{ return self->raw == 0; }
+/* CONFIG_X86_IO_FLEXPAGES is off, so the arch-page half of the C++
+   is_complete_fpage() is always false and only the mem-page test remains. */
+bool   fpage_is_complete_fpage (fpage_t *self)
+{ return fpage_is_mempage (self) && self->mem.x.size == 1 && self->mem.x.base == 0; }
 word_t fpage_get_size_log2 (fpage_t *self)
 { return (self->mem.x.size == 1 && self->mem.x.base == 0) ? sizeof (word_t) * 8 : self->mem.x.size; }
 bool   fpage_is_range_overlapping (fpage_t *self, addr_t start, addr_t end)
