@@ -221,14 +221,16 @@ public:
 private:
     u8_t	data[0];
 public:
-    acpi_madt_hdr_t* find(u8_t type, int index);
+    /* Defined in C (generic/acpi.c); the __asm__ labels make the C++ call
+       sites resolve to the C symbols ('this' is the leading pointer arg). */
+    acpi_madt_hdr_t* find(u8_t type, int index) __asm__ ("acpi_madt_find");
 public:
-    acpi_madt_lapic_t* lapic(int index);
-    acpi_madt_ioapic_t* ioapic(int index);
-    acpi_madt_lsapic_t* lsapic(int index);
-    acpi_madt_iosapic_t* iosapic(int index);
-    acpi_madt_irq_t* irq(int index);
-    acpi_madt_nmi_t* nmi(int index);
+    acpi_madt_lapic_t* lapic(int index) __asm__ ("acpi_madt_lapic");
+    acpi_madt_ioapic_t* ioapic(int index) __asm__ ("acpi_madt_ioapic");
+    acpi_madt_lsapic_t* lsapic(int index) __asm__ ("acpi_madt_lsapic");
+    acpi_madt_iosapic_t* iosapic(int index) __asm__ ("acpi_madt_iosapic");
+    acpi_madt_irq_t* irq(int index) __asm__ ("acpi_madt_irq");
+    acpi_madt_nmi_t* nmi(int index) __asm__ ("acpi_madt_nmi");
 
     friend void dump_apic (acpi_madt_t * madt);
 } __attribute__((packed));
@@ -328,6 +330,194 @@ public:
 
     friend class kdb_t;
 } __attribute__((packed));
+
+#else /* !__cplusplus */
+
+/* C mirrors of the ACPI table classes above.  Same packed layouts (the classes
+   are plain data -- no bases, no virtuals), with the C++ `private:` members
+   simply declared in order.  Used by generic/acpi.c and
+   platform/generic/intctrl-apic.c. */
+
+struct acpi_gas_t {
+    u8_t	id;
+    u8_t	width;
+    u8_t	offset;
+    u8_t	_rsvd_3;
+    /* the 64-bit address is only 32-bit aligned */
+    BITFIELD2 (u32_t,
+	       addrlo,
+	       addrhi);
+} __attribute__((packed));
+typedef struct acpi_gas_t acpi_gas_t;
+
+struct acpi_thead_t {
+    char	sig[4];
+    u32_t	len;
+    u8_t	rev;
+    u8_t	csum;
+    char	oem_id[6];
+    char	oem_tid[8];
+    u32_t	oem_rev;
+    u32_t	creator_id;
+    u32_t	creator_rev;
+} __attribute__((packed));
+typedef struct acpi_thead_t acpi_thead_t;
+
+struct acpi_madt_hdr_t {
+    u8_t	type;
+    u8_t	len;
+} __attribute__((packed));
+typedef struct acpi_madt_hdr_t acpi_madt_hdr_t;
+
+struct acpi_madt_lapic_t {
+    acpi_madt_hdr_t	header;
+    u8_t		apic_processor_id;
+    u8_t		id;
+    struct {
+	u32_t enabled	:  1;
+	u32_t		: 31;
+    } flags;
+} __attribute__((packed));
+typedef struct acpi_madt_lapic_t acpi_madt_lapic_t;
+
+struct acpi_madt_ioapic_t {
+    acpi_madt_hdr_t	header;
+    u8_t	id;	  /* APIC id			*/
+    u8_t	_rsvd_3;
+    u32_t	address;  /* physical address		*/
+    u32_t	irq_base; /* global irq number base	*/
+} __attribute__((packed));
+typedef struct acpi_madt_ioapic_t acpi_madt_ioapic_t;
+
+struct acpi_madt_lsapic_t {
+    acpi_madt_hdr_t	header;
+    u8_t		apic_processor_id;
+    u8_t		id;
+    u8_t		eid;
+    u8_t		__reserved[3];
+    struct {
+	u32_t enabled	:  1;
+	u32_t		: 31;
+    } flags;
+} __attribute__((packed));
+typedef struct acpi_madt_lsapic_t acpi_madt_lsapic_t;
+
+struct acpi_madt_iosapic_t {
+    acpi_madt_hdr_t	header;
+    u8_t	id;	  /* APIC id			*/
+    u8_t	__reserved;
+    u32_t	irq_base; /* global irq number base	*/
+    u64_t	address;  /* physical address		*/
+} __attribute__((packed));
+typedef struct acpi_madt_iosapic_t acpi_madt_iosapic_t;
+
+/* polarity / trigger_mode enum values (acpi_madt_irq_t and acpi_madt_nmi_t
+   share the encoding; nmi has no reserved_* names but the values match). */
+#define ACPI_MADT_CONFORM_POLARITY	0
+#define ACPI_MADT_ACTIVE_HIGH		1
+#define ACPI_MADT_RESERVED_POLARITY	2
+#define ACPI_MADT_ACTIVE_LOW		3
+#define ACPI_MADT_CONFORM_TRIGGER	0
+#define ACPI_MADT_EDGE			1
+#define ACPI_MADT_RESERVED_TRIGGER	2
+#define ACPI_MADT_LEVEL			3
+
+struct acpi_madt_irq_t {
+    acpi_madt_hdr_t	header;
+    u8_t	src_bus;	/* source bus, fixed 0=ISA	*/
+    u8_t	src_irq;	/* source bus irq		*/
+    u32_t	dest;		/* global irq number		*/
+    union {
+	u16_t	flags;		/* irq flags */
+	struct {
+	    BITFIELD3 (
+		u16_t,
+		polarity	: 2,
+		trigger_mode	: 2,
+		reserved	: 12);
+	} x;
+    };
+} __attribute__((packed));
+typedef struct acpi_madt_irq_t acpi_madt_irq_t;
+
+struct acpi_madt_nmi_t {
+    acpi_madt_hdr_t	header;
+    union {
+	u16_t		flags;
+	struct {
+	    BITFIELD3 (
+		u16_t,
+		polarity	: 2,
+		trigger_mode	: 2,
+		reserved	: 12);
+	} x;
+    };
+    u32_t		irq;
+} __attribute__((packed));
+typedef struct acpi_madt_nmi_t acpi_madt_nmi_t;
+
+struct acpi_madt_t {
+    acpi_thead_t header;
+    u32_t	local_apic_addr;
+    u32_t	apic_flags;
+    u8_t	data[0];
+} __attribute__((packed));
+typedef struct acpi_madt_t acpi_madt_t;
+
+struct acpi_fadt_t {
+    acpi_thead_t header;
+    u8_t	data[0];
+} __attribute__((packed));
+typedef struct acpi_fadt_t acpi_fadt_t;
+
+/* RSDT and XSDT differ in their pointer size only (the acpi__sdt_t<T> template
+   instantiations): rsdt 32-bit, xsdt 64-bit. */
+struct acpi_rsdt_t {
+    acpi_thead_t	header;
+    u32_t		ptrs[0];
+} __attribute__((packed));
+typedef struct acpi_rsdt_t acpi_rsdt_t;
+
+struct acpi_xsdt_t {
+    acpi_thead_t	header;
+    u64_t		ptrs[0];
+} __attribute__((packed));
+typedef struct acpi_xsdt_t acpi_xsdt_t;
+
+struct acpi_rsdp_t {
+    char	sig[8];
+    u8_t	csum;
+    char	oemid[6];
+    u8_t	rev;
+    u32_t	rsdt_ptr;
+    u32_t	rsdt_len;
+    u64_t	xsdt_ptr;
+    u8_t	xcsum;
+    u8_t	_rsvd_33[3];
+} __attribute__((packed));
+typedef struct acpi_rsdp_t acpi_rsdp_t;
+
+/* C forms of the trivial accessors (the C++ inline methods above). */
+INLINE u64_t acpi_gas_address (acpi_gas_t *self)
+{ return (((u64_t) self->addrhi) << 32) + self->addrlo; }
+INLINE word_t acpi_madt_irq_get_polarity (acpi_madt_irq_t *self)	{ return self->x.polarity; }
+INLINE word_t acpi_madt_irq_get_trigger_mode (acpi_madt_irq_t *self)	{ return self->x.trigger_mode; }
+INLINE word_t acpi_madt_nmi_get_polarity (acpi_madt_nmi_t *self)	{ return self->x.polarity; }
+INLINE word_t acpi_madt_nmi_get_trigger_mode (acpi_madt_nmi_t *self)	{ return self->x.trigger_mode; }
+INLINE u32_t acpi_fadt_pmtimer_ioport (acpi_fadt_t *self)
+{ return *(u32_t *) &self->data[76 - sizeof (acpi_thead_t)]; }
+
+/* The MADT entry walkers (defined in generic/acpi.c). */
+BEGIN_DECLS
+acpi_madt_hdr_t *    acpi_madt_find (acpi_madt_t *self, u8_t type, int index);
+acpi_madt_lapic_t *  acpi_madt_lapic (acpi_madt_t *self, int index);
+acpi_madt_ioapic_t * acpi_madt_ioapic (acpi_madt_t *self, int index);
+acpi_madt_lsapic_t * acpi_madt_lsapic (acpi_madt_t *self, int index);
+acpi_madt_iosapic_t *acpi_madt_iosapic (acpi_madt_t *self, int index);
+acpi_madt_irq_t *    acpi_madt_irq (acpi_madt_t *self, int index);
+acpi_madt_nmi_t *    acpi_madt_nmi (acpi_madt_t *self, int index);
+END_DECLS
+
 #endif /* __cplusplus */
 
 

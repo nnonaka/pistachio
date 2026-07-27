@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2003,  Karlsruhe University
  *                
- * File path:     generic/acpi.cc
+ * File path:     generic/acpi.c
  * Description:   Implementation of ACPI structure walkers
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -32,11 +32,14 @@
 
 #include <acpi.h>
 
-acpi_madt_hdr_t* acpi_madt_t::find(u8_t type, int index)
+/* Walk the MADT entries looking for the index'th entry of the given type.
+   Translated from acpi_madt_t's methods (the C++ decls in acpi.h carry
+   __asm__ labels naming these symbols, so C++ call sites link here). */
+acpi_madt_hdr_t* acpi_madt_find (acpi_madt_t *self, u8_t type, int index)
 {
-    for (word_t i = 0; i < (header.len-sizeof(acpi_madt_t));)
+    for (word_t i = 0; i < (self->header.len - sizeof (acpi_madt_t));)
     {
-	acpi_madt_hdr_t* h = (acpi_madt_hdr_t*) &data[i];
+	acpi_madt_hdr_t* h = (acpi_madt_hdr_t*) &self->data[i];
 	if (h->type == type)
 	{
 	    if (index == 0)
@@ -48,32 +51,32 @@ acpi_madt_hdr_t* acpi_madt_t::find(u8_t type, int index)
     return NULL;
 }
 
-acpi_madt_lapic_t* acpi_madt_t::lapic(int index)
+acpi_madt_lapic_t* acpi_madt_lapic (acpi_madt_t *self, int index)
 {
-    return (acpi_madt_lapic_t*) find(0, index);
-};
-
-acpi_madt_ioapic_t* acpi_madt_t::ioapic(int index)
-{
-    return (acpi_madt_ioapic_t*) find(1, index);
-};
-
-acpi_madt_irq_t* acpi_madt_t::irq(int index)
-{
-    return (acpi_madt_irq_t*) find(2, index);
-};
-
-acpi_madt_nmi_t* acpi_madt_t::nmi(int index)
-{
-    return (acpi_madt_nmi_t*) find(3, index);
-};
-
-acpi_madt_lsapic_t * acpi_madt_t::lsapic(int index)
-{
-    return (acpi_madt_lsapic_t*) find(7, index);
+    return (acpi_madt_lapic_t*) acpi_madt_find (self, 0, index);
 }
 
-acpi_madt_iosapic_t * acpi_madt_t::iosapic(int index)
+acpi_madt_ioapic_t* acpi_madt_ioapic (acpi_madt_t *self, int index)
 {
-    return (acpi_madt_iosapic_t*) find (6, index);
+    return (acpi_madt_ioapic_t*) acpi_madt_find (self, 1, index);
+}
+
+acpi_madt_irq_t* acpi_madt_irq (acpi_madt_t *self, int index)
+{
+    return (acpi_madt_irq_t*) acpi_madt_find (self, 2, index);
+}
+
+acpi_madt_nmi_t* acpi_madt_nmi (acpi_madt_t *self, int index)
+{
+    return (acpi_madt_nmi_t*) acpi_madt_find (self, 3, index);
+}
+
+acpi_madt_lsapic_t * acpi_madt_lsapic (acpi_madt_t *self, int index)
+{
+    return (acpi_madt_lsapic_t*) acpi_madt_find (self, 7, index);
+}
+
+acpi_madt_iosapic_t * acpi_madt_iosapic (acpi_madt_t *self, int index)
+{
+    return (acpi_madt_iosapic_t*) acpi_madt_find (self, 6, index);
 }

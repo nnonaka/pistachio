@@ -48,7 +48,7 @@ CFLAGS_src/glue/$(API)-$(ARCH)/$(SUBARCH)/exception = -fomit-frame-pointer
 
 
 ifeq ("$(CONFIG_IOAPIC)","y")
-SOURCES += src/generic/acpi.cc
+SOURCES += src/generic/acpi.c
 endif
 
 

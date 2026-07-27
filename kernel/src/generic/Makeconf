@@ -33,7 +33,7 @@ SOURCES+=	src/generic/lib.c \
 		src/generic/kmemory.c
 
 ifeq ("$(CONFIG_ACPI)","y")
-SOURCES+=	src/generic/acpi.cc
+SOURCES+=	src/generic/acpi.c
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")

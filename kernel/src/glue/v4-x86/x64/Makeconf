@@ -38,7 +38,7 @@ CFLAGS_/src/glue/$(API)-$(ARCH)/$(SUBARCH)/pagefault = -fomit-frame-pointer
 CFLAGS_/src/glue/$(API)-$(ARCH)/$(SUBARCH)/exception = -fomit-frame-pointer
 
 ifeq ("$(CONFIG_IOAPIC)","y")
-SOURCES += src/generic/acpi.cc
+SOURCES += src/generic/acpi.c
 endif
 
 # use linear_ptab_walker if need be
