@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2004,  Karlsruhe University
  *
- * File path:     kernel/kdb/generic/tid_format.cc
+ * File path:     kernel/kdb/generic/tid_format.c
  * Description:   Implementation of thread ID format configuration
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,7 @@
 /**
  * Current thread ID format
  */
-kdb_tid_format_t kdb_tid_format = { X: { value:0, human:1, version:0, sep:0 }  };
+kdb_tid_format_t kdb_tid_format = { .X = { .value = 0, .human = 1, .version = 0, .sep = 0 } };
 
 /**
  * Change memory dump word size.
