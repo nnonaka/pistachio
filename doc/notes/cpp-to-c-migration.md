@@ -2147,3 +2147,64 @@ space.cc additions; (B) the flip.  Verify: build warning-clean + 0 implicit-decl
 boottest PASS, l4test test-region byte-identical (KIP/memtest/IPC, same
 Local-destination-Id fault eip=0000000001000295).  Completing this drops the C++
 toolchain entirely -- the migration goal.
+
+
+## 65. glue/v4-x86/space.cc -> C: the last wrapper-host, staged F1/F2/mmu + flip (2026-07-27, commits e306a3d 98931c1 043d717 49fab2d)
+
+space.cc (1446 lines) -- the monster, third wrapper-host, a THREE-LAYER
+de-classing (space_t -> pgent_t -> x86_pgent_t) + mmu/fpage/atomic/mem_region.
+No infrastructure blockers: every external dependency already had a C form (see
+§64 scoping).
+
+Foundation (byte-identical, committed separately): F1 pgent_set_global/cpulocal/
+cacheability + pgent_sync + pgent_smp_sync/_reference_bits decls (pgent.h);
+F2 x86_pgent_t bitfield C forms (ptab.h, ~24 accessors); x86_mmu_t get_active_
+pagetable/get_pagefault_address/flush_tlbent (mmu.h).
+
+The flip (49fab2d).  Approach that worked after per-method whitespace edits
+proved fragile: a full careful Write of the translated file, then compiler- and
+l4test-guided fixes.
+  - each out-of-line space_t method -> a C function bearing its space_* wrapper
+    name (the redundant wrapper deleted); internal calls use those names;
+    this-> -> self->, space->data -> space->base.data (struct space_t wraps
+    x86_space_t base), pgsize_e -> word_t (X86_PGSIZE_*), pgent->m(this,..) ->
+    pgent_m(pgent,self,..), get_kernel_space() -> get_kernel_space_c().
+  - pgent_* wrappers delegate to x86_pgent_* (F2) + pgent_sync + a static
+    pgent_linknode_ptr (SMP __linknode_ptr form); pgent_set_entry rebuilds the
+    attrib bits inline (PGE/PAT/NX #ifs kept).
+  - fpage_* wrappers -> direct mem.x/raw field access (CONFIG_X86_IO_FLEXPAGES off
+    => arch_fpage always invalid => all mem-pages; is_complete_mempage =
+    size==1&&base==0).  NB fpage_get_base: (word_t)mem.x.base << 10 -- widen the
+    bitfield to 64-bit BEFORE the shift or large bases truncate.
+  - space_* inline-method wrappers -> self->base.data field access; is_user_area/
+    is_tcb_area/is_copy_area over sign_ext (= addr | X86_X64_SIGN_EXTENSION);
+    unmap_fpage builds an mdb_ctrl_t (C-visible) and calls the asm-named
+    space_mapctrl.
+  - the io_bitmap methods are dead (#if CONFIG_X86_IO_FLEXPAGES, off) -> #error
+    guard instead of dead C++.
+
+Gotchas:
+  - active_cpu_space_t is a C++ class -> defined a C struct locally; atomic_t
+    thread_count needs atomic_inc/dec/read C forms (added to atomic.h).
+  - IS_SPACE_SMALL/GLOBAL and align_memregion are C++-only in space.h -> redefined
+    IS_SPACE_* macros locally, added align_memregion + mem_region_is_empty as C.
+  - REMAINING C++ callers of space_t methods (intctrl-apic.cc, sched-rr policy
+    schedule.cc) forced asm-name bridges on add_mapping/move_tcb/lookup_mapping
+    (the §62 pattern); lookup_mapping's out-param stays int* (4-byte pgsize_e ABI,
+    NOT word_t* -- a word_t write would corrupt the caller's stack).
+  - BUG found by l4test (hang at "Send timeout"): tcb_sched_set_timeout passed
+    enqueue=false, but sched_ktcb_t::set_timeout(u64_t,bool enqueue=true) defaults
+    to true; the timeout never enqueued.  Fixed to true.  (First real behavioural
+    bug caught by l4test in the whole migration -- underscores its value.)
+
+Verified: builds 354744, 0 implicit-decl, warning-clean; boots through kernel-
+space + per-CPU page-table init + AP bringup (a wrong pgent bit => triple fault);
+boottest PASS; l4test test-region byte-identical (Send/Receive timeout now OK,
+same Local-destination-Id fault eip=0000000001000295).
+
+MILESTONE: all three wrapper-hosts flipped; tcb_t/space_t/pgent_t glue is fully C.
+STILL BUILT AS C++ (the earlier "3 wrapper-hosts = last" framing overlooked
+these): api/v4/sched-rr/schedule.cc (scheduler policy; hosts the sched_* wrapper
+defs), arch/x86/x64/init32.cc (32-bit boot init), generic/acpi.cc,
+platform/generic/intctrl-apic.cc.  Plus config-gated/unbuilt: io_space/mdb_io/
+vrt_io/hvm-space/timer/mdb/mdb_mem.
