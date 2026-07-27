@@ -3080,3 +3080,42 @@ rather than started here. `build/scratch-tbuf` is left in place as the harness
 Verification of the two fixes: the **main** config rebuilds byte-identical
 (332136) with boottest PASS, confirming both changes are confined to code that
 this config does not compile.
+
+## §88 — Dual-repped the two tracebuffer headers
+
+`src/kdb/tracebuffer.h` and `src/arch/x86/tracebuffer.h` were pure C++ with
+unguarded `class` (§87). Both now carry a C rep and compile from a C TU:
+
+  - `tracerecord_t` and `tracebuffer_t` get C structs in declaration order plus
+    free functions. `num_args` becomes `TRACERECORD_NUM_ARGS`, `ofs_counters`
+    becomes `TRACEBUFFER_OFS_COUNTERS`.
+  - `current` is an `atomic_t`, so `current++` / `== max` / `= 0` become
+    `atomic_inc` / `atomic_read` / `atomic_set` — the C++ operators do not exist
+    in C.
+  - `store_record` and `next_record` depend on the arch-specific `store_arch`,
+    so their C forms sit *after* the `INC_ARCH(tracebuffer.h)` include at the
+    bottom of the file, mirroring how C++ orders the same dependency.
+  - `tracerecord_t::store_arch` and `tracebuffer_t::initialize` in the arch
+    header get C counterparts.
+  - Collateral: `traceconfig_t` had no C typedef; `tbuf_dump`'s two default
+    arguments needed a C declaration; and the `TBUF_REC_*` macro bodies used
+    `tbuf->next_record(...)` / `store_string` / `store_data` method syntax.
+
+### A long tail: TRACEPOINT call sites in already-C files
+
+With the headers fixed, the scratch build advanced and immediately hit the same
+class of defect in *other* `.c` files — code inside `TRACEPOINT(...)` that was
+never compiled because the option is off:
+
+    src/api/v4/exregs.c    ctrl.string()        -> fixed (added exregs_ctrl_string)
+    src/api/v4/ipc.c       ->get_state()        -> still open
+    ...                    the build stops at each in turn
+
+This is the third and fourth instance of the pattern first seen in §84
+(ctrlxfer) and §87 (tracepoints.c). **Any statement that only appears inside a
+disabled `TRACEPOINT`/`TRACEF` was never compiled by the migration**, so C++
+method syntax survives there in files that already have a `.c` extension. The
+count is unknown until the scratch build runs clean; each fix reveals the next.
+
+Verification: main config rebuilds byte-identical (332136), boottest PASS — all
+of this is confined to code the working config does not compile.

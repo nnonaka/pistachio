@@ -59,17 +59,21 @@ union traceconfig_t
     };
     word_t raw;
 };
-    
+typedef union traceconfig_t traceconfig_t;
+
 
 /**
  * A tracebuffer record indicates the type of event, the time of the
  * event, the current thread, a number of event specific parameters,
  * and potentially the current performance counters.
  */
+#define TRACERECORD_NUM_ARGS 9
+
+#if defined(__cplusplus)
 class tracerecord_t
 {
 public:
-    static const word_t num_args = 9;
+    static const word_t num_args = TRACERECORD_NUM_ARGS;
 
     struct {
         word_t          utype   : 16;
@@ -108,6 +112,34 @@ public:
             store_arch(config);
         }
 };
+#else
+/* C rep of tracerecord_t: data members in declaration order (the methods are
+   free functions below; store_arch is arch-specific and comes with the arch
+   header included at the bottom of this file). */
+struct tracerecord_t
+{
+    struct {
+        word_t          utype   : 16;
+        word_t          ktype   : 16;
+        word_t                  : BITS_WORD-32;
+        word_t          cpu     : 16;
+        word_t          id      : 16;
+        word_t                  : BITS_WORD-32;
+    };
+    word_t              tsc;
+    word_t              thread;
+    word_t              pmc0;
+    word_t              pmc1;
+    const char *        str;
+    word_t              arg[TRACERECORD_NUM_ARGS];
+};
+typedef struct tracerecord_t tracerecord_t;
+
+INLINE bool tracerecord_is_kernel_event (tracerecord_t *self)
+{ return self->ktype && ! self->utype; }
+INLINE word_t tracerecord_get_type (tracerecord_t *self)
+{ return (self->utype == 0) ? self->ktype : self->utype; }
+#endif
 
 
 /**
@@ -117,6 +149,7 @@ public:
  * The remaining part of the region hold the counters and the
  * tracebuffer records.
  */
+#if defined(__cplusplus)
 class tracebuffer_t
 {
     word_t        magic;
@@ -168,6 +201,37 @@ public:
         { tracerecords[current].arg[offset] = item; }
 
 };
+#else
+/* C rep of tracebuffer_t: same layout; the members are private in C++ but the
+   layout is identical.  next_record/initialize need store_arch, so their C
+   forms live after the arch include at the bottom of this file. */
+struct tracebuffer_t
+{
+    word_t        magic;
+    atomic_t      current;
+    word_t        mask;
+    word_t        max;
+    traceconfig_t config;
+    word_t        __pad[3];
+    word_t        counters[8];
+    tracerecord_t tracerecords[];
+};
+typedef struct tracebuffer_t tracebuffer_t;
+
+#define TRACEBUFFER_OFS_COUNTERS  (sizeof (word_t) * 8)
+
+INLINE bool tracebuffer_is_valid (tracebuffer_t *self)
+{ return self->magic == TRACEBUFFER_MAGIC; }
+
+INLINE void tracebuffer_increase_counter (tracebuffer_t *self, word_t ctr)
+{ self->counters[ctr & 0x7]++; }
+
+INLINE void tracebuffer_store_string (tracebuffer_t *self, const char *str)
+{ self->tracerecords[atomic_read (&self->current)].str = str; }
+
+INLINE void tracebuffer_store_data (tracebuffer_t *self, word_t offset, word_t item)
+{ self->tracerecords[atomic_read (&self->current)].arg[offset] = item; }
+#endif
 
 INLINE tracebuffer_t * get_tracebuffer (void)
 {
@@ -179,7 +243,11 @@ INLINE tracebuffer_t * get_tracebuffer (void)
  * Wrap tracepoint events with event type arguments
  */
 
+#if defined(__cplusplus)
 extern void tbuf_dump (word_t count, word_t usec, word_t tp_id = 0, word_t cpumask=~0UL);
+#else
+extern void tbuf_dump (word_t count, word_t usec, word_t tp_id, word_t cpumask);
+#endif
 
 #define DEBUG_KERNEL_DETAILS
 #if defined(DEBUG_KERNEL_DETAILS)
@@ -189,6 +257,38 @@ extern void tbuf_dump (word_t count, word_t usec, word_t tp_id = 0, word_t cpuma
 #endif
 
 #include INC_ARCH(tracebuffer.h)
+
+#if !defined(__cplusplus)
+/* These need tracerecord_store_arch, defined by the arch header above. */
+INLINE void tracerecord_store_record (tracerecord_t *self, traceconfig_t config,
+				      word_t type, word_t id)
+{
+    /* Store type, cpu, id, thread, counters */
+    self->ktype = type & 0xffff;
+    self->utype = 0;
+    self->id = id & 0xffff;
+    self->cpu = get_current_cpu();
+    self->thread = (word_t) __builtin_frame_address(0);
+    tracerecord_store_arch (self, config);
+}
+
+INLINE bool tracebuffer_next_record (tracebuffer_t *self, word_t type, word_t id)
+{
+    /* Check wheter to filter the event */
+    if ((self->mask & ((type & 0xffff) << 16)) == 0)
+	return false;
+
+    atomic_inc (&self->current);
+    if (atomic_read (&self->current) == self->max)
+	atomic_set (&self->current, 0);
+
+    /* Store type, cpu, id, thread, counters */
+    tracerecord_store_record (&self->tracerecords[atomic_read (&self->current)],
+			      self->config, type, id);
+
+    return true;
+}
+#endif
 #include <stdarg.h>	/* for va_list, ... comes with gcc */
 
 #define tbuf_record_event(type, tpid, str, args...)			\
@@ -204,21 +304,21 @@ INLINE void __tbuf_record_event(word_t type, word_t tpid, const char *str, ...)
        used to be checked as "!this" inside next_record(), which is undefined
        behaviour -- the compiler is free to assume "this" is never null. */
     tracebuffer_t *tbuf = get_tracebuffer();
-    if(!tbuf || !tbuf->next_record(type, tpid))
+    if(!tbuf || !tracebuffer_next_record (tbuf, type, tpid))
         return;
                    
-    tbuf->store_string(str);
+    tracebuffer_store_string (tbuf, str);
 
     va_start(args, str);
     
     word_t i;
-    for (i=0; i < tracerecord_t::num_args; i++)
+    for (i=0; i < TRACERECORD_NUM_ARGS; i++)
     {
 	arg = va_arg(args, word_t);
 	if (arg == TRACEBUFFER_MAGIC)
 	    break;
 	
-	tbuf->store_data(i, arg);
+	tracebuffer_store_data (tbuf, i, arg);
 	
     }
     

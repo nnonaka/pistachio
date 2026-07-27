@@ -418,7 +418,7 @@ SYS_EXCHANGE_REGISTERS (threadid_t dst_tid, word_t control,
 		"SYS_EXCHANGE_REGISTERS: current %t, dst=%t [%s], control=0x%x [%s]"
 		", usp=%p, uip=%p, uflags=%p, pager=%t, uhandle=%x\n",
 		current, TID(dst_tid), is_local ? "local" : "global",
-		ctrl.raw, ctrl.string(), usp, uip, uflags, TID(pager_tid), uhandle);
+		ctrl.raw, exregs_ctrl_string (&ctrl), usp, uip, uflags, TID(pager_tid), uhandle);
 
     // Upon entry a local dst_tid will be converted into a global
     // thread ID before kernel entry.  If user somehow tricked kernel

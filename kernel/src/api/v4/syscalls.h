@@ -256,6 +256,29 @@ INLINE bool exregs_ctrl_is_set (const exregs_ctrl_t *self, word_t flag)
 { return (self->raw & (1UL << flag)) != 0; }
 INLINE void exregs_ctrl_set (exregs_ctrl_t *self, word_t flag)
 { self->raw |= (1UL << flag); }
+
+/* C form of exregs_ctrl_t::string(), used by the TRACEPOINT in exregs.c. */
+INLINE char * exregs_ctrl_string (const exregs_ctrl_t *self)
+{
+    static char s[] =  "~~~~~~~~~~~~~~";
+
+    s[0]  =  self->halt		? 'h' : '~';
+    s[1]  =  self->recv		? 'r' : '~';
+    s[2]  =  self->send		? 's' : '~';
+    s[3]  =  self->sp		? 's' : '~';
+    s[4]  =  self->ip		? 'i' : '~';
+    s[5]  =  self->flags	? 'f' : '~';
+    s[6]  =  self->uhandle	? 'u' : '~';
+    s[7]  =  self->pager	? 'p' : '~';
+    s[8]  =  self->haltflag	? 'h' : '~';
+    s[9]  =  self->ctrlxfer_conf	? 'C' : '~';
+    s[10] =  self->ctrlxfer_read	? 'R' : '~';
+    s[11] =  self->ctrlxfer_write	? 'W' : '~';
+    s[12] =  self->exchandler	? 'e' : '~';
+    s[13] =  self->scheduler	? 's' : '~';
+
+    return s;
+}
 #endif /* !__cplusplus */
 
 /* schedule_ctrl_t is dual-repped: the union is C-visible (api/v4/schedule.c
