@@ -300,6 +300,25 @@ INLINE void x86_mmu_flush_tlb (bool global)
 	    : "=r" (dummy1));
 #endif
 }
+
+INLINE word_t x86_mmu_get_active_pagetable (void)
+{
+    word_t pgm;
+    __asm__ __volatile__ ("mov %%cr3, %0\n" : "=a" (pgm));
+    return pgm;
+}
+
+INLINE word_t x86_mmu_get_pagefault_address (void)
+{
+    word_t tmp;
+    __asm__ ("mov %%cr2, %0\n" : "=r" (tmp));
+    return tmp;
+}
+
+INLINE void x86_mmu_flush_tlbent (word_t addr)
+{
+    __asm__ __volatile__ ("invlpg (%0)\n" : : "r" (addr));
+}
 #endif /* !__cplusplus */
 
 #endif /* !__ARCH__X86__MMU_H__ */
