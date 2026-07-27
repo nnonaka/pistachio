@@ -35,14 +35,35 @@
 #include INC_API(tcb.h)
 
 space_t *current_disas_space = NULL;
- 
-// callback for the disassembler to access user mem
-extern "C" int SECTION(".kdebug") kdb_disas_readmem(char * s, char * d)
+
+/* readmem<char> from generic/linear_ptab.h, specialised for the one byte the
+   disassembler asks for (the template itself is C++-only). */
+static bool readmem_char (space_t *space, addr_t vaddr, char *v)
+{
+    if (!space_is_user_area (vaddr))
+    {
+	/* We are not reading user memory.  Just access it directly */
+	*v = *(char *) vaddr;
+	return true;
+    }
+
+    word_t w;
+
+    /* Check if memory is accessible */
+    if (!space_readmem (space, vaddr, &w))
+	return false;
+
+    *v = (char) (w & 0xff);
+    return true;
+}
+
+/* callback for the disassembler to access user mem */
+int SECTION(".kdebug") kdb_disas_readmem(char * s, char * d)
 {
     if (!current_disas_space)
-	current_disas_space = get_kernel_space();
-	
-    return readmem(current_disas_space, s, d);
+	current_disas_space = get_kernel_space_c();
+
+    return readmem_char(current_disas_space, s, d);
 }
 
 

@@ -32,6 +32,7 @@
 #ifndef __KDB__KDB_H__
 #define __KDB__KDB_H__
 
+#if defined(__cplusplus)
 class tcb_t;
 class mdb_t;
 class mdb_node_t;
@@ -39,9 +40,25 @@ class mdb_table_t;
 class vrt_t;
 class vrt_table_t;
 class space_t;
+#else
+struct tcb_t;   typedef struct tcb_t tcb_t;
+struct space_t; typedef struct space_t space_t;
+#endif
     
 #include <kdb/cmd.h>
 
+#if !defined(__cplusplus)
+/* C rep of kdb_t: instance data only (the commands are free functions since
+   the step-A change; entry/init/pre/post stay C++ members for now). */
+struct kdb_t {
+    void *	kdb_param;
+    tcb_t *	kdb_current;
+    space_t *	last_space;
+    word_t	last_dump;
+};
+typedef struct kdb_t kdb_t;
+extern kdb_t kdb;
+#else
 class kdb_t {
 
 public:
@@ -70,6 +87,7 @@ public:
 #include <kdb_class_helper.h>
 
 extern kdb_t kdb;
+#endif /* __cplusplus */
 
 
 #endif /* !__KDB__KDB_H__ */

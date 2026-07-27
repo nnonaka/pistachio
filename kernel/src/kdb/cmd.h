@@ -58,8 +58,15 @@ extern cmd_mode_t kdb_cmd_mode;
 #define KEY_ESC			0x1b
 #define KEY_BS			0x8
 
+#if defined(__cplusplus)
 class cmd_t;
 class cmd_group_t;
+#else
+struct cmd_t;
+typedef struct cmd_t cmd_t;
+struct cmd_group_t;
+typedef struct cmd_group_t cmd_group_t;
+#endif
 
 
 
@@ -89,9 +96,8 @@ typedef cmd_ret_t (*cmd_func_t)(cmd_group_t *);
 /**
  * cmd_t: Descriptor for kernel debugger command.
  */
-class cmd_t
+struct cmd_t
 {
-public:
     char	key;
     const char	*command;
     const char	*description;
@@ -102,13 +108,13 @@ public:
 /**
  * cmd_group_t: Descriptor for kernel debugger command group.
  */
-class cmd_group_t
+struct cmd_group_t
 {
-public:
     linker_set_t	*cmd_set;
     cmd_group_t		*parent;
     const char 		*name;
 
+#if defined(__cplusplus)
     cmd_ret_t interact (cmd_group_t * myparent, const char * myname);
     void reset (void) { cmd_set->reset (); }
     cmd_t * next (void) { return (cmd_t *) cmd_set->next (); }
@@ -116,6 +122,7 @@ public:
 private:
     cmd_t * interact_by_key (void);
     cmd_t * interact_by_command (void);
+#endif
 };
 
 
