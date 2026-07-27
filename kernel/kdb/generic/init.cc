@@ -40,7 +40,10 @@ kdb_t UNIT ("cpulocal") kdb;
 cmd_mode_t kdb_t::kdb_cmd_mode;
 
 /* From generic/linker_set.cc */
+/* defined in C (kdb/generic/linker_set.c) */
+BEGIN_DECLS
 void init_sets (void);
+END_DECLS
 
 
 /*

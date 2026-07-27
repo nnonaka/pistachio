@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2006,  Karlsruhe University
  *                
- * File path:     kdb/generic/linker_set.cc
+ * File path:     kdb/generic/linker_set.c
  * Description:   Implementation of generic link time sets
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -101,11 +101,11 @@ void init_sets (void)
 }
 
 
-void linker_set_t::print (void)
+void linker_set_print (linker_set_t *self)
 {
-    printf ("Set = %p,  Entries = %d\n", this, entries);
-    for (word_t i = 0; i < entries; i++)
-	printf ("%3d = %p\n", i, list[i].get_entry ());
+    printf ("Set = %p,  Entries = %d\n", self, self->entries);
+    for (word_t i = 0; i < self->entries; i++)
+	printf ("%3d = %p\n", i, self->list[i].entry);
 }
 
 
@@ -113,9 +113,9 @@ void linker_set_t::print (void)
 /**
  * linker_set_t::reset: Reset linker set iterator.
  */
-void linker_set_t::reset (void)
+void linker_set_reset (linker_set_t *self)
 {
-    curidx = 0;
+    self->curidx = 0;
 }
 
 
@@ -123,29 +123,29 @@ void linker_set_t::reset (void)
  * linker_set_t::next: Retrieves pointer to next entry in linker set,
  * or NULL if all entries have been iterated over.
  */
-addr_t linker_set_t::next (void)
+addr_t linker_set_next (linker_set_t *self)
 {
-    if (curidx >= entries)
+    if (self->curidx >= self->entries)
 	return (addr_t) 0;
-    return list[curidx++].get_entry ();
+    return self->list[self->curidx++].entry;
 }
 
 
 /**
  * linker_set_t::size: Returns size (number of entries) of linker set.
  */
-word_t linker_set_t::size (void)
+word_t linker_set_size (linker_set_t *self)
 {
-    return entries;
+    return self->entries;
 }
 
 
 /**
  * linker_set_t::get: Returns indicated linker set entry.
  */
-addr_t linker_set_t::get (word_t n)
+addr_t linker_set_get (linker_set_t *self, word_t n)
 {
-    if (n >= entries)
+    if (n >= self->entries)
 	return NULL;
-    return list[n].get_entry ();
+    return self->list[n].entry;
 }

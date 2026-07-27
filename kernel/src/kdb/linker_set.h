@@ -46,14 +46,24 @@ struct linker_set_t
     word_t		curidx;
 
 #if defined(__cplusplus)
-    void print (void);
-    void reset (void);
-    addr_t next (void);
-    word_t size (void);
-    addr_t get (word_t n);
+    /* defined in C (kdb/generic/linker_set.c); the __asm__ labels make the C++
+       call sites resolve to the C symbols ('this' leads). */
+    void print (void) __asm__ ("linker_set_print");
+    void reset (void) __asm__ ("linker_set_reset");
+    addr_t next (void) __asm__ ("linker_set_next");
+    word_t size (void) __asm__ ("linker_set_size");
+    addr_t get (word_t n) __asm__ ("linker_set_get");
 #endif
 };
 typedef struct linker_set_t linker_set_t;
+
+BEGIN_DECLS
+void   linker_set_print (linker_set_t *self);
+void   linker_set_reset (linker_set_t *self);
+addr_t linker_set_next (linker_set_t *self);
+word_t linker_set_size (linker_set_t *self);
+addr_t linker_set_get (linker_set_t *self, word_t n);
+END_DECLS
 
 
 /**
