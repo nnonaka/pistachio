@@ -32,8 +32,8 @@
 SOURCES+=	kdb/generic/bootinfo.c \
 		kdb/generic/cmd.c \
 		kdb/generic/console.c \
-		kdb/generic/entry.cc \
-		kdb/generic/init.cc \
+		kdb/generic/entry.c \
+		kdb/generic/init.c \
 		kdb/generic/input.c \
 		kdb/generic/kmemory.c \
 		kdb/generic/linker_set.c \

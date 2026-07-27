@@ -434,3 +434,10 @@ void kdb_t::post() {
     }
 #endif
 };
+
+
+/* Thin C-linkage forwarders so kdb/generic/entry.c (now C) can drive pre/post
+   while this file is still C++.  When prepost.cc itself is flipped these
+   become the definitions and kdb_t::pre/post disappear. */
+extern "C" bool kdb_pre (void)  { return kdb.pre (); }
+extern "C" void kdb_post (void) { kdb.post (); }

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2005, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/generic/entry.cc
+ * File path:     kdb/generic/entry.c
  * Description:   The kernel debugger entry point.
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -60,31 +60,31 @@ DECLARE_CMD_GROUP (statistics);
 
 
 /* Wrapper to call KDB's entry method */
-extern "C" void SECTION(SEC_KDEBUG) kdebug_entry (void * param) { kdb.entry(param); }
+void SECTION(SEC_KDEBUG) kdebug_entry (void * param) { kdb_entry (param); }
 
 
 /**
  * kdebug_entry: Entry point for the kernel debugger.
  */
-void kdb_t::entry (void * param)
+void kdb_entry (void * param)
 {
     cmd_ret_t r;
 
-    kdb_param = param;
-    last_space = NULL;
-    last_dump = 0;
+    kdb.kdb_param = param;
+    kdb.last_space = NULL;
+    kdb.last_dump = 0;
     
     /* XXX probably not generic enough */
-    kdb_current = addr_to_tcb ((addr_t) param);
+    kdb.kdb_current = addr_to_tcb ((addr_t) param);
 
-    if (pre())
+    if (kdb_pre ())
 	do {
-	    r = root.interact (NULL, "");
+	    r = cmd_group_interact (&root, NULL, "");
 	} while (r != CMD_QUIT);
     
-    post();
+    kdb_post ();
     
-    kdb_param = NULL;
+    kdb.kdb_param = NULL;
 }
 
 
@@ -107,7 +107,7 @@ DECLARE_CMD (cmd_arch, root, 'a', "arch", "architecure specifics");
 
 CMD (cmd_arch, cg)
 {
-    return arch.interact (cg, "arch");
+    return cmd_group_interact (&arch, cg, "arch");
 }
 
 
@@ -118,7 +118,7 @@ DECLARE_CMD (cmd_config, root, 'c', "config", "KDB configuration");
 
 CMD (cmd_config, cg)
 {
-    return config.interact (cg, "conf");
+    return cmd_group_interact (&config, cg, "conf");
 }
 
 /**
@@ -128,5 +128,5 @@ DECLARE_CMD (cmd_statistics, root, '#', "stats", "statistics");
 
 CMD (cmd_statistics, cg)
 {
-    return statistics.interact (cg, "stats");
+    return cmd_group_interact (&statistics, cg, "stats");
 }

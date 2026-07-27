@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2005, 2007,  Karlsruhe University
  *                
- * File path:     kdb/generic/init.cc
+ * File path:     kdb/generic/init.c
  * Description:   Invoke all kernel debugger init functions
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@
 
 /* THE kernel debugger instance */
 kdb_t UNIT ("cpulocal") kdb;
-cmd_mode_t kdb_t::kdb_cmd_mode;
+cmd_mode_t kdb_cmd_mode;
 
 /* From generic/linker_set.cc */
 /* defined in C (kdb/generic/linker_set.c) */
@@ -55,16 +55,16 @@ DECLARE_SET (kdb_initfuncs);
 
 
 /* Wrapper to call KDB's init method */
-extern "C" void SECTION (".init") kdebug_init (void) { kdb.init(); };
+void SECTION (".init") kdebug_init (void) { kdb_init (); }
 
 /**
  * kdebug_init: Invoke all kernel debugger init functions.
  */
-void SECTION (".init") kdb_t::init (void)
+void SECTION (".init") kdb_init (void)
 {
     /* initialize state */
     kdb_cmd_mode = CMD_KEYMODE;
-    kdb_param = NULL;
+    kdb.kdb_param = NULL;
 
     /*
      * Ensure that linker sets are initialized.
@@ -77,8 +77,8 @@ void SECTION (".init") kdb_t::init (void)
      */
 
     kdb_initfunc_t initfunc;
-    kdb_initfuncs.reset ();
-    while ((initfunc = (kdb_initfunc_t) kdb_initfuncs.next ()) != NULL)
+    linker_set_reset (&kdb_initfuncs);
+    while ((initfunc = (kdb_initfunc_t) linker_set_next (&kdb_initfuncs)) != NULL)
 	initfunc ();
     
 #if defined(CONFIG_TRACEPOINTS)

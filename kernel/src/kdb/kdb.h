@@ -91,5 +91,15 @@ extern kdb_t kdb;
    class, and for BOTH languages -- kdb files are progressively becoming C. */
 #include <kdb_class_helper.h>
 
+/* The kdb entry points, as C free functions.  entry/init are defined in
+   kdb/generic/entry.c and init.c; pre/post are forwarders in prepost.cc
+   until that file is flipped too. */
+BEGIN_DECLS
+void kdb_entry (void * param);
+void kdb_init (void);
+bool kdb_pre (void);
+void kdb_post (void);
+END_DECLS
+
 
 #endif /* !__KDB__KDB_H__ */
