@@ -2597,3 +2597,34 @@ The `CONFIG_X_X86_HVM` block is off in this config and so is preprocessed away.
 It was translated by inspection and names `space_is_hvm_space`,
 `space_get_hvm_space` and `hvm_lookup_gphys_addr`, none of which exist yet — an
 HVM port must supply them. Same honest-undefined-name approach as §70.
+
+## §76 — kdb/api/v4/input.cc → .c
+
+Defines `get_space` and `get_thread` (the thread-name parser). Nearly all the
+C forms it needs already existed: `tcb_get_space`, `tcb_get_tcb`,
+`get_kernel_space_c`, `get_idle_tcb_c`, `get_kdebug_tcb`, `space_is_user_area`,
+and the whole `threadid_*` family (`threadid_from_raw`, `threadid_global`,
+`threadid_nilthread`, `threadid_irqthread`, `threadid_equals`).
+
+Only `tcb_t::is_tcb` needed a C form — and adding it repeated a mistake from
+earlier in the migration: **I inserted it without mapping the guards first**, so
+it landed inside the `#if defined(__cplusplus)` block that opens well above it
+(line 411) and runs past the definition. `addr_to_tcb` was stuck in that same
+block. Both are now hoisted out ahead of the C++ region.
+
+Under CONFIG_STATIC_TCBS there is deliberately **no** C form: that branch reads
+`tcb_array`, a static member of `class tcb_t`. A STATIC_TCBS port must make it
+C-visible first; the comment says so rather than pretending otherwise. That
+config is off here.
+
+Verification: 337176 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. Drove `t` six ways against a pre-flip kernel (scratchpad/inp2run.sh):
+by name for sigma0 / roottask / idlethrd, the RETURN default (current), a
+`80v1` threadno+version entry, and an invalid name that backs itself out.
+
+One field differed: `curr ts`. It is stable per binary, so "run-to-run noise"
+would have been the wrong explanation. Ran the *same* binary with the kdb entry
+delayed 14s -> 17s and got exactly the pre-flip value (6094us), proving `curr ts`
+tracks when the debugger is entered rather than the code. Every other field
+across all six dumps — TCB address, ID, priority, state, queues, space, pdir,
+pager, quanta, timeouts, resources, flags, partner, scheduler — is identical.

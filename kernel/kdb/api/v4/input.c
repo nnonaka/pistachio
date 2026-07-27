@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2004, 2006-2010,  Karlsruhe University
  *                
- * File path:     kdb/api/v4/input.cc
+ * File path:     kdb/api/v4/input.c
  * Description:   Version 4 specific input functions
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -53,34 +53,35 @@ space_t SECTION(SEC_KDEBUG) * get_space (const char * prompt)
     addr_t val;
     
     if (!kdb.last_space)
-	kdb.last_space = kdb.kdb_current->get_space() 
-	    ? kdb.kdb_current->get_space()
-	    : get_kernel_space ();
+	kdb.last_space = tcb_get_space (kdb.kdb_current)
+	    ? tcb_get_space (kdb.kdb_current)
+	    : get_kernel_space_c ();
 
     val = (addr_t) get_hex (prompt, (word_t) kdb.last_space, "last");
 
-    tcb_t * tidtcb = tcb_t::get_tcb (threadid ((word_t) val));
+    threadid_t valtid = threadid_from_raw ((word_t) val);
+    tcb_t * tidtcb = tcb_get_tcb (valtid);
 
-    if (tcb_t::is_tcb (val))
+    if (tcb_is_tcb (val))
     {
 	// Pointer into the TCB area
 	tcb_t * tcb = addr_to_tcb (val);
-	kdb.last_space = tcb->get_space ();
+	kdb.last_space = tcb_get_space (tcb);
     }
-    else if (tcb_t::is_tcb((addr_t) tidtcb) && tidtcb->myself_global == threadid ((word_t) val))
+    else if (tcb_is_tcb ((addr_t) tidtcb) && threadid_equals (&tidtcb->myself_global, &valtid))
     {
 	// A valid thread ID
-	kdb.last_space = tidtcb->get_space ();
+	kdb.last_space = tcb_get_space (tidtcb);
     }
-    else if (kdb.last_space->is_user_area (val))
+    else if (space_is_user_area (val))
     {
 	// Pointer in lower memory area.  Probably a physical address
 	// but doublecheck
 	val = phys_to_virt (val);
-	if (!kdb.last_space->is_user_area(val))
+	if (!space_is_user_area (val))
 	    kdb.last_space = (space_t *) val;
 	else 
-	    kdb.last_space = kdb.kdb_current->get_space ();
+	    kdb.last_space = tcb_get_space (kdb.kdb_current);
     }
     else 
     {
@@ -125,7 +126,7 @@ static inline int thread_match (const char * str)
  */
 tcb_t SECTION (SEC_KDEBUG) * get_thread (const char * prompt)
 {
-    UNUSED space_t * dummy = kdb.kdb_current->get_space ();
+    UNUSED space_t * dummy = tcb_get_space (kdb.kdb_current);
     const word_t nsize = sizeof (word_t) * 2;
 
     printf ("%s [current]: ", prompt ? prompt : "Thread");
@@ -140,7 +141,7 @@ tcb_t SECTION (SEC_KDEBUG) * get_thread (const char * prompt)
     while (! break_loop && 
 	   (len < nsize || version_char != 0))
     {
-	switch (r = c = getc ())
+	switch (r = c = getc (true))
 	{
 	case '0': case '1': case '2': case '3': case '4':
 	case '5': case '6': case '7': case '8': case '9':
@@ -191,7 +192,7 @@ tcb_t SECTION (SEC_KDEBUG) * get_thread (const char * prompt)
 
 		while (! thread_match (buf) && r != KEY_RETURN)
 		{
-		    switch (r = getc ())
+		    switch (r = getc (true))
 		    {
 		    case '\b':
 			printf ("\b \b");
@@ -214,33 +215,33 @@ tcb_t SECTION (SEC_KDEBUG) * get_thread (const char * prompt)
 
 		// Check which thread name the user gave
 
-		word_t ubase = get_kip ()->thread_info.get_user_base ();
+		word_t ubase = thread_info_get_user_base (&get_kip ()->thread_info);
 		break_loop = true;
 
 		switch (thread_match (buf))
 		{
 		case 1: // Nilthrad
-		    val = threadid_t::nilthread ().get_raw ();
+		    val = threadid_nilthread ().raw;
 		    break;
 	
 		case 2: // IRQ thread
-		    val = threadid_t::irqthread	(get_dec ()).get_raw ();
+		    val = threadid_irqthread (get_dec (NULL, 0, NULL)).raw;
 		    break;
 
 		case 3: // Idle thread
-		    val = (word_t) get_idle_tcb ();
+		    val = (word_t) get_idle_tcb_c ();
 		    break;
 
 		case 4: // Sigma0
-		    val = threadid_t::threadid (ubase, 1).get_raw ();
+		    val = threadid_global (ubase, 1).raw;
 		    break;
 
 		case 5: // Sigma1
-		    val = threadid_t::threadid (ubase + 1, 1).get_raw ();
+		    val = threadid_global (ubase + 1, 1).raw;
 		    break;
 
 		case 6: // Roottask
-		    val = threadid_t::threadid (ubase + 2, 1).get_raw ();
+		    val = threadid_global (ubase + 2, 1).raw;
 		    break;
 
 #if defined(CONFIG_DEBUG)
@@ -300,14 +301,14 @@ tcb_t SECTION (SEC_KDEBUG) * get_thread (const char * prompt)
 
     printf ("\n");
 
-    if (tcb_t::is_tcb ((addr_t) val) || 
-	(addr_t) val == (addr_t) get_idle_tcb() || 
+    if (tcb_is_tcb ((addr_t) val) || 
+	(addr_t) val == (addr_t) get_idle_tcb_c() || 
 	(addr_t) val  == (addr_t)  get_kdebug_tcb())
 	return addr_to_tcb ((addr_t) val); 
 #if defined(CONFIG_X_SCHED_HS)
-    else if (!dummy->is_user_area ((addr_t) val))
+    else if (!space_is_user_area ((addr_t) val))
 	return addr_to_tcb ((addr_t) val); 
 #endif
     else
-	return tcb_t::get_tcb (threadid (val));
+	return tcb_get_tcb (threadid_from_raw (val));
 }

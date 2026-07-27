@@ -454,13 +454,26 @@ INLINE threadid_t tcb_t::get_irq_handler()
  *                  Access functions
  *
  **********************************************************************/
+#endif /* __cplusplus -- addr_to_tcb / tcb_is_tcb are needed from C too */
+
 __attribute__ ((const)) INLINE tcb_t * addr_to_tcb (addr_t addr)
 {
     return (tcb_t *) ((word_t) addr & KTCB_MASK);
 }
 
+#if !defined(CONFIG_STATIC_TCBS)
+INLINE bool tcb_is_tcb (addr_t addr)
+{
+    return space_is_tcb_area (addr);
+}
+#endif
+
+#if defined(__cplusplus)
+
 
 #if defined(CONFIG_STATIC_TCBS)
+/* No C form here: tcb_array is a static member of class tcb_t, so a
+   CONFIG_STATIC_TCBS port needs to make it C-visible first. */
 INLINE bool tcb_t::is_tcb(addr_t addr)
 {
     tcb_t * tcb = addr_to_tcb(addr);
@@ -479,7 +492,7 @@ INLINE tcb_t * tcb_t::get_tcb( threadid_t tid )
 
 INLINE bool tcb_t::is_tcb(addr_t addr)
 {
-    return space_t::is_tcb_area(addr);
+    return tcb_is_tcb (addr);
 }
 INLINE tcb_t * tcb_t::get_tcb( threadid_t tid )
 {
