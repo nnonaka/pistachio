@@ -79,6 +79,11 @@ struct tracepoint_t
 };
 typedef struct tracepoint_t tracepoint_t;
 
+#if !defined(__cplusplus)
+INLINE void tracepoint_reset_counter (tracepoint_t *self)
+{ for (int cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; self->counter[cpu++] = 0); }
+#endif
+
 #define EXTERN_TRACEPOINT(tp)				\
     extern tracepoint_t __tracepoint_##tp
 

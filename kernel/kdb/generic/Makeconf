@@ -40,7 +40,7 @@ SOURCES+=	kdb/generic/bootinfo.cc \
 		kdb/generic/memdump.c \
 		kdb/generic/print.c \
 		kdb/generic/tid_format.c \
-		kdb/generic/tracepoints.cc 
+		kdb/generic/tracepoints.c 
 
 
 ifeq ("$(CONFIG_TRACEBUFFER)","y")

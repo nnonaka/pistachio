@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2003, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/generic/tracepoints.cc
+ * File path:     kdb/generic/tracepoints.c
  * Description:   Tracepoint related commands
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -155,7 +155,7 @@ CMD(cmd_tp_enable, cg)
 	    tp->enabled = cpu_mask;
 	    tp->enter_kdb = get_choice ("Enter KDB", "y/n", 'y') == 'y' ?
 		cpu_mask : 0;
-	    tp->reset_counter ();
+	    tracepoint_reset_counter (tp);
 	    printf ("Tracepoint %s enabled\n", tp->name);
 	    return CMD_NOQUIT;
 	}
@@ -185,7 +185,7 @@ CMD(cmd_tp_disable, cg)
 	{
 	    tracepoint_t * tp = tp_list.get (n - 1);
 	    tp->enabled = tp->enter_kdb = false;
-	    tp->reset_counter ();
+	    tracepoint_reset_counter (tp);
 
 	    printf ("Tracepoint %s disabled\n", tp->name);
 	    return CMD_NOQUIT;
@@ -212,7 +212,7 @@ CMD(cmd_tp_enable_all, cg)
     {
 	tp->enabled = ~0UL;
 	tp->enter_kdb = 0;
-	tp->reset_counter();
+	tracepoint_reset_counter (tp);
     }
 
     return CMD_NOQUIT;
@@ -248,7 +248,7 @@ CMD(cmd_tp_reset, cg)
 
     tp_list.reset ();
     while ((tp = tp_list.next ()) != NULL)
-	tp->reset_counter();
+	tracepoint_reset_counter (tp);
     
     return CMD_NOQUIT;
 }
