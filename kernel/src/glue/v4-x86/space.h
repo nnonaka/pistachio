@@ -542,6 +542,8 @@ bool      fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end);
    C symbol would corrupt the many external callers). This wrapper bridges it for
    linear_ptab_walker.c's readmem, writing the page size as a word_t. */
 bool      space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size);
+/* r_size is a 4-byte pgsize_e on the C++ side -- hence int*, not word_t*. */
+bool      space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg, int *r_size, cpuid_t cpu);
 END_DECLS
 
 

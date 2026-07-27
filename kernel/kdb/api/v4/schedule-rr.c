@@ -38,6 +38,9 @@
 #include INC_API(schedule.h)
 #include INC_API(cpu.h)
 
+/* get_current_scheduler() is a C++ inline; the cpulocal instance is the global */
+extern scheduler_t scheduler;
+
 tcb_t * global_present_list UNIT("kdebug") = NULL;
 spinlock_t present_list_lock;
 
@@ -47,17 +50,20 @@ DECLARE_CMD(cmd_show_sched_empty, root, 'Q', "showqueue",  "show scheduling queu
 static void show_sched_queue(bool empty)
 {
     int abort = 1000000;
-    present_list_lock.lock();
+    spinlock_lock (&present_list_lock);
 
     for (cpuid_t cpu = 0; cpu < cpu_count; cpu++)
     {
 	bool print_cpu_header = false;
-        scheduler_t *scheduler = get_on_cpu(cpu, get_current_scheduler());
+        /* NB: name the local differently from the global `scheduler' -- a local
+           is in scope inside its own initializer, so `&scheduler' would take the
+           address of this (uninitialised) pointer instead of the global. */
+        scheduler_t *sched = (scheduler_t *) get_on_cpu_c (cpu, &scheduler);
 
         if (empty)
         {
             printf("\n\nCPU %d:  accounted tcb %t, max_prio %d\n", 
-                   cpu, scheduler->get_accounted_tcb(), scheduler->get_prio_queue()->max_prio);
+                   cpu, sched->__base.root_prio_queue.timeslice_tcb, sched->__base.root_prio_queue.max_prio);
             printf("\n");
             print_cpu_header = true;
         }
@@ -68,13 +74,13 @@ static void show_sched_queue(bool empty)
 	    tcb_t* walk = global_present_list;
 
 	    do {
-		if (walk->sched_state.get_priority() == prio && walk->get_cpu() == cpu) 
+		if (rr_sched_get_priority (&walk->sched_state.base) == prio && tcb_get_cpu (walk) == cpu) 
 		{
                     /* if so, print */
                     if (!print_cpu_header)
                     {
                         printf("\n\nCPU %d:  accounted tcb %t, max_prio %d\n", 
-                               cpu, scheduler->get_accounted_tcb(), scheduler->get_prio_queue()->max_prio);
+                               cpu, sched->__base.root_prio_queue.timeslice_tcb, sched->__base.root_prio_queue.max_prio);
                         printf("\n");
                         print_cpu_header = true;
                     }
@@ -83,8 +89,8 @@ static void show_sched_queue(bool empty)
 		    walk = global_present_list;
 		
 		    do {
-			if (walk->sched_state.get_priority() == prio && walk->get_cpu() == cpu) 
-			    printf(walk->queue_state.is_set(queue_state_t::ready) ? " %t" : " (%t)", walk);
+			if (rr_sched_get_priority (&walk->sched_state.base) == prio && tcb_get_cpu (walk) == cpu) 
+			    printf(queue_state_is_set (&walk->queue_state, QUEUE_STATE_READY) ? " %t" : " (%t)", walk);
 			walk = walk->present_list.next;
 
 		    } while (walk != global_present_list);
@@ -117,8 +123,8 @@ static void show_sched_queue(bool empty)
 	    } while (walk != global_present_list);
 	}
     }
-    printf("idle : %t\n\n", get_idle_tcb());
-    present_list_lock.unlock();
+    printf("idle : %t\n\n", get_idle_tcb_c());
+    spinlock_unlock (&present_list_lock);
     return;
 }
 
