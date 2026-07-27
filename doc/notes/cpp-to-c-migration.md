@@ -2984,3 +2984,54 @@ own `.cc` files were never migrated (powerpc, ofppc) and with the un-migrated
 subsystems found in §84 (x32comp, mdb/vrt, ctrlxfer). Deleting a C++ branch that
 those still depend on would break them silently, since nothing in this config
 compiles them. Each header needs that check before its guard comes out.
+
+## §86 — Collapse step 2: kdb/linker_set.h only — the rest are BLOCKED
+
+Applied the §85 gate ("who else includes this, and is any of them still C++?")
+to the five remaining `src/kdb/*.h` guards. The answer split them sharply:
+
+| header | .cc includers | verdict |
+|--------|---------------|---------|
+| linker_set.h | 0 | **collapsed** |
+| cmd.h | 15 | blocked |
+| input.h | 15 | blocked |
+| console.h | 7 | blocked |
+| tracepoints.h | 26 | blocked |
+
+`linker_set.h` lost its `__asm__`-labelled method block (the C forms are the
+only callers now) and the two `linker_set_entry_t` accessors, which had no
+callers at all — the `get_entry` hits in the tree are on mdb tables, a
+different type.
+
+### Why the other four are blocked, and by what
+
+Four `.cc` files can still be pulled into an x86-x64 build by config options:
+
+    kdb/generic/tracebuffer.cc   <- CONFIG_TRACEBUFFER
+    kdb/generic/vrt.cc           <- CONFIG_X86_IO_FLEXPAGES
+    kdb/generic/acpi.cc          <- CONFIG_ACPI
+    kdb/glue/v4-x86/ipc.cc       <- CONFIG_X_CTRLXFER_MSG
+
+Compiled `tracebuffer.cc` as C++ with the option forced: its **only** errors are
+`cmd_* was not declared`, which is an artifact of the test (the `DECLARE_CMD`
+scraper only sees files in the configured SOURCES). Otherwise it compiles
+cleanly — so it is *live* C++, and deleting the C++ branch of cmd.h / input.h /
+console.h / tracepoints.h would break `CONFIG_TRACEBUFFER=y`.
+
+**Corollary: those four `.cc` files are the real prerequisite.** Migrating them
+unblocks the remaining kdb headers; collapsing first would silently break
+configs nothing here compiles.
+
+### Separate finding: CONFIG_ACPI is already broken
+
+`kdb/generic/acpi.cc` does not compile as C++ today — several
+`... is private within this context` errors against `acpi__sdt_t` /
+`acpi_rsdp_t`. That is independent of this collapse (it is an access-control
+problem, not a language-branch one) and predates it; most likely fallout from
+the acpi header dual-rep in §66. Worth confirming against a pre-migration
+checkout before assuming which.
+
+Verification: byte-identical kernel size (332136) across a forced full rebuild,
+boottest PASS, command loop identical — the last matters here because every
+`DECLARE_SET` iteration in the command dispatcher goes through
+`linker_set_reset`/`_next`.

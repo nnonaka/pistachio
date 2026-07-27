@@ -36,24 +36,14 @@ struct linker_set_entry_t;
 
 /**
  * linker_set_t: A linker set contains a number of set entries defined
- * at link time.  These entries can be iterated over using the reset()
- * and next() methods.
+ * at link time.  These entries can be iterated over with
+ * linker_set_reset() and linker_set_next().
  */
 struct linker_set_t
 {
     struct linker_set_entry_t	*list;
     word_t		entries;
     word_t		curidx;
-
-#if defined(__cplusplus)
-    /* defined in C (kdb/generic/linker_set.c); the __asm__ labels make the C++
-       call sites resolve to the C symbols ('this' leads). */
-    void print (void) __asm__ ("linker_set_print");
-    void reset (void) __asm__ ("linker_set_reset");
-    addr_t next (void) __asm__ ("linker_set_next");
-    word_t size (void) __asm__ ("linker_set_size");
-    addr_t get (word_t n) __asm__ ("linker_set_get");
-#endif
 };
 typedef struct linker_set_t linker_set_t;
 
@@ -75,10 +65,6 @@ struct linker_set_entry_t
     struct linker_set_t	*set;
     addr_t		entry;
 
-#if defined(__cplusplus)
-    inline linker_set_t * get_set (void) { return set; }
-    inline addr_t get_entry (void) { return entry; }
-#endif
 };
 typedef struct linker_set_entry_t linker_set_entry_t;
 
