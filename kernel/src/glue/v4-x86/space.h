@@ -405,6 +405,12 @@ private:
 extern active_cpu_space_t active_cpu_space;
 #endif
 
+/* C accessor for active_cpu_space.set (used by tcb_switch_to in thread.c;
+   active_cpu_space_t stays a C++ class).  Defined in space.cc. */
+BEGIN_DECLS
+void active_cpu_space_set (cpuid_t cpu, space_t *s);
+END_DECLS
+
 
 
 /**

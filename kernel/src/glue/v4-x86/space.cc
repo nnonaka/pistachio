@@ -1154,6 +1154,9 @@ pgent_t * x86_top_pdir_get_kernel_pdp_pgent (x86_top_pdir_t *self)
 x86_kernel_pdp_t * x86_top_pdir_get_kernel_pdp (x86_top_pdir_t *self)
 { return self->get_kernel_pdp (); }
 
+void active_cpu_space_set (cpuid_t cpu, space_t *s)
+{ active_cpu_space.set (cpu, s); }
+
 void space_alloc_cpu_top_pdir (space_t *self, cpuid_t cpu)
 { self->alloc_cpu_top_pdir (cpu); }
 

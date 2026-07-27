@@ -91,7 +91,14 @@ struct thread_resources_t {
 #endif
 typedef struct thread_resources_t thread_resources_t;
 
-
+/* C prototypes for the resources entry points defined in resources.c, so
+   glue/v4-x86/thread.c (tcb_switch_to / tcb_release_copy_area) can call them.
+   The __asm__ labels on the C++ methods above make both languages agree. */
+BEGIN_DECLS
+void tcb_resources_save (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_load (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_release_copy_area (thread_resources_t *self, tcb_t *tcb, bool disable_copyarea);
+END_DECLS
 
 
 #endif /* !__GLUE__V4_X86__RESOURCES_H__ */
