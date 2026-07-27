@@ -284,15 +284,15 @@ void setup_tracebuffer (void)
     {
 	//TRACEF("add tbuf mapping %t -> %t\n", addr_offset(tracebuffer, p),
         //     virt_to_phys(addr_offset(tracebuffer, p)));
-	get_kernel_space()->add_mapping(addr_offset(tracebuffer, p),
-                                        (paddr_t) virt_to_phys(addr_offset(tracebuffer, p)),
-                                        PGSIZE_KERNEL, true, false, true);
+	space_add_mapping (get_kernel_space_c (), addr_offset(tracebuffer, p),
+			   (paddr_t) virt_to_phys(addr_offset(tracebuffer, p)),
+			   PGSIZE_KERNEL, true, false, true, true);
     }
     memory_info_insert (&get_kip()->memory_info, MEMDESC_RESERVED, 0, true,
 			tracebuffer,
 			addr_offset(tracebuffer, TRACEBUFFER_SIZE -1));
 
-    tracebuffer->initialize ();
+    tracebuffer_initialize (tracebuffer);
 }
 #endif /* CONFIG_TRACEBUFFER */
 

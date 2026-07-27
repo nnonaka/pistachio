@@ -24,6 +24,9 @@
 #include INC_GLUE(schedule.h)
 
 #define TOTAL_QUANTUM_EXPIRED (~0ULL)
+/* Defined in api/v4/schedule.c; the EXTERN_TRACEPOINT that used to cover this
+   lives in the C++-only sched-rr/schedule_functions.h. */
+EXTERN_TRACEPOINT(SCHEDULE_IDLE);
 DECLARE_TRACEPOINT(TOTAL_QUANTUM_EXPIRED);
 DECLARE_TRACEPOINT(SCHEDULE_WAKEUP_TIMEOUT);
 DECLARE_TRACEPOINT(TIMESLICE_EXPIRED);

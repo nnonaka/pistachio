@@ -3162,3 +3162,47 @@ Verification is the important part here, because this touched six files that
 (332136), boottest PASS, and a full l4test run identical to the reference. The
 edits are all inside macros that expand to nothing when tracepoints are off,
 and the unchanged binary is the proof.
+
+## §90 — kdb/generic/tracebuffer.cc → .c; the scratch CONFIG_TRACEBUFFER build links
+
+Done in named steps with a build between each, as the shadowing hazard demanded.
+
+**The key decision.** `tbuf_handler_t` has exactly one instance, so instead of
+threading a `self` parameter the methods became free functions that name the
+global directly (`tbuf_handler.cpumask`). That is what made the transformation
+safe: the class needed `this->` precisely because `set_id(word_t idx, word_t id)`
+and `set_tcb(word_t idx, tcb_t *t)` have parameters shadowing the `id[]`/`tcb[]`
+members, and a qualified name cannot be shadowed. The hazard that made this file
+look dangerous disappeared rather than being worked around.
+
+Steps, each compile-checked: struct + methods; call sites; templates and the
+leftover member declarations; then the long tail the linker found.
+
+Other C++ constructs removed:
+  - `template<typename T> pmc_print/pmc_delta` — `word_t` and `u64_t` coincide
+    on this subarch so both instantiations collapse to one; noted that a 32-bit
+    port needs a second form.
+  - `max()` is a C++ template in `generic/types.h`; spelled out inline.
+  - `tracebuffer->current` is `atomic_t`: `== 0` and `= 0` became
+    `atomic_read`/`atomic_set`.
+  - `get_current_space()`/`get_kernel_space()`/`readmem()` → the `_c`/`_u8` C
+    forms (the last also in prepost.c, which had the same call).
+  - `EXTERN_TRACEPOINT(SCHEDULE_IDLE)` had to be added to `sched-rr/schedule.c`:
+    the declaration covering it lived in the C++-only schedule_functions.h.
+
+Two regex mishaps, both caught by the compiler and worth recording because
+neither would survive review by eye: the member-qualifier rewrote a *local*
+struct declaration (`word_t tbuf_handler.tsc;`), and the dedup step deleted the
+new global instead of the old one.
+
+**Result: `build/scratch-tbuf` now links — 417832 bytes, no C++ anywhere.**
+CONFIG_TRACEBUFFER has almost certainly not built since before the migration
+began; it does now, in C.
+
+Verification of the working config, which is what matters since prepost.c and
+sched-rr/schedule.c are both live: byte-identical kernel (332136), boottest
+PASS, full l4test identical to the reference.
+
+**Not verified: the tracebuffer code has never been run.** The scratch kernel
+links but was not booted, so `tb`/`tp` command behaviour is unproven. That is
+the remaining gap for anyone enabling this option.

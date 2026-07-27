@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2003, 2007-2010,  Karlsruhe University
  *                
- * File path:     kdb/generic/tracebuffer.cc
+ * File path:     kdb/generic/tracebuffer.c
  * Description:   Tracebuffer for PC99 platform
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -55,9 +55,11 @@ static inline int SECTION(SEC_KDEBUG) strlen(const char* p) { int i=0; while (*(
 extern void putc(const char c);
 
 
-template<typename T> static void pmc_print(T pmc)
+/* Was a template; word_t and u64_t coincide on this subarch, so the two
+   instantiations collapse to one.  A 32-bit port needs a second form. */
+static void pmc_print(u64_t pmc)
 {
-    T divisor = 0;
+    u64_t divisor = 0;
     int digits = 0, num = 0;
 
     const int width = 4;
@@ -68,7 +70,8 @@ template<typename T> static void pmc_print(T pmc)
     else
 	for (divisor = 1, digits = 1; pmc/divisor >= 10; divisor *= 10, digits++);
 
-    while (num < max(width - digits, 0))
+    /* max() is a C++ template in generic/types.h; spelled out for C. */
+    while (num < (width - digits > 0 ? width - digits : 0))
     {
 	putc('0');
 	num++;
@@ -99,9 +102,9 @@ template<typename T> static void pmc_print(T pmc)
     
 }
 
-template<typename T> T pmc_delta(T cur, T old)
+static u64_t pmc_delta(u64_t cur, u64_t old)
 {
-    return (cur >= old) ? cur - old : cur + (T) -1 - old;
+    return (cur >= old) ? cur - old : cur + (u64_t) -1 - old;
 }
 
 
@@ -109,51 +112,55 @@ template<typename T> T pmc_delta(T cur, T old)
 DECLARE_CMD_GROUP (tracebuf);
 
 
-class tbuf_handler_t
-{
-public:
-    static const word_t max_filters = 4;
+#define TBUF_MAX_FILTERS 4
 
-private:   
-    word_t id[max_filters];
-    tcb_t *tcb[max_filters];
+struct tbuf_handler_t
+{
+    word_t id[TBUF_MAX_FILTERS];
+    tcb_t *tcb[TBUF_MAX_FILTERS];
     word_t typemask;
     word_t cpumask;
     u64_t tsc;
-    
-    bool cpu_pass(tracerecord_t *t)
+};
+typedef struct tbuf_handler_t tbuf_handler_t;
+
+/* Single instance; the free functions below name it directly, which also
+   removes the member/parameter shadowing that the class needed `this->` for. */
+static tbuf_handler_t tbuf_handler;
+
+static bool tbuf_handler_cpu_pass (tracerecord_t *t)
 	{
-	    return ((cpumask & (1UL << t->cpu)) != 0);
+	    return ((tbuf_handler.cpumask & (1UL << t->cpu)) != 0);
 	}
 
-    bool type_pass(tracerecord_t *t)
+static bool tbuf_handler_type_pass (tracerecord_t *t)
 	{
-	    return (typemask & ((t->ktype << 16) | t->utype));
+	    return (tbuf_handler.typemask & ((t->ktype << 16) | t->utype));
 	}
 
-    bool tsc_pass(tracerecord_t *t)
+static bool tbuf_handler_tsc_pass (tracerecord_t *t)
 	{
-	    if (tsc == 0) return true;
+	    if (tbuf_handler.tsc == 0) return true;
 	    
 	    u64_t ttsc = t->tsc;
 #if defined(CONFIG_TBUF_PERFMON_ENERGY)
             if (get_tbuf_config().pmon_e)
                 ttsc <<= X86_PMC_TSC_SHIFT;
 #endif
-	    return (ttsc >= tsc);
+	    return (ttsc >= tbuf_handler.tsc);
 	}
 
     
-    bool id_pass(tracerecord_t *t)
+static bool tbuf_handler_id_pass (tracerecord_t *t)
 	{
-	    if (id[0] == NULL || ((word_t) id[0] == t->id))
+	    if (tbuf_handler.id[0] == NULL || ((word_t) tbuf_handler.id[0] == t->id))
 		return true;
 	    
-	    for (word_t i=1; i < max_filters; i++)
+	    for (word_t i=1; i < TBUF_MAX_FILTERS; i++)
 	    {
-		if (id[i] == NULL)
+		if (tbuf_handler.id[i] == NULL)
 		    return false;
-		if ((word_t) id[i] == t->id)
+		if ((word_t) tbuf_handler.id[i] == t->id)
 		    return true;
 	    }
 	    
@@ -161,131 +168,126 @@ private:
 	}
 
 
-    bool tcb_pass(tracerecord_t *t)
+static bool tbuf_handler_tcb_pass (tracerecord_t *t)
 	{
-	    tcb_t *rtcb = t->is_kernel_event() 
+	    tcb_t *rtcb = tracerecord_is_kernel_event (t) 
 		? addr_to_tcb((addr_t) t->thread)
-		: tcb_t::get_tcb(threadid (t->thread));
+		: tcb_get_tcb(threadid_from_raw (t->thread));
 
-	    if (tcb[0] == NULL || (tcb[0] == rtcb))
+	    if (tbuf_handler.tcb[0] == NULL || (tbuf_handler.tcb[0] == rtcb))
 		return true;
 	    
-	    for (word_t i=1; i < max_filters; i++)
+	    for (word_t i=1; i < TBUF_MAX_FILTERS; i++)
 	    {
-		if (tcb[i] == rtcb)
+		if (tbuf_handler.tcb[i] == rtcb)
 		    return true;
-		if (tcb[i] == NULL)
+		if (tbuf_handler.tcb[i] == NULL)
 		    return false;
 	    }
 	    return false;
 	}
 
-
-public:
     
-    tbuf_handler_t()
-	{ invalidate_filters(); }
-    
-    void invalidate_filters()
+static void tbuf_handler_invalidate_filters (void)
 	{
-	    for (word_t i=0; i < max_filters; i++)
+	    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
 	    {
-		id[i] = NULL;
-		tcb[i] = NULL;
+		tbuf_handler.id[i] = NULL;
+		tbuf_handler.tcb[i] = NULL;
 	    }
-	    cpumask = typemask = ~0UL;
-	    tsc = 0;
+	    tbuf_handler.cpumask = tbuf_handler.typemask = ~0UL;
+	    tbuf_handler.tsc = 0;
 
 	}
     
-    void dump_filters()
+static void tbuf_handler_dump_filters (void)
 	{
 	    
 	    printf("Record  filters:\n");
 	    printf("\tTypemask: [%x]\n", get_tracebuffer()->mask);
 	    
 	    printf("Display filters:\n");
-	    printf("\tCPU:      [%x]\n", cpumask);
-	    printf("\tTypemask: [%x]\n", typemask);
-	    printf("\tTSC:      [%x/%x]\n", (u32_t) (tsc >> 32), (u32_t) tsc);
+	    printf("\tCPU:      [%x]\n", tbuf_handler.cpumask);
+	    printf("\tTypemask: [%x]\n", tbuf_handler.typemask);
+	    printf("\tTSC:      [%x/%x]\n", (u32_t) (tbuf_handler.tsc >> 32), (u32_t) tbuf_handler.tsc);
 	    printf("\tTracepoints: \n");
-	    for (word_t i=0; i < max_filters; i++)
+	    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
 	    {
-		if (id[i] == NULL)
+		if (tbuf_handler.id[i] == NULL)
 		    break;
-		printf("\t\t%2d: %8d %s\n", i, id[i], tp_list.get(id[i]-1)->name);
+		printf("\t\t%2d: %8d %s\n", i, tbuf_handler.id[i], tracepoint_list_get (&tp_list, tbuf_handler.id[i]-1)->name);
 	    }    
 	    
 	    printf("\tTCBs: \n");
-	    for (word_t i=0; i < max_filters; i++)
+	    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
 	    {
-		if (tcb[i] == NULL)
+		if (tbuf_handler.tcb[i] == NULL)
 		    break;
-		printf("\t\t%2d: %8t\n", i, (tcb_t *) tcb[i]);
+		printf("\t\t%2d: %8t\n", i, (tcb_t *) tbuf_handler.tcb[i]);
 	    }    
     
 
 
 	}
     
-    void set_cpumask(word_t mask) {  cpumask = mask; }
-    word_t get_cpumask() { return this->cpumask; }
+static void tbuf_handler_set_cpumask (word_t mask) {  tbuf_handler.cpumask = mask; }
+static word_t tbuf_handler_get_cpumask (void) { return tbuf_handler.cpumask; }
     
-    void set_typemask(word_t mask) {  typemask = mask; }
-    word_t get_typemask() { return this->typemask; }
+static void tbuf_handler_set_typemask (word_t mask) {  tbuf_handler.typemask = mask; }
+static word_t tbuf_handler_get_typemask (void) { return tbuf_handler.typemask; }
     
-    void set_tsc(u64_t t) {  tsc = t; }
-    u64_t get_tsc() { return this->tsc; }
+static void tbuf_handler_set_tsc (u64_t t) {  tbuf_handler.tsc = t; }
+static u64_t tbuf_handler_get_tsc (void) { return tbuf_handler.tsc; }
 
-    void set_id(word_t idx, word_t id)
+static void tbuf_handler_set_id (word_t idx, word_t id)
 	{ 
-	    ASSERT(idx < max_filters);
-	    this->id[idx] = id;
+	    ASSERT(idx < TBUF_MAX_FILTERS);
+	    tbuf_handler.id[idx] = id;
 	}
     
-    word_t get_id(word_t idx)
+static word_t tbuf_handler_get_id (word_t idx)
 	{ 
-	    ASSERT(idx < max_filters);
-	    return this->id[idx];
+	    ASSERT(idx < TBUF_MAX_FILTERS);
+	    return tbuf_handler.id[idx];
 	}
     
 
-    void set_tcb(word_t idx, tcb_t *t)
+static void tbuf_handler_set_tcb (word_t idx, tcb_t *t)
 	{ 
-	    ASSERT(idx < max_filters);
-	    tcb[idx] = t;
+	    ASSERT(idx < TBUF_MAX_FILTERS);
+	    tbuf_handler.tcb[idx] = t;
 	}
     
-    bool pass(tracerecord_t *t)
-	{ return cpu_pass(t) && type_pass(t) && id_pass(t) && tsc_pass(t) && tcb_pass(t); }
+static bool tbuf_handler_pass (tracerecord_t *t)
+	{ return tbuf_handler_cpu_pass (t) && tbuf_handler_type_pass (t) && tbuf_handler_id_pass (t) && tbuf_handler_tsc_pass (t) && tbuf_handler_tcb_pass (t); }
 
     
     /* Tbuf handling */
-    void set_tbuf_typemask(word_t mask)
+static void tbuf_handler_set_tbuf_typemask (word_t mask)
 	{ get_tracebuffer()->mask = mask; }
 
-    word_t get_tbuf_typemask()
+static word_t tbuf_handler_get_tbuf_typemask (void)
 	{ return get_tracebuffer()->mask; }
 
     traceconfig_t get_tbuf_config()
 	{ return get_tracebuffer()->config; }
 
     
-    word_t get_tbuf_max()
+static word_t tbuf_handler_get_tbuf_max (void)
 	{ return get_tracebuffer()->max; }
     
-    word_t get_tbuf_current()
-	{ return get_tracebuffer()->current; }
+static word_t tbuf_handler_get_tbuf_current (void)
+	{ return atomic_read (&get_tracebuffer()->current); }
 
-    void reset_tbuf()
+static void tbuf_handler_reset_tbuf (void)
 	{ 
 	    memset (get_tracebuffer ()->tracerecords, 0,
 		    TRACEBUFFER_SIZE - sizeof (tracerecord_t));
-	    get_tracebuffer ()->current = 0;
+	    atomic_set (&get_tracebuffer ()->current, 0);
 
 	}
     
-    void reset_tbuf_counters()
+static void tbuf_handler_reset_tbuf_counters (void)
 	{ 
 	    tracebuffer_t * tracebuffer = get_tracebuffer ();
 	    
@@ -294,7 +296,7 @@ public:
 
 	}
     
-    void dump_tbuf_counters()
+static void tbuf_handler_dump_tbuf_counters (void)
 	{
 	    
 	    tracebuffer_t * tracebuffer = get_tracebuffer ();
@@ -305,7 +307,7 @@ public:
 	}
 
 
-    word_t find_tbuf_start(word_t end, word_t count, word_t size)
+static word_t tbuf_handler_find_tbuf_start (word_t end, word_t count, word_t size)
 	{ 
     
 	    word_t start, num;
@@ -315,9 +317,9 @@ public:
 		if (start > size) start = size;
 		
 		tracerecord_t *rec = get_tracebuffer()->tracerecords + start;
-		if (!pass(rec))
+		if (!tbuf_handler_pass (rec))
 		{
-		    //if (rec->tsc && !tsc_pass(rec))
+		    //if (rec->tsc && !tbuf_handler_tsc_pass (rec))
 		    //break;
 		    //else
 		    continue;
@@ -327,7 +329,7 @@ public:
 	    return start;
 	}
     
-    word_t find_tbuf_end(word_t start, word_t count, word_t size)
+static word_t tbuf_handler_find_tbuf_end (word_t start, word_t count, word_t size)
 	{ 
 	    word_t end, num;
 		
@@ -335,7 +337,7 @@ public:
 	    {
 		if (end > size) end = 0;
 		
-		if (!pass(get_tracebuffer()->tracerecords + end))
+		if (!tbuf_handler_pass (get_tracebuffer()->tracerecords + end))
 		    continue;
 		
 		count--;
@@ -343,18 +345,18 @@ public:
 	    return end;
 	}
     
-    bool is_tbuf_valid()
+static bool tbuf_handler_is_tbuf_valid (void)
 	{
 	    tracebuffer_t * tracebuffer = get_tracebuffer ();
 
-	    if (! tracebuffer->is_valid ())
+	    if (! tracebuffer_is_valid (tracebuffer))
 	    {
 		printf("Bad tracebuffer signature at %p [%p]\n",
 		       (word_t) (&tracebuffer->magic), tracebuffer->magic);
 		return false;
 	    }  
 	    
-	    if (tracebuffer->current == 0)
+	    if (atomic_read (&tracebuffer->current) == 0)
 	    {
 		printf ("No records\n");
 		return false;
@@ -366,13 +368,13 @@ public:
     
 
     
-    void dump_tbuf(word_t start, word_t count, word_t size, bool header = true)
+static void tbuf_handler_dump_tbuf (word_t start, word_t count, word_t size, bool header)
 	{
 	    word_t num, index;
 	    tracerecord_t * rec;
 	    tracebuffer_t * tracebuffer = get_tracebuffer ();
 	    bool printed = false;
-	    space_t * space = get_current_space ();
+	    space_t * space = get_current_space_c ();
 
 	    struct {
 		word_t tsc;
@@ -393,7 +395,7 @@ public:
 		if (index >= size) index = 0;
 		rec = tracebuffer->tracerecords + index;
 
-		if (!pass(rec))
+		if (!tbuf_handler_pass (rec))
 		    continue;
 		
 		word_t cpu = rec->cpu;
@@ -401,7 +403,7 @@ public:
 		if (((++num % 4000) == 0) && get_choice ("Continue", "y/n", 'y') == 'n')
 		    break;
 		
-		if (header && !current_reached && (index >= get_tbuf_current() + 1))
+		if (header && !current_reached && (index >= tbuf_handler_get_tbuf_current () + 1))
 		{
 		    current_reached = true;
 		    printf ("------------------- Current ---------------"
@@ -425,20 +427,19 @@ public:
 		tcb_t * tcb;
 		threadid_t tid;
 		
-		if (rec->is_kernel_event ())
+		if (tracerecord_is_kernel_event (rec))
 		{
 		    tcb = addr_to_tcb((addr_t) rec->thread);
-		    tid = tcb->get_global_id();
+		    tid = tcb_get_global_id (tcb);
 		    
-		    printf ("%6d %01d %04x %c %4d %wt ", index, rec->cpu, rec->get_type 
-			    (), rec->is_kernel_event () ? 'k' : 'u', rec->id, tcb);
+		    printf ("%6d %01d %04x %c %4d %wt ", index, rec->cpu, tracerecord_get_type (rec), tracerecord_is_kernel_event (rec) ? 'k' : 'u', rec->id, tcb);
 		}
 		else
 		{
-		    tid = threadid (rec->thread);
-		    tcb = tcb_t::get_tcb (tid);
-		    printf ("%6d %01d %04x %c %4d %wt ", index, rec->cpu, rec->get_type(), 
-			    rec->is_kernel_event () ? 'k' : 'u', rec->id, tid.get_raw ());
+		    tid = threadid_from_raw (rec->thread);
+		    tcb = tcb_get_tcb (tid);
+		    printf ("%6d %01d %04x %c %4d %wt ", index, rec->cpu, tracerecord_get_type (rec), 
+			    tracerecord_is_kernel_event (rec) ? 'k' : 'u', rec->id, tid.raw);
 
 		}
 
@@ -500,9 +501,9 @@ public:
 		char *src = (char*) rec->str, *dst = tb_str;
 		bool mapped = true;
 		
-		if (rec->is_kernel_event ())
+		if (tracerecord_is_kernel_event (rec))
 		{
-		    space = get_kernel_space();
+		    space = get_kernel_space_c ();
 		}
 		else
 		{
@@ -512,9 +513,9 @@ public:
 
 		    // Check if we seem to have a valid space and string pointer
 
-		    if (tcb->get_global_id () != tid ||
-			space->is_user_area ((addr_t) tcb->get_space ()) ||
-			! space->is_user_area ((addr_t) rec->str))
+		    if (tcb_get_global_id (tcb).raw != tid.raw ||
+			space_is_user_area ((addr_t) tcb_get_space (tcb)) ||
+			! space_is_user_area ((addr_t) rec->str))
 		    {
 	 		printf ("%p (%p, %p, %p, %p)\n", rec->str,
 				rec->arg[0], rec->arg[1],
@@ -524,13 +525,13 @@ public:
 				rec->arg[8]);
 			continue;
 		    }
-		    space = tcb->get_space ();
+		    space = tcb_get_space (tcb);
 
 		}
 		addr_t p = (addr_t) src;
 		char c;
 
-		while ((mapped = readmem (space, p, &c)) && (c != 0) && idx++ < (sizeof (tb_str) - 1))
+		while ((mapped = readmem_u8 (space, p, &c)) && (c != 0) && idx++ < (sizeof (tb_str) - 1))
 		{
 		    *dst++ = c;
 		    p = addr_offset (p, 1);
@@ -596,60 +597,59 @@ public:
 	}
 
 
-};
+
  
 
-tbuf_handler_t tbuf_handler;
 
 
 void tbuf_dump (word_t count, word_t usec, word_t tp_id, word_t cpumask)
 {
     word_t start, end, max;
-    word_t old_tp_id[tbuf_handler_t::max_filters];
-    word_t old_cpumask = tbuf_handler.get_cpumask();
-    word_t old_typemask = tbuf_handler.get_typemask();
-    u64_t old_tsc = tbuf_handler.get_tsc();
-    word_t old_tbuf_typemask = tbuf_handler.get_tbuf_typemask();
+    word_t old_tp_id[TBUF_MAX_FILTERS];
+    word_t old_cpumask = tbuf_handler_get_cpumask ();
+    word_t old_typemask = tbuf_handler_get_typemask ();
+    u64_t old_tsc = tbuf_handler_get_tsc ();
+    word_t old_tbuf_typemask = tbuf_handler_get_tbuf_typemask ();
     
-    tbuf_handler.set_cpumask(cpumask);
-    tbuf_handler.set_tbuf_typemask((word_t) ~0ULL);
-    tbuf_handler.set_typemask((word_t )~0ULL);
+    tbuf_handler_set_cpumask (cpumask);
+    tbuf_handler_set_tbuf_typemask ((word_t) ~0ULL);
+    tbuf_handler_set_typemask ((word_t )~0ULL);
     
-    for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
+    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
     {
-	old_tp_id[i] = tbuf_handler.get_id(i);
-	tbuf_handler.set_id(i, 0);
+	old_tp_id[i] = tbuf_handler_get_id (i);
+	tbuf_handler_set_id (i, 0);
     }
-    tbuf_handler.set_id(0, tp_id);
+    tbuf_handler_set_id (0, tp_id);
     
-    max  =  tbuf_handler.get_tbuf_max();
-    end   = tbuf_handler.get_tbuf_current();
+    max  =  tbuf_handler_get_tbuf_max ();
+    end   = tbuf_handler_get_tbuf_current ();
     
     if (usec)
     {
-        procdesc_t * pdesc = get_kip()->processor_info.get_procdesc(get_current_cpu());
+        procdesc_t * pdesc = processor_info_get_procdesc (&get_kip()->processor_info, get_current_cpu());
         ASSERT (pdesc);
         word_t freq = pdesc->internal_freq + 1;
         u64_t tsc = get_cpu_cycles() - ((u64_t) usec * (u64_t) (freq / 1000));
 	count = max;
-	tbuf_handler.set_tsc(tsc);
+	tbuf_handler_set_tsc (tsc);
     }
     else if (count == 0)
 	count = max;
     
-    start = tbuf_handler.find_tbuf_start(end, count, max);
+    start = tbuf_handler_find_tbuf_start (end, count, max);
     count = (end >= start) ? end - start : end + max - start;
-    tbuf_handler.dump_tbuf(start, count, max, false);
+    tbuf_handler_dump_tbuf (start, count, max, false);
 
     if (tp_id)
     {
-	for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
-	    tbuf_handler.set_id(i, old_tp_id[i]);
+	for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
+	    tbuf_handler_set_id (i, old_tp_id[i]);
     }
-    tbuf_handler.set_cpumask(old_cpumask);
-    tbuf_handler.set_typemask(old_typemask);
-    tbuf_handler.set_tsc(old_tsc);
-    tbuf_handler.set_tbuf_typemask(old_tbuf_typemask);
+    tbuf_handler_set_cpumask (old_cpumask);
+    tbuf_handler_set_typemask (old_typemask);
+    tbuf_handler_set_tsc (old_tsc);
+    tbuf_handler_set_tbuf_typemask (old_tbuf_typemask);
  
 }
 
@@ -664,7 +664,7 @@ DECLARE_CMD (cmd_tracebuffer, root, 'y', "tracebuffer",
 
 CMD (cmd_tracebuffer, cg)
 {
-    return tracebuf.interact (cg, "tracebuffer");
+    return cmd_group_interact (&tracebuf, cg, "tracebuffer");
 }
 
 
@@ -676,7 +676,7 @@ DECLARE_CMD (cmd_tb_reset, tracebuf, 'r', "reset", "Reset buffer");
 
 CMD (cmd_tb_reset, cg)
 {	
-    tbuf_handler.reset_tbuf();
+    tbuf_handler_reset_tbuf ();
     return CMD_NOQUIT;
 }
 
@@ -689,7 +689,7 @@ DECLARE_CMD (cmd_tb_reset_ctr, tracebuf, 'R', "resetctr", "Reset counters");
 
 CMD (cmd_tb_reset_ctr, cg)
 {
-    tbuf_handler.reset_tbuf_counters();
+    tbuf_handler_reset_tbuf_counters ();
     return CMD_NOQUIT;
 }
 
@@ -702,7 +702,7 @@ DECLARE_CMD (cmd_tb_dump_ctr, tracebuf, 'c', "counters", "Dump counters");
 
 CMD (cmd_tb_dump_ctr, cg)
 {
-    tbuf_handler.dump_tbuf_counters();
+    tbuf_handler_dump_tbuf_counters ();
     return CMD_NOQUIT;
 }
 
@@ -734,7 +734,7 @@ word_t get_typemask()
 	mask = 0x0000ffff;
 	break;
     case 'm':
-	mask = get_hex ("Mask", 0xffffffff);
+	mask = get_hex ("Mask", 0xffffffff, NULL);
 	break;
     }
     
@@ -746,7 +746,7 @@ DECLARE_CMD (cmd_tb_type_filter, tracebuf, 'f', "filter", "Record filter");
 
 CMD (cmd_tb_type_filter, cg)
 {	
-    tbuf_handler.set_tbuf_typemask(get_typemask());
+    tbuf_handler_set_tbuf_typemask (get_typemask());
     return CMD_NOQUIT;
 }
 
@@ -761,13 +761,13 @@ CMD (cmd_tb_dump, cg)
 { 
     word_t start, end, max, count;
    
-    if (!tbuf_handler.is_tbuf_valid())
+    if (!tbuf_handler_is_tbuf_valid ())
 	return CMD_NOQUIT;
     
-    max  = tbuf_handler.get_tbuf_max();
+    max  = tbuf_handler_get_tbuf_max ();
     count = 32;
     start = 0;
-    end   = tbuf_handler.get_tbuf_current();
+    end   = tbuf_handler_get_tbuf_current ();
     
     switch (get_choice ("Dump tracebuffer", "All/Region/Top/Bottom", 'b'))
     {
@@ -775,23 +775,23 @@ CMD (cmd_tb_dump, cg)
 	count = max;
 	break;
     case 'r': 
-	start = get_dec ("From record",  0);
+	start = get_dec ("From record",  0, NULL);
 	// Fall through
     case 't': 
-	count = get_dec ("Record count", count);
-	end = tbuf_handler.find_tbuf_end(start, count, max);
+	count = get_dec ("Record count", count, NULL);
+	end = tbuf_handler_find_tbuf_end (start, count, max);
 	if (count > max)  count = max; 
 	break;
     case 'b':
     default: 
-	count = get_dec ("Record count", count);
+	count = get_dec ("Record count", count, NULL);
 	if (count > max) count = max;
-	start = tbuf_handler.find_tbuf_start(end, count, max);
+	start = tbuf_handler_find_tbuf_start (end, count, max);
 	break;
     } 
 
     count = (end >= start) ? end - start : end + max - start;
-    tbuf_handler.dump_tbuf(start, count, max);
+    tbuf_handler_dump_tbuf (start, count, max, true);
 	
     return CMD_NOQUIT;
 }
@@ -809,16 +809,16 @@ CMD (cmd_tb_dump_def, cg)
 {
     word_t start, end, max, count;
    
-    if (!tbuf_handler.is_tbuf_valid())
+    if (!tbuf_handler_is_tbuf_valid ())
 	return CMD_NOQUIT;
     
     
-    max  = tbuf_handler.get_tbuf_max();
+    max  = tbuf_handler_get_tbuf_max ();
     count = 64;
-    end   = tbuf_handler.get_tbuf_current();
-    start = tbuf_handler.find_tbuf_start(end, count, max);
+    end   = tbuf_handler_get_tbuf_current ();
+    start = tbuf_handler_find_tbuf_start (end, count, max);
     count = (end >= start) ? end - start : end + max - start;
-    tbuf_handler.dump_tbuf(start, count, max);
+    tbuf_handler_dump_tbuf (start, count, max, true);
 
     return CMD_NOQUIT;
 }
@@ -832,7 +832,7 @@ CMD (cmd_tb_dump_def, cg)
 DECLARE_CMD (cmd_tb_cpu, tracebuf, 'C', "cpufilter", "CPU display filter");
 CMD(cmd_tb_cpu, cg) 
 {
-    tbuf_handler.set_cpumask(get_hex("Processor Filter", ~0UL, "all"));
+    tbuf_handler_set_cpumask (get_hex("Processor Filter", ~0UL, "all"));
     return CMD_NOQUIT;
 }
 
@@ -846,7 +846,7 @@ DECLARE_CMD (cmd_tb_events, tracebuf, 'F', "filter", "Record display filter");
 
 CMD (cmd_tb_events, cg)
 {	
-    tbuf_handler.set_typemask(get_typemask());
+    tbuf_handler_set_typemask (get_typemask());
     return CMD_NOQUIT;
 }
 
@@ -854,14 +854,14 @@ CMD (cmd_tb_events, cg)
 DECLARE_CMD (cmd_tb_evt, tracebuf, 't', "tpfilter", "TP display filter");
 CMD(cmd_tb_evt, cg) 
 {
-    for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
-	tbuf_handler.set_id(i, 0);
+    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
+	tbuf_handler_set_id (i, 0);
     
-    for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
+    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
     {
 	for (;;)
 	{
-	    tbuf_handler.set_id(i, 0);
+	    tbuf_handler_set_id (i, 0);
 	    word_t id = get_dec ("Select TP", 0, "list");
 	    if (id == 0)
 	    {
@@ -870,10 +870,10 @@ CMD(cmd_tb_evt, cg)
 	    }
 	    else if (id == ABORT_MAGIC)
 		return CMD_NOQUIT;
-	    else if (id <= tp_list.size ())
-		tbuf_handler.set_id(i, id);
+	    else if (id <= tracepoint_list_size (&tp_list))
+		tbuf_handler_set_id (i, id);
 	    else if (id >= TB_USERID_START)
-		tbuf_handler.set_id(i, id);
+		tbuf_handler_set_id (i, id);
 	    break;
 	}
 	if (get_choice ("More events", "y/n", 'n') == 'n')
@@ -887,12 +887,12 @@ CMD(cmd_tb_evt, cg)
 DECLARE_CMD (cmd_tb_tcb, tracebuf, 'T', "tcbfilter", "TCB display filter");
 CMD(cmd_tb_tcb, cg) 
 {
-    for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
-	tbuf_handler.set_tcb(i, NULL);
+    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
+	tbuf_handler_set_tcb (i, NULL);
     
-    for (word_t i=0; i < tbuf_handler_t::max_filters; i++)
+    for (word_t i=0; i < TBUF_MAX_FILTERS; i++)
     {
-	tbuf_handler.set_tcb(i, get_thread ("tcb/tid/name"));
+	tbuf_handler_set_tcb (i, get_thread ("tcb/tid/name"));
 	if (get_choice ("More threads", "y/n", 'n') == 'n')
 	    break;
 
@@ -904,7 +904,7 @@ CMD(cmd_tb_tcb, cg)
 DECLARE_CMD (cmd_tb_showfilters, tracebuf, 's', "showfilters", "Show filters");
 CMD(cmd_tb_showfilters, cg) 
 {
-    tbuf_handler.dump_filters();
+    tbuf_handler_dump_filters ();
     return CMD_NOQUIT;
 	
 }
@@ -912,7 +912,7 @@ CMD(cmd_tb_showfilters, cg)
 DECLARE_CMD (cmd_tb_zero, tracebuf, 'z', "zerofilter", "Invalidate filters");
 CMD(cmd_tb_zero, cg) 
 {
-    tbuf_handler.invalidate_filters();
+    tbuf_handler_invalidate_filters ();
     return CMD_NOQUIT;
 }
 

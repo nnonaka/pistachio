@@ -44,7 +44,7 @@ SOURCES+=	kdb/generic/bootinfo.c \
 
 
 ifeq ("$(CONFIG_TRACEBUFFER)","y")
-SOURCES+=	kdb/generic/tracebuffer.cc
+SOURCES+=	kdb/generic/tracebuffer.c
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")

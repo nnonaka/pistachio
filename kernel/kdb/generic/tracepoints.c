@@ -91,7 +91,7 @@ DECLARE_CMD (cmd_tracepoints, root, 'r', "tracepoints",
 
 CMD(cmd_tracepoints, cg)
 {
-    return tracepoints.interact (cg, "tracepoints");
+    return cmd_group_interact (&tracepoints, cg, "tracepoints");
 }
 
 

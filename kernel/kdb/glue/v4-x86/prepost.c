@@ -176,7 +176,7 @@ bool kdb_pre (void)
 	    db = x86_dr_read(dbnum);
 	    space_t *space = tcb_get_space (kdb.kdb_current);
 	    if (!space)
-		space = get_kernel_space();
+		space = get_kernel_space_c ();
 	    
 
 	    word_t content;
