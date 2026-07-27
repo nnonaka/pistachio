@@ -86,8 +86,63 @@ public:
  * C++ class, which adds only static members and methods on top of the base).
  */
 struct x86_exceptionframe_t { struct x86_exceptionregs_t __base; };
+typedef struct x86_exceptionframe_t x86_exceptionframe_t;
+
+#if defined(CONFIG_DEBUG)
+/* C forms of x86_exceptionframe_t::dump_flags / ::dump (kdb uses them). */
+#define X86_EXC_NUM_DBGREGS	18
+
+INLINE void x86_exceptionframe_dump_flags (x86_exceptionframe_t *self)
+{
+    word_t f = self->__base.regs[X86_EXC_FREG];
+    printf("%c%c%c%c%c%c%c%c%c%c%c",
+	   f & (1 <<  0) ? 'C' : 'c',
+	   f & (1 <<  2) ? 'P' : 'p',
+	   f & (1 <<  4) ? 'A' : 'a',
+	   f & (1 <<  6) ? 'Z' : 'z',
+	   f & (1 <<  7) ? 'S' : 's',
+	   f & (1 << 11) ? 'O' : 'o',
+	   f & (1 << 10) ? 'D' : 'd',
+	   f & (1 <<  9) ? 'I' : 'i',
+	   f & (1 <<  8) ? 'T' : 't',
+	   f & (1 << 16) ? 'R' : 'r',
+	   ((f >> 12) & 3) + '0'
+	);
+}
+
+INLINE void x86_exceptionframe_dump (x86_exceptionframe_t *self)
+{
+    if (self->__base.regs[X86_EXC_CSREG] == X86_KCS)
+    {
+	printf("fault addr: %8x\tstack: %8x\terror code: %x frame: %p\n",
+	       self->__base.regs[X86_EXC_IPREG],
+	       (word_t) self + sizeof(*self) - 2 * sizeof(word_t),
+	       self->__base.error, self);
+    }
+    else
+    {
+	printf("fault addr: %8x\tstack: %8x\terror code: %x frame: %p\n",
+	       self->__base.regs[X86_EXC_IPREG], self->__base.regs[X86_EXC_SPREG],
+	       self->__base.error, self);
+    }
+
+    for (word_t r = 0; r < X86_EXC_NUM_DBGREGS; r++)
+    {
+	printf("\t%s: %wx", x86_exceptionframe_name[x86_exceptionframe_dbgreg[r]],
+	       self->__base.regs[x86_exceptionframe_dbgreg[r]]);
+
+	if (x86_exceptionframe_dbgreg[r] == X86_EXC_FREG)
+	{
+	    printf(" ["); x86_exceptionframe_dump_flags (self); printf("]");
+	}
+	if ((r+1) % 2 == 0) printf("\n");
+    }
+}
+#endif /* CONFIG_DEBUG */
 #endif /* defined(__cplusplus) */
 
+#if defined(__cplusplus)
 typedef struct x86_exceptionframe_t x86_exceptionframe_t;
+#endif
 
 #endif /* !__ARCH__X86__TRAPGATE_H__ */

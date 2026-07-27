@@ -81,13 +81,13 @@ public:
 #define STATIC
 };
 
-/* The debugger commands are free functions (they were static members, which is
-   why cmd_func_t could always be a plain function pointer).  Declared after the
-   class so a command body can still touch kdb's data. */
-#include <kdb_class_helper.h>
-
 extern kdb_t kdb;
 #endif /* __cplusplus */
+
+/* The debugger commands are free functions (they were static members, which is
+   why cmd_func_t could always be a plain function pointer).  Declared after the
+   class, and for BOTH languages -- kdb files are progressively becoming C. */
+#include <kdb_class_helper.h>
 
 
 #endif /* !__KDB__KDB_H__ */

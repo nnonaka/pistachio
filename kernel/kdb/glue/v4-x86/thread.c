@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003, 2005, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/thread.cc
+ * File path:     kdb/glue/v4-x86/thread.c
  * Description:   Various thread management stuff
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -44,11 +44,11 @@ CMD (cmd_dump_frame, cg)
 {
     tcb_t * current = get_thread ("Thread");
     x86_exceptionframe_t * f =
-	(x86_exceptionframe_t *) current->get_stack_top () - 1;
+	(x86_exceptionframe_t *) tcb_get_stack_top (current) - 1;
 
-    x86_exceptionframe_t *frame = 
+    x86_exceptionframe_t *frame =
 	(x86_exceptionframe_t*) get_hex ("Frame", (word_t) f, "current user frame");
-    frame->dump();
+    x86_exceptionframe_dump (frame);
 
     return CMD_NOQUIT;
 }
