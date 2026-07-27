@@ -268,6 +268,53 @@ INLINE void x86_mmu_enable_global_pages (void)
     x86_cr4_set (X86_CR4_PGE);
 }
 
+/* C mirrors of the long-mode bring-up statics used by arch/x86/x64/init32.c. */
+INLINE void x86_mmu_enable_paging (void)
+{
+    x86_cr0_set (X86_CR0_PG | X86_CR0_WP | X86_CR0_PE);
+    __asm__ __volatile__ ("jmp penabled; penabled:");
+}
+
+INLINE void x86_mmu_disable_paging (void)
+{
+    x86_cr0_mask (X86_CR0_PG);
+}
+
+INLINE void x86_mmu_enable_pae_mode (void)
+{
+    x86_cr4_set (X86_CR4_PAE);
+}
+
+INLINE __attribute__((always_inline)) bool x86_mmu_has_long_mode (void)
+{
+    if (!(x86_x64_has_cpuid ()))
+	return false;
+
+    u32_t features, lfn, dummy;
+
+    x86_cpuid (CPUID_MAX_EXT_FN_NR, &lfn, &dummy, &dummy, &dummy);
+
+    if (lfn < CPUID_AMD_FEATURES)
+	return false;
+
+    x86_cpuid (CPUID_AMD_FEATURES, &dummy, &dummy, &dummy, &features);
+
+    return (features & CPUID_AMD_HAS_LONGMODE);
+}
+
+INLINE void x86_mmu_enable_long_mode (void)
+{
+    u64_t efer = x86_rdmsr (X86_MSR_EFER);
+    efer |= X86_MSR_EFER_LME;
+    x86_wrmsr (X86_MSR_EFER, efer);
+}
+
+INLINE bool x86_mmu_long_mode_active (void)
+{
+    u64_t efer = x86_rdmsr (X86_MSR_EFER);
+    return (efer & X86_MSR_EFER_LMA);
+}
+
 INLINE void x86_mmu_flush_tlb (bool global)
 {
     word_t dummy1;

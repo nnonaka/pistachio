@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2009,  Karlsruhe University
  *                
- * File path:     arch/x86/x64/init32.cc
+ * File path:     arch/x86/x64/init32.c
  * Description:   Switch to 64bit long mode
  *                This file is compiled as 32bit Code
  *
@@ -29,7 +29,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: init32.cc,v 1.8 2006/11/30 15:32:07 stoess Exp $
+ * $Id: init32.c,v 1.8 2006/11/30 15:32:07 stoess Exp $
  *                
  ********************************************************************/
 
@@ -63,7 +63,7 @@ x86_segdesc_t init32_gdt[2] SECTION(".init.data");
 
 #if defined(CONFIG_CONS_KBD) 
 #define INIT32_DEBUG_SCREEN	(0xb8000)
-INLINE void SECTION(".init.init32")  init32_spin(int pos = 0)
+INLINE void SECTION(".init.init32")  init32_spin(int pos)
 {
 
     while(1)
@@ -88,7 +88,7 @@ static void SECTION(".init.init32") init32_cons (void) {};
 #define INIT32_COMPORT		CONFIG_KDB_COMPORT
 #define INIT32_RATE		CONFIG_KDB_COMSPEED
 
-inline void SECTION(".init.init32") init32_out(const u16_t port, const u8_t val)
+static inline void SECTION(".init.init32") init32_out(const u16_t port, const u8_t val)
 {
     /* GCC can optimize here if constant */
     __asm__ __volatile__("outb	%1, %0\n"
@@ -109,10 +109,10 @@ static inline u8_t SECTION(".init.init32") init32_in(const u16_t port)
 static inline void SECTION(".init.init32") init32_putc(const char c)
 {
     while ((init32_in(INIT32_COMPORT+5) & 0x60) == 0);
-    init32_out(INIT32_COMPORT,c);
+    init32_out(INIT32_COMPORT,(u8_t) c);
 }
 
-static void SECTION(".init.init32")  init32_spin (int pos = 0)
+static void SECTION(".init.init32")  init32_spin (int pos)
 {
     char c= 'A';
     while (1)
@@ -166,7 +166,7 @@ static void SECTION(".init.init32") init32_cons (void)
  * Precondition: paged or non paged protected mode
 d */
 
-extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
+void SECTION(".init.init32") init_paging( u32_t is_ap )
 {
    
     init32_cons();
@@ -176,7 +176,7 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
      * spin(x) signalizes error at character position x
      */ 
 	
-    if (!x86_mmu_t::has_long_mode())
+    if (!x86_mmu_has_long_mode())
 	init32_spin(1);
 
 
@@ -220,9 +220,9 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
 
     for (int i=0; i< INIT32_PDIR_ENTRIES; i++){
     	/* the pdir (used twice!) maps 1 GByte */
-	u64_t v = ((i << X86_SUPERPAGE_BITS) | (INIT32_PDIR_ATTRIBS & X86_SUPERPAGE_FLAGS_MASK));
+	u64_t v = (((u64_t) i << X86_SUPERPAGE_BITS) | (INIT32_PDIR_ATTRIBS & X86_SUPERPAGE_FLAGS_MASK));
 	pdir[i] = v;
-	pdir[i + X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED)] = v;
+	pdir[(word_t) i + X86_X64_PDIR_IDX(KERNEL_OFFSET_TYPED)] = v;
     }
 
     /*
@@ -251,22 +251,22 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
 
 
     /* Disable Paging (Vol. 2, 14.6.1) */
-    x86_mmu_t::disable_paging();
+    x86_mmu_disable_paging();
 	 
     /* Enable PAE mode - required before  long mode */
-    x86_mmu_t::enable_pae_mode();
+    x86_mmu_enable_pae_mode();
      
     /* Enable long mode (not active unless paging is enabled) */
-    x86_mmu_t::enable_long_mode();
+    x86_mmu_enable_long_mode();
 	 
     /* Set pagemap base pointer (CR3) */
-    x86_mmu_t::set_active_pagetable((u64_t) ((u32_t)pml4));
+    x86_mmu_set_active_pagetable((u64_t) ((u32_t)pml4));
 	 
     /* Enable paged mode */
-    x86_mmu_t::enable_paging();
+    x86_mmu_enable_paging();
 	 
     /* Success ?  */
-    if (!(x86_mmu_t::long_mode_active()))
+    if (!(x86_mmu_long_mode_active()))
 	init32_spin(3);
 	 
     /* Set up temporary GDT (true long mode needs 64bit Code Segment).
@@ -276,12 +276,13 @@ extern "C" void SECTION(".init.init32") init_paging( u32_t is_ap )
      * selector 0x08 would be invalid. */
     x86_segdesc_t *gdt = init32_gdt;
     __asm__ ("" : "+r"(gdt));
-    gdt[0].set_seg((u32_t)0, x86_segdesc_t::inv, 0, x86_segdesc_t::m_comp);
-    gdt[1].set_seg((u32_t)0, x86_segdesc_t::code, 0, x86_segdesc_t::m_long);
+    x86_segdesc_set_seg(&gdt[0], (u64_t) 0, X86_SEGDESC_INV, 0, X86_SEGDESC_M_COMP, X86_SEGDESC_MSR_NONE);
+    x86_segdesc_set_seg(&gdt[1], (u64_t) 0, X86_SEGDESC_CODE, 0, X86_SEGDESC_M_LONG, X86_SEGDESC_MSR_NONE);
 
     /* Install temporary GDT */
-    x86_descreg_t gdtr((word_t) gdt, sizeof(init32_gdt));
-    gdtr.setdescreg(x86_descreg_t::gdtr);
+    x86_descreg_t gdtr;
+    x86_descreg_set(&gdtr, (word_t) gdt, sizeof(init32_gdt));
+    x86_descreg_setdescreg(&gdtr, X86_DESCREG_GDTR);
 	 
     /*
      * Search startup_system (see linker script)
