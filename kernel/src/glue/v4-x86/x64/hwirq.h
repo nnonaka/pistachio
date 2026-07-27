@@ -33,9 +33,17 @@
 #define __GLUE_V4_X86__X64__HWIRQ_H__
 
 
+/* the stub is always a C symbol; "extern \"C\"" is C++-only syntax, so spell it
+   conditionally (platform/generic/intctrl-apic.c is C). */
+#if defined(__cplusplus)
+#define __HWIRQ_EXTERN_C	extern "C"
+#else
+#define __HWIRQ_EXTERN_C	extern
+#endif
+
 #define HW_IRQ(num)						\
-extern "C" void hwirq_##num();					\
-void hwirq_##num##_wrapper()					\
+__HWIRQ_EXTERN_C void hwirq_##num(void);			\
+void hwirq_##num##_wrapper(void)				\
 {								\
     __asm__ (							\
         ".global hwirq_"#num"				\n"	\

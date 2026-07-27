@@ -612,6 +612,33 @@ INLINE word_t local_apic_read_error (void)
     *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280) = 0;
     return *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280);
 }
+
+/* command_reg_t: vector[0:7] delivery_mode[8:10] destination_mode[11]
+   delivery_status[12] level[14] trigger_mode[15] destination[18:19].
+   The writable fields below are cleared then re-set; the rest is preserved. */
+#define __LAPIC_CMD_FIELDS	((u32_t) 0xCCFFF)
+
+INLINE void local_apic_send_init_ipi (u8_t apic_id, bool assert)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x310) = ((u32_t) apic_id) << (56 - 32);
+    volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + 0x300);
+    u32_t raw = *cmd1 & ~__LAPIC_CMD_FIELDS;
+    raw |= (5u << 8)			/* delivery_mode = init */
+	 | ((assert ? 1u : 0u) << 14)	/* level */
+	 | (1u << 15);			/* trigger_mode */
+    *cmd1 = raw;
+}
+
+INLINE void local_apic_send_startup_ipi (u8_t apic_id, void (*startup_func)(void))
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x310) = ((u32_t) apic_id) << (56 - 32);
+    volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + 0x300);
+    u32_t raw = *cmd1 & ~__LAPIC_CMD_FIELDS;
+    /* the AP starts at 0x000VV000, where VV is sent with the SIPI */
+    raw |= ((((u32_t) (word_t) startup_func) >> 12) & 0xff)
+	 | (6u << 8);			/* delivery_mode = startup */
+    *cmd1 = raw;
+}
 #endif /* !__cplusplus */
 
 #endif /* !__ARCH__X86__APIC_H__ */
