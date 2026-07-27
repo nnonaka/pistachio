@@ -167,6 +167,11 @@ INLINE void prio_queue_enqueue (prio_queue_t *self, tcb_t *tcb, bool head)
 	self->max_prio = (s16_t) prio;
 }
 
+/* C forms of the scheduler_t helpers the policy bodies use.  scheduler_t is
+   {policy_scheduler_t __base;} in C, so the queue lives at __base. */
+INLINE prio_queue_t * sched_get_prio_queue (scheduler_t *self)
+{ return &self->__base.root_prio_queue; }
+
 INLINE void prio_queue_dequeue (prio_queue_t *self, tcb_t *tcb)
 {
     ASSERT (tcb);
