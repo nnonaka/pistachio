@@ -44,8 +44,7 @@ typedef enum {
 } cmd_mode_t;
 
 
-/* Defined in generic/init.cc as the static member kdb_t::kdb_cmd_mode, which
-   carries an __asm__ label so both languages name the same symbol. */
+/* Defined in kdb/generic/init.c. */
 BEGIN_DECLS
 extern cmd_mode_t kdb_cmd_mode;
 END_DECLS
