@@ -2394,3 +2394,31 @@ chosen deliberately because it is the only probe that reaches `dump_mdbmaps`
 (the `[1] space=... vaddr=... pgent=...` line); the first baseline at address 0
 stopped at `dump_mdbroot` and would have left `pgent_vaddr` and most of the
 translated accessors unexercised.
+
+## §70 — kdb/generic/linear_ptab_dump.cc → .c
+
+Another cheap one: every `pgent_t` method it uses already had a C form in
+`arch/x86/pgent.h`'s BEGIN_DECLS block or its C-only INLINE block
+(`pgent_is_valid/_subtree/_readable/_writable/_executable/_kernel`,
+`pgent_address/_subtree/_next/_mapnode/_reference_bits/_dump_misc`), and
+`space->pgent (n, cpu)` had `space_pgent_cpu`.
+
+**The 4-byte enum trap, fourth occurrence.** `get_ptab_dump_ranges` writes its
+`max_size` out-parameter through an `int *` on the C side, so the local must be
+`int`, not `word_t` — a `word_t` write would clobber 8 bytes of caller stack.
+The loop variable `size` is `int` too, both to match the C++ enum's width and to
+keep `size < max_size` from mixing signedness.
+
+The `#if !defined(CONFIG_ARCH_X86)` fallback is dead for this config but was
+still translated; it now names `PGENT_SIZE_MAX`, which no arch defines yet, with
+a comment saying non-x86 ports must supply it. The rename touched four
+Makeconfs (x64, x32, powerpc, powerpc64) since the file is shared.
+
+Left the `$Id: linear_ptab_dump.cc,v` line alone — that is a CVS record of the
+file's history, not a path reference, and rewriting it would be a false record.
+Same convention as `sigma0.c`.
+
+Verification: 337976 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. Drove `p` over the *user* area against a pre-flip kernel: 22 lines
+identical, covering subtree recursion in both directions, valid mappings,
+reference bits, `mapnode`, and the `dump_misc` cacheability suffix.

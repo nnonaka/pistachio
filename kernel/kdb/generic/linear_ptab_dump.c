@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2004, 2007-2008, 2010, 2012,  Karlsruhe University
  *                
- * File path:     kdb/generic/linear_ptab_dump.cc
+ * File path:     kdb/generic/linear_ptab_dump.c
  * Description:   Linear page table dump
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -42,16 +42,18 @@
    is what the C side writes through its int* out-parameter. */
 BEGIN_DECLS
 void get_ptab_dump_ranges (addr_t * vaddr, word_t * num,
-			   pgent_t::pgsize_e * max_size);
+			   int * max_size);
 END_DECLS
 
+/* Non-x86 ports must define PGENT_SIZE_MAX (the C spelling of what was
+   pgent_t::size_max) alongside their pgent_t C form. */
 #if !defined(CONFIG_ARCH_X86)
 void get_ptab_dump_ranges (addr_t * vaddr, word_t * num,
-			   pgent_t::pgsize_e * max_size)
+			   int * max_size)
 {
     *vaddr = (addr_t) 0;
-    *num = page_table_size (pgent_t::size_max);
-    *max_size = pgent_t::size_max;
+    *num = page_table_size (PGENT_SIZE_MAX);
+    *max_size = PGENT_SIZE_MAX;
 }
 #endif
 
@@ -65,27 +67,27 @@ CMD(cmd_dump_ptab, cg)
 {
     static char spaces[] = "                                ";
     char * spcptr = spaces + sizeof (spaces) - 1;
-    char * spcpad = spcptr - pgent_t::size_max * 2;
+    char * spcpad = spcptr - X86_PGSIZE_MAX * 2;
 
     space_t * space;
     addr_t vaddr;
     word_t num, count = 0;
     pgent_t * pg;
-    pgent_t::pgsize_e size, max_size;
+    int size, max_size;
 
     // Arrays to implement recursion
-    pgent_t * r_pg[pgent_t::size_max];
-    word_t r_num[pgent_t::size_max];
+    pgent_t * r_pg[X86_PGSIZE_MAX];
+    word_t r_num[X86_PGSIZE_MAX];
 
     // Get dump arguments
     space = get_space ("Space");
-    size = pgent_t::size_max;
+    size = X86_PGSIZE_MAX;
     
     word_t cpu = get_dec("CPU id", get_current_cpu(), NULL);
     if (cpu >= CONFIG_SMP_MAX_CPUS) cpu = get_current_cpu();
     
     get_ptab_dump_ranges (&vaddr, &num, &max_size);
-    pg = space->pgent (page_table_index (pgent_t::size_max, vaddr), cpu);
+    pg = space_pgent_cpu (space, page_table_index (X86_PGSIZE_MAX, vaddr), cpu);
 
     if (!pg)
     {
@@ -95,13 +97,13 @@ CMD(cmd_dump_ptab, cg)
 
     while (size != max_size)
     {
-	if (!pg->is_subtree (space, size))
+	if (!pgent_is_subtree (pg, space, size))
 	{
 	    printf ("No subtree");
 	    return CMD_NOQUIT;
 	}
-	pg = pg->subtree (space, size--);
-	pg = pg->next (space, size, page_table_index (size, vaddr));
+	pg = pgent_subtree (pg, space, size--);
+	pg = pgent_next (pg, space, size, page_table_index (size, vaddr));
    }
 
     
@@ -110,21 +112,21 @@ CMD(cmd_dump_ptab, cg)
 	if (((++count % 4000) == 0) && get_choice ("Continue", "y/n", 'y') == 'n')
 	    break;
 
-	if (pg->is_valid (space, size))
+	if (pgent_is_valid (pg, space, size))
 	{
-	    if (pg->is_subtree (space, size))
+	    if (pgent_is_subtree (pg, space, size))
 	    {
 		// Recurse into subtree
 		printf ("%p [%p]:%s tree=%p\n", vaddr, pg->raw, spcptr,
-			pg->subtree (space, size));
+			pgent_subtree (pg, space, size));
 
 		size--;
-		r_pg[size] = pg->next (space, size+1, 1);
+		r_pg[size] = pgent_next (pg, space, size+1, 1);
 		r_num[size] = num - 1;
 		spcptr -= 2;
 		spcpad += 2;
 
-		pg = pg->subtree (space, size+1);
+		pg = pgent_subtree (pg, space, size+1);
 		num = page_table_size (size);
 		continue;
 	    }
@@ -132,31 +134,31 @@ CMD(cmd_dump_ptab, cg)
 	    {
 		// Print valid mapping
 		word_t pgsz = page_size (size);
-		word_t rwx = pg->reference_bits (space, size, vaddr);
+		word_t rwx = pgent_reference_bits (pg, space, size, vaddr);
 
 
 		printf ("%p [%p]:%s phys=%p map=%p %s%3d%cB %c%c%c "
 			"(%c%c%c) %s",
-			vaddr, pg->raw, spcptr, pg->address (space, size),
-			pg->mapnode (space, size, vaddr), spcpad,
+			vaddr, pg->raw, spcptr, pgent_address (pg, space, size),
+			pgent_mapnode (pg, space, size, vaddr), spcpad,
 			(pgsz >= GB (1) ? pgsz >> 30 :
 			 pgsz >= MB (1) ? pgsz >> 20 : pgsz >> 10),
 			pgsz >= GB (1) ? 'G' : pgsz >= MB (1) ? 'M' : 'K',
-			pg->is_readable (space, size)   ? 'r' : '~',
-			pg->is_writable (space, size)   ? 'w' : '~',
-			pg->is_executable (space, size) ? 'x' : '~',
+			pgent_is_readable (pg, space, size)   ? 'r' : '~',
+			pgent_is_writable (pg, space, size)   ? 'w' : '~',
+			pgent_is_executable (pg, space, size) ? 'x' : '~',
 			rwx & 4 ? 'R' : '~',
 			rwx & 2 ? 'W' : '~',
 			rwx & 1 ? 'X' : '~',
-			pg->is_kernel (space, size) ? "kernel" : "user");
-		pg->dump_misc (space, size);
+			pgent_is_kernel (pg, space, size) ? "kernel" : "user");
+		pgent_dump_misc (pg, space, size);
 		printf ("\n");
 	    }
 	}
 
 	// Goto next ptab entry
 	vaddr = addr_offset (vaddr, page_size (size));
-	pg = pg->next (space, size, 1);
+	pg = pgent_next (pg, space, size, 1);
 	num--;
 
 	while (num == 0 && size < max_size)

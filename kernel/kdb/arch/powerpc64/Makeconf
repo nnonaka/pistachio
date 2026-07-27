@@ -36,5 +36,5 @@ ifeq ("$(CONFIG_KDB_DISAS)","y")
 SOURCES+=	kdb/arch/powerpc64/disas.cc 
 endif
 
-SOURCES +=	kdb/generic/linear_ptab_dump.cc \
+SOURCES +=	kdb/generic/linear_ptab_dump.c \
 		kdb/generic/mapping.cc

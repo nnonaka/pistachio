@@ -30,7 +30,7 @@
 ##                
 ######################################################################
 SOURCES+=	kdb/arch/x86/x64/x86.cc
-SOURCES+=	kdb/generic/linear_ptab_dump.cc 
+SOURCES+=	kdb/generic/linear_ptab_dump.c 
 
 
 ifeq ("$(CONFIG_KDB_DISAS)","y")
