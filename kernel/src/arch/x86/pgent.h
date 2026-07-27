@@ -445,6 +445,30 @@ INLINE void pgent_set_cpulocal (pgent_t *self, struct space_t *s, word_t pgsize,
     self->pgent.pg4k.cpulocal = local;
 }
 
+INLINE bool pgent_is_kernel (pgent_t *self, struct space_t *s, word_t pgsize)
+{ (void) s; (void) pgsize; return x86_pgent_is_kernel (&self->pgent); }
+
+/* pgent_t::dump_misc (kdb) -- native C, not a bridge: every accessor it needs
+   already has an x86_pgent_* C form. */
+INLINE void pgent_dump_misc (pgent_t *self, struct space_t *s, word_t pgsize)
+{
+    (void) s;
+    if (x86_pgent_is_global (&self->pgent))
+	printf ("global ");
+
+    if (x86_pgent_is_cpulocal (&self->pgent))
+	printf ("local ");
+
+#if defined(CONFIG_X86_PAT)
+    if (x86_pgent_is_pat (&self->pgent, pgsize))
+	printf (x86_pgent_is_cache_disabled (&self->pgent) ? "WP" :
+		x86_pgent_is_write_through (&self->pgent)  ? "WT" : "WC");
+    else
+#endif
+	printf (x86_pgent_is_cache_disabled (&self->pgent) ? "UC" :
+		x86_pgent_is_write_through (&self->pgent)  ? "WT" : "WB");
+}
+
 INLINE void pgent_set_cacheability (pgent_t *self, struct space_t *s, word_t pgsize, bool cacheable)
 {
     self->pgent.pg4k.cache_disabled = !cacheable;
