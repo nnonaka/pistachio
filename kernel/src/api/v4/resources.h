@@ -154,6 +154,8 @@ INLINE void resource_bits_add (resource_bits_t *self, word_t t)
     { self->resource_bits.maskvalue |= (1UL << t); }
 INLINE void resource_bits_remove (resource_bits_t *self, word_t t)
     { self->resource_bits.maskvalue &= ~(1UL << t); }
+INLINE bool resource_bits_have_resources (resource_bits_t *self)
+    { return self->resource_bits.maskvalue != 0; }
 #endif /* !__cplusplus */
 
 #endif

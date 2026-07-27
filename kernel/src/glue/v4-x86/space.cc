@@ -29,6 +29,11 @@
 #include INC_GLUE(memory.h)
 #include INC_GLUE(space.h)
 
+/* for the tcb_t/time_t bridge wrappers relocated from thread.cc: sched_state
+   set_timeout (schedule.h -> schedule_functions.h) and acceptor_t. */
+#include INC_API(schedule.h)
+#include INC_API(generic-archmap.h)
+
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
 #include INC_GLUE_SA(x32comp/kernelinterface.h)
 #endif
@@ -1375,6 +1380,41 @@ u8_t space_get_from_user (space_t *self, addr_t addr)	{ return self->get_from_us
 bool space_is_tcb_area (addr_t addr)				{ return space_t::is_tcb_area (addr); }
 bool space_is_user_area (addr_t addr)				{ return space_t::is_user_area (addr); }
 void reload_user_segregs_c (void)				{ reload_user_segregs (); }
+
+/* tcb_t / time_t bridge wrappers relocated here from thread.cc when it became C:
+   these bodies need C++ methods (resources copy-area, sched_state, acceptor,
+   time_t::operator<) that stay class methods until space.cc itself flips. */
+addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)	{ return self->copy_area_real_address (addr); }
+void   tcb_adjust_for_copy_area (tcb_t *self, tcb_t *dst, addr_t *saddr, addr_t *daddr)
+								{ self->adjust_for_copy_area (dst, saddr, daddr); }
+void   tcb_sched_set_timeout (tcb_t *self, time_t t)		{ self->sched_state.set_timeout (t); }
+void   tcb_init_saved_state (tcb_t *self)			{ self->init_saved_state (); }
+bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
+fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, tcb_t *dest)
+								{ return self->get_arch_specific_rcvwindow (dest); }
+
+/* time_t::operator< inlined (its only out-of-line definition was in thread.cc). */
+bool   time_lt (time_t a, time_t b)
+{
+    u64_t curtime = get_current_scheduler ()->get_current_time ();
+    u64_t l_to, r_to;
+
+    if (a.is_point ())
+	UNIMPLEMENTED ();
+    else if (a.is_never ())
+	l_to = ~0UL;
+    else
+	l_to = curtime + a.get_microseconds ();
+
+    if (b.is_point ())
+	UNIMPLEMENTED ();
+    else if (b.is_never ())
+	r_to = ~0UL;
+    else
+	r_to = curtime + b.get_microseconds ();
+
+    return l_to < r_to;
+}
 space_t * get_kernel_space_c (void)				{ return get_kernel_space (); }
 void space_init_kernel_space (void)				{ space_t::init_kernel_space (); }
 void space_init_cpu_mappings (space_t *self, cpuid_t cpu)	{ self->init_cpu_mappings (cpu); }
