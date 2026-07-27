@@ -256,6 +256,23 @@ INLINE bool  rr_sched_has_timeout_expired (rr_sched_ktcb_t *self, u64_t time)
 { return self->absolute_timeout <= time; }
 
 INLINE void   rr_sched_set_maximum_delay (rr_sched_ktcb_t *self, u16_t usec) { self->current_max_delay = usec; }
+INLINE void   rr_sched_init_maximum_delay (rr_sched_ktcb_t *self, u16_t usec)
+{ self->current_max_delay = self->max_delay = usec; }
+INLINE void   rr_sched_set_sensitive_prio (rr_sched_ktcb_t *self, prio_t prio) { self->sensitive_prio = prio; }
+INLINE void   rr_sched_set_priority (rr_sched_ktcb_t *self, prio_t prio)
+{
+    self->priority = prio;
+    /* keep sensitive and current prio in-sync to reduce checking overhead */
+    if (self->sensitive_prio < prio)
+	rr_sched_set_sensitive_prio (self, prio);
+}
+INLINE void   rr_sched_init_timeslice (rr_sched_ktcb_t *self, time_t timeslice)
+{
+    ASSERT (timeslice.time.type == 0);  /* is_period */
+    /* time_t::get_microseconds inlined (declared later in tcb.h) */
+    self->current_timeslice = self->timeslice_length =
+	(s64_t) ((1 << timeslice.time.exponent) * timeslice.time.mantissa);
+}
 INLINE u16_t  rr_sched_get_maximum_delay (rr_sched_ktcb_t *self)	{ return self->current_max_delay; }
 #endif /* !__cplusplus */
 
