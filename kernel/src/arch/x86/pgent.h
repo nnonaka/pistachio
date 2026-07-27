@@ -416,7 +416,43 @@ void      pgent_flush          (pgent_t *self, struct space_t *s, word_t pgsize,
 /* Entries used by the AMD64 SMP page-table sync (glue/v4-x86/x64/space.c). */
 word_t    pgent_idx            (pgent_t *self);
 bool      pgent_is_cpulocal    (pgent_t *self, struct space_t *s, word_t pgsize);
+void      pgent_smp_sync       (pgent_t *self, struct space_t *s, word_t pgsize);
 END_DECLS
+
+#if !defined(__cplusplus)
+/* C forms of the pgent_t modifier methods used only by glue/v4-x86/space.c:
+   bit-twiddling on the C-visible x86_pgent_t union (pgsize is X86_PGSIZE_*).
+   pgent_sync mirrors pgent_t::sync -> smp_sync. */
+INLINE void pgent_sync (pgent_t *self, struct space_t *s, word_t pgsize)
+{
+    if (pgsize >= X86_PGSIZE_SYNC)
+	pgent_smp_sync (self, s, pgsize);
+}
+
+INLINE void pgent_set_global (pgent_t *self, struct space_t *s, word_t pgsize, bool global)
+{
+#if defined(CONFIG_X86_PGE)
+    self->pgent.pg4k.global = global;
+    pgent_sync (self, s, pgsize);
+#endif
+}
+
+INLINE void pgent_set_cpulocal (pgent_t *self, struct space_t *s, word_t pgsize, bool local)
+{
+    (void) s; (void) pgsize;
+    self->pgent.pg4k.cpulocal = local;
+}
+
+INLINE void pgent_set_cacheability (pgent_t *self, struct space_t *s, word_t pgsize, bool cacheable)
+{
+    self->pgent.pg4k.cache_disabled = !cacheable;
+    if (pgsize == X86_PGSIZE_4K)
+	self->pgent.pg4k.pat = 0;
+    else
+	self->pgent.pg2m.pat = 0;
+    pgent_sync (self, s, pgsize);
+}
+#endif /* !__cplusplus */
 
 #if defined(CONFIG_NEW_MDB)
 #undef mapnode_t
