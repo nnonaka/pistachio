@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2001, 2003-2010,  Karlsruhe University
  *                
- * File path:     kdb/platform/pc99/io.cc
+ * File path:     kdb/platform/pc99/io.c
  * Description:   PC99 specific I/O functions
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -407,7 +407,7 @@ CMD(cmd_dumpvga, cg)
 	    {
 	    
 		unsigned char v = 0;
-		readmem(space, addr_offset(display, y*160 + 2*x), &v);
+		readmem_u8 (space, addr_offset(display, y*160 + 2*x), &v);
 		printf ("%c", ((v >= 32 && v < 127) ||
 			       (v >= 161 && v <= 191) ||
 			       (v >= 224)) ? v : (v == 0) ? ' ' : '.');
@@ -423,6 +423,10 @@ CMD(cmd_dumpvga, cg)
     return CMD_NOQUIT;
 }
 
+/* CONFIG_X86_IO_FLEXPAGES is off in this config, so everything below is
+   preprocessed away and cannot be compiled or exercised; translated to C by
+   inspection only.  mdb_node_get_table / space_get_io_space do not exist yet --
+   an IO-flexpage port must supply them. */
 #if defined(CONFIG_X86_IO_FLEXPAGES)
 /**
  * Dump IO-port mappings for given port.
@@ -432,7 +436,7 @@ DECLARE_CMD (cmd_mdb_io_dump, mdb, 'i', "dumpio",
 
 CMD (cmd_mdb_io_dump, cg)
 {
-    word_t addr =  get_hex ("Address");
+    word_t addr =  get_hex ("Address", 0, NULL);
     if (addr == ABORT_MAGIC)
 	return CMD_NOQUIT;
 
@@ -450,7 +454,7 @@ DECLARE_CMD (cmd_mdb_io_dump_all, mdb, 'I', "dumpallio",
 CMD (cmd_mdb_io_dump_all, cg)
 {
     extern mdb_node_t * sigma0_ionode;
-    dump_table (&mdb_io, sigma0_ionode->get_table (), 0);
+    dump_table (&mdb_io, mdb_node_get_table (sigma0_ionode), 0);
     return CMD_NOQUIT;
 }
 
@@ -465,7 +469,7 @@ DECLARE_CMD (cmd_dump_iospace, arch, 'P', "dumpiospace",
 CMD (cmd_dump_iospace, cg)
 {
     space_t * space = get_space("Address space of IO space");
-    vrt_t * iospace = space->get_io_space ();
+    vrt_t * iospace = space_get_io_space (space);
     if (iospace == NULL)
 	return CMD_NOQUIT;
 

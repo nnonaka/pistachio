@@ -51,26 +51,7 @@ static word_t kip_get_kernel_id_raw (kernel_interface_page_t *kip)
     return (kd->kernel_id.id << 24) | (kd->kernel_id.subid << 16);
 }
 
-/*
- * C form of the readmem<u8_t> template (linear_ptab.h): direct access for
- * kernel memory, checked space_readmem for user memory, truncate to a byte.
- */
-static bool readmem_u8 (space_t *space, addr_t vaddr, u8_t *v)
-{
-    word_t w;
-
-    if (! space_is_user_area (vaddr))
-    {
-	*v = *(u8_t *) vaddr;
-	return true;
-    }
-
-    if (! space_readmem (space, vaddr, &w))
-	return false;
-
-    *v = (u8_t) (w & 0xff);
-    return true;
-}
+/* readmem_u8 is now shared, in generic/linear_ptab.h. */
 
 
 bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)

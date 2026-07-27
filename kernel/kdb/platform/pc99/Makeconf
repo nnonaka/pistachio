@@ -10,4 +10,4 @@
 ## $Id:$
 ##                
 ######################################################################
-SOURCES += kdb/platform/pc99/io.cc kdb/platform/pc99/intctrl.c
+SOURCES += kdb/platform/pc99/io.c kdb/platform/pc99/intctrl.c

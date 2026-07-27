@@ -2750,3 +2750,33 @@ to a real C TU and a real C++ TU that include the header:
 
 then read the sizes back out of the "conflicting declaration" notes. Re-run it
 whenever a field is added to a base that a dual-repped type derives from.
+
+## §80 — kdb/platform/pc99/io.cc → .c
+
+The kdb console driver (serial + screen putc/getc, `kdb_consoles[]`) plus the
+VGA screendump command. The active code was already essentially C: the only
+translation in compiled code is one `readmem` call.
+
+`readmem` is a **C++ function template** in `generic/linear_ptab.h` — the second
+template blocker after `local_apic_t` (§75), and templates cannot be asm-name
+bridged. Added `readmem_u8` and `readmem_word` C forms mirroring the template
+body exactly (direct access outside the user area, otherwise checked
+`space_readmem` plus a mask; `is_user_area` is static in C++ so takes no space
+argument). The template itself stays — `kdb/glue/v4-x86/prepost.cc` is still C++
+and still instantiates it, so there is no emission problem.
+
+Consolidated a duplicate: `glue/v4-x86/exception.c` already carried an identical
+`static readmem_u8` from an earlier flip. Removed it in favour of the shared
+header version rather than leaving two copies to drift.
+
+The `CONFIG_X86_IO_FLEXPAGES` block (off here) holds the only other C++ in the
+file; translated by inspection, naming `mdb_node_get_table` and
+`space_get_io_space`, which do not exist — an IO-flexpage port must supply them.
+Same convention as §70 and §75.
+
+Verification: 332944 bytes, warning-clean, 0 implicit declarations, boottest
+PASS, and the `V` screendump driven against a pre-flip kernel
+(scratchpad/vgarun.sh) — 25x80 of real screen memory read through `readmem_u8`,
+identical apart from one line: the on-screen kickstart text quotes the kernel's
+own size, which legitimately changed (333152 -> 332944). The console driver
+itself needs no separate test — every character of the session is proof it works.

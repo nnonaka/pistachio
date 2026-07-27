@@ -202,6 +202,41 @@ INLINE bool readmem (space_t * space, addr_t vaddr, T * v)
 }
 #else /* !__cplusplus */
 
+/* C forms of the readmem<T> template above.  C has no templates, so one
+   function per width actually used in the tree; each mirrors the template
+   body exactly (direct access outside the user area, otherwise a checked
+   space_readmem plus a mask).  is_user_area is static in C++, hence no
+   space argument. */
+INLINE bool readmem_u8 (space_t * space, addr_t vaddr, u8_t * v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(u8_t *) vaddr;
+	return true;
+    }
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+    *v = (u8_t) (w & 0xff);
+    return true;
+}
+
+INLINE bool readmem_word (space_t * space, addr_t vaddr, word_t * v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(word_t *) vaddr;
+	return true;
+    }
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+    *v = w;
+    return true;
+}
+
 /* C reimplementations of the page-geometry helpers. The C++ versions above
    take pgent_t::pgsize_e; C passes a word_t holding an X86_PGSIZE_* value. */
 INLINE word_t page_size (word_t pgsize)
