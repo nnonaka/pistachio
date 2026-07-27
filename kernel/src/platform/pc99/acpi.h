@@ -63,6 +63,22 @@ INLINE acpi_rsdp_t* acpi_rsdp_t::locate(addr_t addr)
     /* not found */
     return NULL;
 };
+#else /* !__cplusplus */
+/* C form of acpi_rsdp_t::locate (same scan). */
+INLINE acpi_rsdp_t * acpi_rsdp_locate (addr_t addr)
+{
+    for (addr_t p = addr;
+	 p < addr_offset (addr, ACPI20_PC99_RSDP_SIZE);
+	 p = addr_offset (p, 16))
+    {
+	acpi_rsdp_t *r = (acpi_rsdp_t *) p;
+	if (r->sig[0] == 'R' && r->sig[1] == 'S' && r->sig[2] == 'D' && r->sig[3] == ' ' &&
+	    r->sig[4] == 'P' && r->sig[5] == 'T' && r->sig[6] == 'R' && r->sig[7] == ' ')
+	    return r;
+    }
+    /* not found */
+    return NULL;
+}
 #endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__ACPI_H__ */

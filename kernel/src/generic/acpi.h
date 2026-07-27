@@ -507,6 +507,61 @@ INLINE word_t acpi_madt_nmi_get_trigger_mode (acpi_madt_nmi_t *self)	{ return se
 INLINE u32_t acpi_fadt_pmtimer_ioport (acpi_fadt_t *self)
 { return *(u32_t *) &self->data[76 - sizeof (acpi_thead_t)]; }
 
+/* C forms of acpi_rsdp_t::rsdt / ::xsdt (checksum-verified pointers). */
+INLINE acpi_rsdt_t * acpi_rsdp_rsdt (acpi_rsdp_t *self)
+{
+    u8_t csum = 0;
+    for (int i = 0; i < 20; i++)
+	csum = (u8_t) (csum + ((char *) self)[i]);
+    if (csum != 0)
+	return NULL;
+    return (acpi_rsdt_t *) (word_t) self->rsdt_ptr;
+}
+INLINE acpi_xsdt_t * acpi_rsdp_xsdt (acpi_rsdp_t *self)
+{
+    /* only ACPI 2.0 knows about an XSDT */
+    if (self->rev != 2)
+	return NULL;
+    u8_t csum = 0;
+    for (int i = 0; i < 36; i++)
+	csum = (u8_t) (csum + ((char *) self)[i]);
+    if (csum != 0)
+	return NULL;
+    return (acpi_xsdt_t *) (word_t) self->xsdt_ptr;
+}
+
+/* C forms of the acpi__sdt_t<T>::find / ::list template methods (rsdt and xsdt
+   differ only in pointer width, so one pair each). */
+#define __ACPI_SDT_FIND_BODY(self, sig, myself_phys)				\
+    acpi_thead_t *head = NULL;							\
+    for (word_t i = 0;								\
+	 i < (((self)->header.len - sizeof ((self)->header)) / sizeof ((self)->ptrs[0])) && !head; \
+	 i++)									\
+    {										\
+	acpi_thead_t *t = (acpi_thead_t *) (acpi_remap ((addr_t) (word_t) (self)->ptrs[i])); \
+	if (t->sig[0] == (sig)[0] && t->sig[1] == (sig)[1] &&			\
+	    t->sig[2] == (sig)[2] && t->sig[3] == (sig)[3])			\
+	    head = (acpi_thead_t *) (addr_t) (word_t) (self)->ptrs[i];		\
+	acpi_remap (myself_phys);						\
+    }										\
+    return head;
+
+INLINE acpi_thead_t * acpi_rsdt_find (acpi_rsdt_t *self, const char *sig, addr_t myself_phys)
+{ __ACPI_SDT_FIND_BODY (self, sig, myself_phys) }
+INLINE acpi_thead_t * acpi_xsdt_find (acpi_xsdt_t *self, const char *sig, addr_t myself_phys)
+{ __ACPI_SDT_FIND_BODY (self, sig, myself_phys) }
+
+INLINE void acpi_rsdt_list (acpi_rsdt_t *self, addr_t myself_phys)
+{
+    for (word_t i = 0; i < ((self->header.len - sizeof (self->header)) / sizeof (self->ptrs[0])); i++)
+    {
+	UNUSED acpi_thead_t *t = (acpi_thead_t *) (acpi_remap ((addr_t) (word_t) self->ptrs[i]));
+	TRACE_INIT ("\t%c%c%c%c is at %p\n",
+		    t->sig[0], t->sig[1], t->sig[2], t->sig[3], self->ptrs[i]);
+	acpi_remap (myself_phys);
+    }
+}
+
 /* The MADT entry walkers (defined in generic/acpi.c). */
 BEGIN_DECLS
 acpi_madt_hdr_t *    acpi_madt_find (acpi_madt_t *self, u8_t type, int index);
