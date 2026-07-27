@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2009,  Karlsruhe University
  *                
- * File path:     kdb/generic/mapping.cc
+ * File path:     kdb/generic/mapping.c
  * Description:   Mapping database dumping
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -37,36 +37,36 @@
 #include <linear_ptab.h>
 
 static void dump_mdbmaps (mapnode_t * map, addr_t paddr,
-			  mapnode_t::pgsize_e size,
+			  word_t size,
 			  rootnode_t * proot, char * spc);
 
 static void dump_mdbroot (rootnode_t * root, addr_t paddr,
-			  mapnode_t::pgsize_e size, char * spc);
+			  word_t size, char * spc);
 
 
 /*
  * Helper functions
  */
 
-INLINE word_t mdb_arraysize (mapnode_t::pgsize_e pgsize)
+INLINE word_t mdb_arraysize (word_t pgsize)
 {
     return 1 << (mdb_pgshifts[pgsize+1] - mdb_pgshifts[pgsize]);
 }
 
-INLINE word_t mdb_get_index (mapnode_t::pgsize_e size, addr_t addr)
+INLINE word_t mdb_get_index (word_t size, addr_t addr)
 {
     return ((word_t) addr >> mdb_pgshifts[size]) & (mdb_arraysize(size) - 1);
 }
 
-INLINE rootnode_t * mdb_index_root (mapnode_t::pgsize_e size, rootnode_t * r,
+INLINE rootnode_t * mdb_index_root (word_t size, rootnode_t * r,
 				    addr_t addr)
 {
     return r + mdb_get_index (size, addr);
 }
 
-INLINE pgent_t::pgsize_e hw_pgsize (mapnode_t::pgsize_e mdb_pgsize)
+INLINE word_t hw_pgsize (word_t mdb_pgsize)
 {
-    pgent_t::pgsize_e s = (pgent_t::pgsize_e) 0;
+    word_t s = 0;
     while (hw_pgshifts[s] < mdb_pgshifts[mdb_pgsize])
 	s++;
     return s;
@@ -82,49 +82,49 @@ CMD (cmd_dump_mdb, cg)
 {
     static char spaces[] = "                                                ";
 
-    addr_t paddr = (addr_t) get_hex ("Address");
+    addr_t paddr = (addr_t) get_hex ("Address", 0, NULL);
     if ((word_t) paddr == ABORT_MAGIC)
 	return CMD_NOQUIT;
     
-    dump_mdbroot (mdb_index_root (mapnode_t::size_max, 
-				  sigma0_mapnode->get_nextroot (), paddr),
-		  paddr, mapnode_t::size_max, spaces + sizeof (spaces)-1);
+    dump_mdbroot (mdb_index_root (MDB_PGSIZE_MAX, 
+				  mapnode_get_nextroot (sigma0_mapnode), paddr),
+		  paddr, MDB_PGSIZE_MAX, spaces + sizeof (spaces)-1);
 
     return CMD_NOQUIT;
 }
 
 static void dump_mdbmaps (mapnode_t * map, addr_t paddr,
-			  mapnode_t::pgsize_e size,
+			  word_t size,
 			  rootnode_t * proot, char * spc)
 {
     mapnode_t * pmap = NULL;
 
     while (map)
     {
-	space_t * space = map->get_space ();
-	pgent_t::pgsize_e hwsize = hw_pgsize (size);
+	space_t * space = mapnode_get_space (map);
+	word_t hwsize = hw_pgsize (size);
 
 	printf ("%s[%d] space=%p  vaddr=%p  pgent=%p  (%p)\n",
-		spc - map->get_depth () * 2, map->get_depth (), space,
+		spc - mapnode_get_depth (map) * 2, mapnode_get_depth (map), space,
 		(pmap ?
-		 map->get_pgent (pmap)->vaddr (space, hwsize, map) :
-		 map->get_pgent (proot)->vaddr (space, hwsize, map)),
-		pmap ? map->get_pgent(pmap) : map->get_pgent(proot),
+		 pgent_vaddr (mapnode_get_pgent (map, pmap), space, hwsize, map) :
+		 pgent_vaddr (mapnode_get_pgent (map, proot), space, hwsize, map)),
+		pmap ? mapnode_get_pgent (map, pmap) : mapnode_get_pgent (map, proot),
 		map);
 	
 	pmap = map;
-	if (map->is_next_root () || (map->is_next_both () &&
-                                     map->get_nextroot () != NULL))
+	if (mapnode_is_next_root (map) || (mapnode_is_next_both (map) &&
+                                     mapnode_get_nextroot (map) != NULL))
 	{
-	    dump_mdbroot (mdb_index_root (size-1, map->get_nextroot (), paddr),
-			  paddr, size-1, spc - 2 - map->get_depth () * 2);
+	    dump_mdbroot (mdb_index_root (size-1, mapnode_get_nextroot (map), paddr),
+			  paddr, size-1, spc - 2 - mapnode_get_depth (map) * 2);
 	}
-	map = map->get_nextmap ();
+	map = mapnode_get_nextmap (map);
     }
 }
 
 static void dump_mdbroot (rootnode_t * root, addr_t paddr,
-			  mapnode_t::pgsize_e size, char * spc)
+			  word_t size, char * spc)
 {
     printf ("%s%p: %d%cB %s (%p)\n",
 	    spc, addr_mask (paddr,  ~((1 << mdb_pgshifts[size]) - 1)),
@@ -133,14 +133,14 @@ static void dump_mdbroot (rootnode_t * root, addr_t paddr,
 	     1 << (mdb_pgshifts[size] - 10)),
 	    ((mdb_pgshifts[size] >= 30) ? 'G' :
 	     (mdb_pgshifts[size] >= 20) ? 'M' : 'K'),
-	    root->is_next_both () ? "[root/map]" :
-	    root->is_next_root () ? "[root]" : "[map]", root);
+	    rootnode_is_next_both (root) ? "[root/map]" :
+	    rootnode_is_next_root (root) ? "[root]" : "[map]", root);
 
-    if (root->is_next_map () || root->is_next_both ())
-	dump_mdbmaps (root->get_map (), paddr, size, root, spc - 2);
+    if (rootnode_is_next_map (root) || rootnode_is_next_both (root))
+	dump_mdbmaps (rootnode_get_map (root), paddr, size, root, spc - 2);
 
-    if (root->is_next_root () || root->is_next_both ())
-	dump_mdbroot (mdb_index_root (size-1, root->get_root (), paddr), paddr,
+    if (rootnode_is_next_root (root) || rootnode_is_next_both (root))
+	dump_mdbroot (mdb_index_root (size-1, rootnode_get_root (root), paddr), paddr,
 		      size-1,  spc - 2);
 }
 

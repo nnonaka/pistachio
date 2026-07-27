@@ -40,5 +40,5 @@ endif
 ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	kdb/generic/mdb.cc
 else
-SOURCES+=	kdb/generic/mapping.cc
+SOURCES+=	kdb/generic/mapping.c
 endif

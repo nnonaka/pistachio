@@ -2363,3 +2363,34 @@ loop of `tcb_get_cpu (self) == tcb_get_cpu (dest)` assertion failures at
 `glue/v4-x86/thread.c:285`. This is **pre-existing**, not a migration
 regression — the HEAD kernel reproduces it identically (30 assertions, 188
 lines). Use `-smp 1` when driving kdb commands interactively.
+
+## §69 — kdb/generic/mapping.cc → .c
+
+Cheap flip: `src/generic/mapping.h` was already dual-repped, so every accessor
+this file needs (`mapnode_get_space/_depth/_pgent/_nextroot/_nextmap`,
+`mapnode_is_next_root/_map/_both`, `rootnode_get_map/_root`,
+`rootnode_is_next_*`) already had a C form, as did `sigma0_mapnode`,
+`mdb_pgshifts` and `hw_pgshifts`.
+
+I briefly added `pgent_vaddr`/`pgent_get_linknode` as new C inlines in
+`arch/x86/pgent.h` before finding `pgent_vaddr` was **already** defined
+out-of-line in `glue/v4-x86/space.c:854` and declared in pgent.h's BEGIN_DECLS
+block. Reverted. *Check the existing BEGIN_DECLS block before writing a new C
+form* — several are already there from earlier flips.
+
+`get_hex ("Address")` needed its two default arguments spelled out; the C++
+defaults are `(NULL, 0, NULL)`, so `get_hex ("Address", 0, NULL)` is exact.
+
+**`pgsize_e` arithmetic:** `mapnode_t::pgsize_e` carries overloaded
+`operator+/-(pgsize_e, int)` that round-trip through the 4-byte enum, so C++
+`size-1` truncates to 32 bits where C `word_t` does not. This only diverges at
+`size == 0`, which the recursion cannot reach (a size-0 root has no next_root),
+and both languages would index `mdb_pgshifts[]` out of bounds there anyway.
+
+Verification: 338032 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. Drove the `m` command at four addresses against a rebuilt pre-flip
+kernel — output identical, including node addresses. Address `0x1000000` was
+chosen deliberately because it is the only probe that reaches `dump_mdbmaps`
+(the `[1] space=... vaddr=... pgent=...` line); the first baseline at address 0
+stopped at `dump_mdbroot` and would have left `pgent_vaddr` and most of the
+translated accessors unexercised.
