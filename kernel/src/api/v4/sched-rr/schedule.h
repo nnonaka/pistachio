@@ -172,6 +172,27 @@ INLINE void prio_queue_enqueue (prio_queue_t *self, tcb_t *tcb, bool head)
 INLINE prio_queue_t * sched_get_prio_queue (scheduler_t *self)
 { return &self->__base.root_prio_queue; }
 
+/* rr_sched_ktcb_t::delay_preemption (schedule_functions.h) */
+INLINE bool rr_sched_delay_preemption (rr_sched_ktcb_t *self, tcb_t *tcb)
+{
+    /* we always allow ourself to delay our preemption */
+    if (addr_to_tcb (self) == tcb)
+	return true;
+    else if (self->sensitive_prio < rr_sched_get_priority (&tcb->sched_state.base))
+	return false;
+    return (self->current_max_delay > 0);
+}
+
+INLINE bool sched_check_dispatch_thread (tcb_t *tcb, tcb_t *dest)
+{
+    preempt_flags_t pf = tcb_get_preempt_flags (tcb);
+    if (EXPECT_FALSE (preempt_flags_is_delayed (&pf) &&
+		      rr_sched_get_maximum_delay (&tcb->sched_state.base)))
+	return !rr_sched_delay_preemption (&tcb->sched_state.base, dest);
+    return (rr_sched_get_priority (&tcb->sched_state.base) <
+	    rr_sched_get_priority (&dest->sched_state.base));
+}
+
 INLINE void prio_queue_dequeue (prio_queue_t *self, tcb_t *tcb)
 {
     ASSERT (tcb);
@@ -182,6 +203,13 @@ INLINE void prio_queue_dequeue (prio_queue_t *self, tcb_t *tcb)
     prio_t prio = rr_sched_get_priority (&tcb->sched_state.base);
     DEQUEUE_LIST (self->prio_queue[prio], tcb, sched_state.base.ready_list);
     queue_state_clear (&tcb->queue_state, QUEUE_STATE_READY);
+}
+
+INLINE void sched_enqueue_ready (scheduler_t *self, tcb_t *tcb, bool head)
+{
+    ASSERT (tcb);
+    ASSERT (tcb_is_local_cpu (tcb));
+    prio_queue_enqueue (sched_get_prio_queue (self), tcb, head);
 }
 #else /* __cplusplus: the C++ scheduler classes + inline methods */
 
