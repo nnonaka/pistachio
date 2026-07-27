@@ -2497,3 +2497,24 @@ build timestamp and CPU-frequency calibration jitter, and the `K` dump matches
 the pre-flip kernel line for line. Note the pre-existing `Local destination Id:
 FAILED` in l4test under `-smp 1` reproduces identically on the pre-flip kernel —
 not a regression.
+
+## §73 — kdb/generic/input.cc → .c
+
+The cheapest flip so far: three `getc ()` calls needed their default argument
+(`getc (true)`), and nothing else changed. The groundwork was already done when
+`kdb/input.h` was dual-repped earlier in this session — its declarations were
+put under BEGIN_DECLS then, so `get_hex`/`get_dec`/`get_choice` already had C
+linkage and every call site already spelled out the arguments C cannot default.
+
+`get_space`/`get_thread`/`get_comspace`/`get_thrspace` are *not* in this file
+(they live in `kdb/api/v4/input.cc`), so nothing else was pulled in.
+
+Verified the object is actually compiled by `gcc` and not `g++` — the kernel
+size did not change at all (337816 both sides), which is expected here since
+the translated code is identical, but it means size is no evidence of a rebuild.
+
+Verification: warning-clean, 0 implicit declarations, boottest PASS, and the
+prompt behaviour driven against a pre-flip kernel over the paths that matter:
+`0x` prefix handling, digit entry, invalid characters ignored, backspace echo,
+ESC returning ABORT_MAGIC, `get_choice` on RETURN (default), `get_choice` on an
+explicit key, and `get_choice` echoing a lettered default. Output identical.

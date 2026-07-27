@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2004,  Karlsruhe University
  *                
- * File path:     kdb/generic/input.cc
+ * File path:     kdb/generic/input.c
  * Description:   Various input functions
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@ word_t SECTION(SEC_KDEBUG) get_hex (const char * prompt, const word_t defnum, co
 
     while (len < (sizeof (word_t) * 2))
     {
-	switch (r = c = getc ())
+	switch (r = c = getc (true))
 	{
 	case '0': case '1': case '2': case '3': case '4':
 	case '5': case '6': case '7': case '8': case '9':
@@ -157,7 +157,7 @@ word_t SECTION(SEC_KDEBUG) get_dec (const char * prompt, const word_t defnum, co
 
     for (;;)
     {
-	switch (c = getc ())
+	switch (c = getc (true))
 	{
 	case '0': case '1': case '2': case '3': case '4':
 	case '5': case '6': case '7': case '8': case '9':
@@ -243,7 +243,7 @@ char SECTION(SEC_KDEBUG) get_choice (const char * prompt, const char * choices, 
 
     for (;;)
     {
-	c = getc ();
+	c = getc (true);
 	p = get_key_string (c == KEY_RETURN ? def : c, choices);
 	for (; p && *p != '/' && *p != 0; p++)
 	    if (prompt)
