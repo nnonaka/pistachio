@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2004  Karlsruhe University
  *
- * File path:     kdb/generic/print.cc
+ * File path:     kdb/generic/print.c
  * Description:   Implementation of printf
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,9 @@ BEGIN_DECLS
 extern void putc(const char c);
 END_DECLS
 
+BEGIN_DECLS
 int print_tid (word_t val, word_t width, word_t precision, bool adjleft);
+END_DECLS
 
 
 /* convert nibble to lowercase hex char */
@@ -63,11 +65,11 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft);
  *	@returns the number of charaters printed (should be same as width).
  */
 int SECTION(SEC_KDEBUG) print_hex(const word_t val,
-				  int width = 0,
-				  int precision = 0,
-				  bool adjleft = false,
-				  bool nullpad = false,
-    				  bool uppercase = false)
+				  int width,
+				  int precision,
+				  bool adjleft,
+				  bool nullpad,
+    				  bool uppercase)
 {
     int i, n = 0;
     int nwidth = 0;
@@ -100,11 +102,11 @@ int SECTION(SEC_KDEBUG) print_hex(const word_t val,
 }
 
 int SECTION(SEC_KDEBUG) print_hex64(const u64_t val,
-                                    int width = 0,
-                                    int precision = 0,
-                                    bool adjleft = false,
-                                    bool nullpad = false,
-                                    bool uppercase = false)
+                                    int width,
+                                    int precision,
+                                    bool adjleft,
+                                    bool nullpad,
+                                    bool uppercase)
 {
     int i, n = 0;
     int nwidth = 0;
@@ -150,8 +152,8 @@ int SECTION(SEC_KDEBUG) print_hex64(const u64_t val,
  *      @returns the number of charaters printed.
  */
 int SECTION(SEC_KDEBUG) print_string(const char * s,
-				     const int width = 0,
-				     const int precision = 0)
+				     const int width,
+				     const int precision)
 {
     int n = 0;
 
@@ -188,9 +190,9 @@ int SECTION(SEC_KDEBUG) print_hex_sep(const word_t val,
 {
     int n = 0;
 
-    n = print_hex(val >> bits, 0, 0);
-    n += print_string(sep);
-    n += print_hex(val & ((1 << bits) - 1), 0, 0);
+    n = print_hex(val >> bits, 0, 0, false, false, false);
+    n += print_string(sep, 0, 0);
+    n += print_hex(val & ((1 << bits) - 1), 0, 0, false, false, false);
 
     return n;
 }
@@ -209,8 +211,8 @@ int SECTION(SEC_KDEBUG) print_hex_sep(const word_t val,
  *	@returns the number of characters printed (may be more than WIDTH)
  */
 int SECTION(SEC_KDEBUG) print_dec(const word_t val,
-                                  const int width = 0,
-                                  const char pad = ' ')
+                                  const int width,
+                                  const char pad)
 {
     word_t divisor;
     int digits;
@@ -233,8 +235,8 @@ int SECTION(SEC_KDEBUG) print_dec(const word_t val,
 
 
 int SECTION(SEC_KDEBUG) print_dec64(const u64_t val,
-                                  const int width = 0,
-                                  const char pad = ' ')
+                                  const int width,
+                                  const char pad)
 {
     u64_t divisor;
     int digits;
@@ -281,7 +283,7 @@ int SECTION(SEC_KDEBUG) do_printf(const char* format_p, va_list args)
     
 #define arg(x) va_arg(args, x)
     
-    printf_spin_lock.lock();
+    spinlock_lock (&printf_spin_lock);
     
     /* sanity check */
     if (format == NULL)
@@ -403,7 +405,7 @@ int SECTION(SEC_KDEBUG) do_printf(const char* format_p, va_list args)
 		format++;
 		continue;
 	    default:
-		n += print_string("?");
+		n += print_string("?", 0, 0);
 		break;
 	    };
 	    i++;
@@ -417,7 +419,7 @@ int SECTION(SEC_KDEBUG) do_printf(const char* format_p, va_list args)
     }
     
 done:
-    printf_spin_lock.unlock();
+    spinlock_unlock (&printf_spin_lock);
     return n;
 }
 
@@ -430,7 +432,7 @@ done:
  *
  *	@returns the number of characters printed
  */
-extern "C" int SECTION(SEC_KDEBUG) printf(const char* format, ...)
+int SECTION(SEC_KDEBUG) printf(const char* format, ...)
 {
     va_list args;
     int i;

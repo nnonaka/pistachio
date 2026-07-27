@@ -34,7 +34,9 @@
 #include INC_API(tcb.h)
 
 
-/* From generic/print.cc */
+/* From generic/print.c (C now) -- C linkage; the default arguments are a
+   caller-side C++ convenience and stay here. */
+BEGIN_DECLS
 
 int print_hex (const word_t val,
 	       int width,
@@ -53,6 +55,9 @@ int print_dec (const word_t val,
 	       const char pad = ' ');
     
 
+END_DECLS
+
+BEGIN_DECLS
 int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 {
     tcb_t * tcb;
@@ -177,3 +182,4 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 
     return (int) n;
 }
+END_DECLS

@@ -38,7 +38,7 @@ SOURCES+=	kdb/generic/bootinfo.cc \
 		kdb/generic/kmemory.c \
 		kdb/generic/linker_set.cc \
 		kdb/generic/memdump.c \
-		kdb/generic/print.cc \
+		kdb/generic/print.c \
 		kdb/generic/tid_format.c \
 		kdb/generic/tracepoints.cc 
 
