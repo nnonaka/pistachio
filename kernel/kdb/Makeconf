@@ -34,7 +34,7 @@ $(BUILDDIR)/include/kdb_class_helper.h:	$(filter kdb/%,$(SOURCES)) $(SRCDIR)/src
 	@if [ ! -d $(dir $@) ]; then $(MKDIRHIER) $(dir $@); fi
 	@echo "/* Machine-generated file - DO NOT EDIT!	*/" > $@.new
 	@echo "/*   will be included from kdb/kdb.h	*/" >> $@.new
-	@grep -h "^ *DECLARE_CMD *(" $(filter %.cc %.h, $^) | perl -pe 's/^ *DECLARE_CMD *\(([^,]+).*/static cmd_ret_t \1(cmd_group_t*);/' >> $@.new
+	@grep -h "^ *DECLARE_CMD *(" $(filter %.cc %.h, $^) | perl -pe 's/^ *DECLARE_CMD *\(([^,]+).*/cmd_ret_t \1(cmd_group_t*);/' >> $@.new
 	@cmp -s $@ $@.new && rm -f $@.new || mv $@.new $@
 # Workaround for broken dependencies with cpp-3.3
 kdb_class_helper.h: $(BUILDDIR)/include/kdb_class_helper.h

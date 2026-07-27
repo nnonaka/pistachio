@@ -48,7 +48,9 @@
 #if defined(__cplusplus)
 class intctrl_t : public generic_intctrl_t 
 {
-private:
+/* public so the (now free-function) kdb commands can inspect the tables; the
+   C mirror below exposes the same members. */
+public:
     class ioapic_t {
     public:
 	void init(word_t id, addr_t paddr)

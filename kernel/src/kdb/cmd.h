@@ -135,11 +135,11 @@ private:
  * initializes the command descriptor.
  */
 #define DECLARE_CMD(func, group, key, cmd, desc)			\
-    static cmd_t __kdb_##group##_##func = { key, cmd, desc, &kdb_t::func };	\
+    static cmd_t __kdb_##group##_##func = { key, cmd, desc, func };	\
     PUT_SET(__kdb_group_##group, __kdb_##group##_##func)
     
 
 #define CMD(func, param) \
-cmd_ret_t SECTION(".kdebug") kdb_t::func(cmd_group_t *param)
+cmd_ret_t SECTION(".kdebug") func(cmd_group_t *param)
 
 #endif /* !__CMD_H__ */
