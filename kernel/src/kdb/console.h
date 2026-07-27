@@ -32,18 +32,27 @@
 #ifndef __KDB__CONSOLE_H__
 #define __KDB__CONSOLE_H__
 
+BEGIN_DECLS
 void putc (char) SECTION (".kdebug");
+#if defined(__cplusplus)
 char getc (bool block = true) SECTION (".kdebug");
+#else
+char getc (bool block) SECTION (".kdebug");
+#endif
 void init_console (void) SECTION (".init");
+END_DECLS
 
-class kdb_console_t
+/* plain data: a console driver's entry points */
+struct kdb_console_t
 {
-public:
     const char * name;
     void (*init) (void);
     void (*putc) (char c);
     char (*getc) (bool block);
 };
+#if !defined(__cplusplus)
+typedef struct kdb_console_t kdb_console_t;
+#endif
 
 #define KDB_NULL_CONSOLE { NULL, NULL, NULL, NULL }
 

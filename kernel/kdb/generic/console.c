@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2004, 2007-2008, 2010,  Karlsruhe University
  *                
- * File path:     kdb/generic/console.cc
+ * File path:     kdb/generic/console.c
  * Description:   Generic console functionality
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,8 @@ word_t kdb_current_console;
 void init_console (void)
 {
 
-    kdb_current_console = min(kdb_num_consoles, (word_t) CONFIG_KDB_BOOT_CONS);
+    kdb_current_console = (kdb_num_consoles < (word_t) CONFIG_KDB_BOOT_CONS)
+	? kdb_num_consoles : (word_t) CONFIG_KDB_BOOT_CONS;   /* min() is a C++ template */
     kdb_current_console = 0;
 
     if (kdb_consoles[kdb_current_console].init)

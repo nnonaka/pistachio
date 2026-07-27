@@ -36,7 +36,10 @@
 #include INC_API(tcb.h)
 #include <linear_ptab.h>
 
+/* defined in C (kdb/generic/console.c) */
+BEGIN_DECLS
 extern void putc(const char c);
+END_DECLS
 
 int print_tid (word_t val, word_t width, word_t precision, bool adjleft);
 
