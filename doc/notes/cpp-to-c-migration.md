@@ -1956,3 +1956,72 @@ glue/v4-x86/space.cc, glue/v4-x86/x64/space.cc -- which hold the C wrappers /
 asm-named bodies bridging the still-C++ tcb_t / space_t / scheduler_t methods.
 Flipping them is the final "de-classing" phase: converting those class methods
 themselves to C.  (io_space/mdb_io/timer/vrt_io.cc are not built in this config.)
+
+
+## 62. glue/v4-x86/x64/space.cc -> C: first wrapper-host, definition-site flip, staged A/B (2026-07-27, commits daae0c0 3d899fa)
+
+Start of the final de-classing phase.  x64/space.cc (179 lines) is the smallest
+of the three wrapper-hosts and the first *definition-site* flip: unlike every
+prior file (which only *called* class methods through the bridge), this file
+*defines* out-of-line method bodies.  space_t / pgent_t stay C++ classes; only
+the five bodies here move to C.
+
+Scoping that made this the right first target: no BEGIN_DECLS wrapper block to
+relocate (thread.cc has ~50, space.cc ~30); five bodies of which four are near
+trivial (readmem_phys = one deref; smp_reference_bits = printf+UNIMPLEMENTED;
+non-compat space_control = return 0; sigma0_translate = cast) and only
+pgent_t::smp_sync is intricate.
+
+Step A (foundation, byte-identical): the C forms smp_sync's C body needs, added
+while the file was still C++ so they were unused/dead until the flip.  Defined in
+space.cc (stays C++), declared in the arch headers:
+  arch/x86/pgent.h        pgent_idx, pgent_is_cpulocal
+  glue/v4-x86/space.h     space_get_top_pdir (pointer form; _phys already existed)
+  glue/v4-x86/x64/space.h x86_top_pdir_get_kernel_pdp{,_pgent}
+(space_pgent / space_pgent_cpu / pgent_next already existed.)
+
+Step B (flip) -- the definition-site bridge and its wrinkles:
+  - asm-name at the DEFINITION side: each `Type::method` body becomes a C free
+    fn emitting a stable symbol, and the class declaration is annotated
+    __asm__("<that symbol>") so the remaining C++ callers link to it.  Same
+    mechanism as schedule.cc's scheduler_init, now applied where the body lives.
+    Chose space_t_* names (space_t_space_control) to avoid clashing with the
+    like-named syscall entry symbols (SYSCALL_ATTR("space_control")).
+  - enum-arg ABI at the C/C++ boundary: pgsize_e is a 4-byte enum, the C bridge
+    uses 8-byte word_t.  Fix = declare the method's pgsize param as word_t (not
+    pgsize_e) in the header; the C++ inline callers (pgent_t::sync /
+    reference_bits) then widen pgsize_e->word_t at the *call site*, so the full
+    64-bit value matches the C word_t param.  (Declaring word_t on the C side
+    alone would read undefined upper bits -- the widening must happen in C++.)
+    Applied to smp_sync, smp_reference_bits, sigma0_translate.  Only the not-built
+    x32 defn diverges from the changed decl.
+  - callee-linkage is atomic with the flip: acpi_remap/acpi_unmap move to C, so
+    generic/acpi.h wraps them in BEGIN_DECLS or the C++ callers (intctrl-apic.cc)
+    would look for the mangled names.
+  - C sees `struct space_t { x86_space_t base; }` (single inheritance ->
+    base-as-first-member), so direct field access is space->base.data.reference_ptab,
+    not space->data...  (all other space access goes through the accessors, which
+    take space_t* and work by the base-at-offset-0 identity).
+  - build: x64/Makeconf space.cc -> space.c; the KDB build compiles the same
+    source, so both src/ and kdb/ objects pick up the rename.
+
+Gotcha during the flip: the header edits left several dependent objects stale
+(thread.o, bootinfo.o, linear_ptab_dump.o still referencing the old mangled
+names at link) -- deleting .depend was not enough; had to touch the changed
+headers / rm the stale .o to force recompile.
+
+smp_sync / smp_reference_bits have no live callers in this config (no ->sync()
+sites anywhere; NEW_MDB off so mdb_mem.cc -- the only reference_bits() caller --
+is unbuilt), but the asm-name bridges are kept correct regardless.
+
+Verified: builds 355912, zero implicit declarations, no new warning kinds (the
+memdesc/kernelinterface header warnings space.c now surfaces already fire from
+the other C TUs); boots through GDT/TSS + AP bringup; boottest PASS; l4test
+test-region byte-identical (same KIP/memtest/IPC output, same Local-destination-Id
+fault at eip=0000000001000295).
+
+Remaining de-classing: glue/v4-x86/thread.cc (~50 tcb_t bridge wrappers to
+relocate into headers as dual-repped C inlines) and glue/v4-x86/space.cc (~30
+space_t bodies + the fpage_t/mem_region wrapper block, and it hosts the
+pgent_*/space_* wrapper DEFINITIONS the other files depend on -- so it flips
+last).
