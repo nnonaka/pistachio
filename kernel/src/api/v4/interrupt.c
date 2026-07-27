@@ -150,7 +150,7 @@ void handle_interrupt(word_t irq)
     // some sanity checks
     ASSERT(threadid_get_irqno (&irq_tid) < thread_info_get_system_base (&get_kip()->thread_info));
 
-    TRACE_IRQ(irq, "IRQ %d (%s)", irq, irq_tcb->get_state().string());
+    TRACE_IRQ(irq, "IRQ %d (%s)", irq, thread_state_string (tcb_get_state (irq_tcb)));
 
     /* VU: we can get a spurious interrupt if we de-attached the IRQ
      * meanwhile in this case we simply ignore the IRQ */
@@ -188,7 +188,7 @@ void handle_interrupt(word_t irq)
     }
 
     TRACE_IRQ_DETAILS("irq %d handler %t (s=%s)",  irq, handler_tcb,
-		      (handler_tcb ? handler_tcb->get_state().string() : "UNDEF"));
+		      (handler_tcb ? thread_state_string (tcb_get_state (handler_tcb)) : "UNDEF"));
 
     if (EXPECT_TRUE( thread_state_is_waiting (&handler_tcb->thread_state) ))
     {

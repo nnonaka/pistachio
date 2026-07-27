@@ -288,8 +288,9 @@ void setup_tracebuffer (void)
                                         (paddr_t) virt_to_phys(addr_offset(tracebuffer, p)),
                                         PGSIZE_KERNEL, true, false, true);
     }
-    get_kip()->memory_info.insert(memdesc_t::reserved, true, tracebuffer,
-                                  addr_offset(tracebuffer, TRACEBUFFER_SIZE -1));
+    memory_info_insert (&get_kip()->memory_info, MEMDESC_RESERVED, 0, true,
+			tracebuffer,
+			addr_offset(tracebuffer, TRACEBUFFER_SIZE -1));
 
     tracebuffer->initialize ();
 }

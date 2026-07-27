@@ -80,7 +80,7 @@ void do_xcpu_send_irq(cpu_mb_entry_t * entry)
 
     if (!tcb_is_local_cpu (handler_tcb))
     {
-	TRACEF("xcpu-IRQ forward (%d->%t %d)", irq, handler_tcb, handler_tcb->get_cpu());
+	TRACEF("xcpu-IRQ forward (%d->%t %d)", irq, handler_tcb, tcb_get_cpu (handler_tcb));
 	enter_kdebug("Untested");
 	xcpu_request_c (tcb_get_cpu (handler_tcb), do_xcpu_send_irq, handler_tcb, irq);
 	return;
@@ -102,7 +102,7 @@ void do_xcpu_send_irq(cpu_mb_entry_t * entry)
     else
     {
 	TRACEF("irq %d xcpu handler not ready %t s=%s",
-	       irq, handler_tcb, handler_tcb->get_state().string());
+	       irq, handler_tcb, thread_state_string (tcb_get_state (handler_tcb)));
 	enter_kdebug("UNTESTED");
 	tcb_set_tag (irq_tcb, msg_tag_irq_tag ());
 	tcb_set_partner (irq_tcb, tcb_get_global_id (handler_tcb));
@@ -235,15 +235,15 @@ static void process_schedule_requests(void)
 	tcb_t *dest_tcb = req.tcb;
 
 	TRACE_SCHEDULE_DETAILS("process_request: %t time=%x, prio=%x proc=%x, preempt=%x",
-		   dest_tcb, req.time_control.get_raw(), req.prio_control.get_raw(),
-		   req.processor_control.get_raw(), req.preemption_control.get_raw());
+		   dest_tcb, req.time_control.raw, req.prio_control.raw,
+		   req.processor_control.raw, req.preemption_control.raw);
 
 	if (tcb_get_cpu (dest_tcb) != cpu)
 	{
 	    TRACEF(" wrong cpu %t cpu %d time=%x, prio=%x proc=%x, preempt=%x",
-		   dest_tcb, dest_tcb->get_cpu(),
-		   req.time_control.get_raw(), req.prio_control.get_raw(),
-		   req.processor_control.get_raw(), req.preemption_control.get_raw());
+		   dest_tcb, tcb_get_cpu (dest_tcb),
+		   req.time_control.raw, req.prio_control.raw,
+		   req.processor_control.raw, req.preemption_control.raw);
 	    enter_kdebug("SCHEDULE BUG");
 	}
 

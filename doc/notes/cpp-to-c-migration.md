@@ -3119,3 +3119,46 @@ count is unknown until the scratch build runs clean; each fix reveals the next.
 
 Verification: main config rebuilds byte-identical (332136), boottest PASS — all
 of this is confined to code the working config does not compile.
+
+## §89 — Direct sweep: every TRACEPOINT-guarded C++ leftover
+
+Instead of discovering these one build-error at a time, used `make -k` in the
+scratch CONFIG_TRACEBUFFER build to collect them all at once. **142 errors
+across 8 `.c` files and 3 headers** — a definite scope rather than a guess.
+
+The pattern was uniform: method-call syntax on types that already have C free
+functions, surviving only where it sits inside a disabled `TRACEPOINT`/
+`TRACE_*` macro. Fixed across `api/v4/{interrupt,ipc,ipcx,schedule}.c` and
+`glue/v4-x86/{exception,init}.c`:
+
+    tcb->get_state().string()   -> thread_state_string (tcb_get_state (tcb))
+    tcb->get_cpu() etc.         -> tcb_get_cpu (tcb) and friends
+    item.is_map_item() etc.     -> msg_item_* (&item)
+    timeout.get_snd()           -> timeout_get_snd (&timeout)
+    frame->regs[] / ->error     -> frame->__base.regs[] / __base.error
+    memory_info.insert(...)     -> memory_info_insert (...)
+
+Three cases needed more than a substitution:
+
+  - **A regex over-reached.** `entry->tcb->get_state().string()` matched on the
+    inner `tcb->`, leaving a stray `entry->` prefix. Caught by the rebuild, not
+    by reading the diff — worth remembering that these sweeps need the compiler,
+    not just eyeballing.
+  - **Chained calls on function results** (`tcb_get_tag (current).get_label()`)
+    cannot become `msg_tag_get_label (&...)` because C has no address-of for a
+    temporary. Used direct field access (`.x.label`) where the C form is a plain
+    field read, and introduced a scoped local where it is not
+    (`time_get_microseconds` on `timeout_get_snd (&timeout)`).
+  - `scheduler->get_current_time()` inside those same statements became
+    `sched_get_current_time ()`.
+
+After the sweep **every `.c` file compiles** under CONFIG_TRACEBUFFER. The only
+remaining errors are in `kdb/generic/tracebuffer.cc` itself, which is still C++
+and now sees the collapsed C-only APIs (`cmd_group_interact`, `linker_set_*`,
+`tracebuffer_*`). That file — the original target, 921 lines — is the last step.
+
+Verification is the important part here, because this touched six files that
+**are** compiled in the working config: main build rebuilds byte-identical
+(332136), boottest PASS, and a full l4test run identical to the reference. The
+edits are all inside macros that expand to nothing when tracepoints are off,
+and the unchanged binary is the proof.

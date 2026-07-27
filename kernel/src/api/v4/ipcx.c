@@ -182,8 +182,8 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 
 
 	    TRACEPOINT(IPC_MAPGRANT_ITEM, "%s item: snd_base=%p, fpage=%p\n",
-		       src_item.is_map_item() ? "map" : "grant",
-		       src_item.get_snd_base(), snd_fpage.raw);
+		       msg_item_is_map_item (&src_item) ? "map" : "grant",
+		       msg_item_get_snd_base (&src_item), snd_fpage.raw);
 
 	    /* does the receiver accept mappings */
 	    if (EXPECT_FALSE( fpage_is_nil_fpage (&rcv_fpage) ))
@@ -255,14 +255,14 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 			"IPC string item: src:%p (sub=%d idx=%d len=%p %s)"
 			"dst:%p (sub=%d idx=%d len=%p %s)",
 			src_item.raw,
-			src_item.get_string_ptr_count (),
+			msg_item_get_string_ptr_count (&src_item),
 			src_ptridx, src_len,
-			src_item.is_string_compound () ?
+			msg_item_is_string_compound (&src_item) ?
 			"c" : "",
 			dst_item.raw,
-			dst_item.get_string_ptr_count (),
+			msg_item_get_string_ptr_count (&dst_item),
 			dst_ptridx, dst_len,
-			dst_item.is_string_compound () ?
+			msg_item_is_string_compound (&dst_item) ?
 			"c" : "");
 
 	    // Sanity checking
@@ -330,9 +330,9 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 
 			TRACEPOINT (IPC_STRING_ITEM,
 				    "  src: substrings=%d (idx=%d) len=%p %s\n",
-					    src_item.get_string_ptr_count (),
+					    msg_item_get_string_ptr_count (&src_item),
 					    src_ptridx, src_len,
-					    src_item.is_string_compound () ?
+					    msg_item_is_string_compound (&src_item) ?
 					    "compound" : "");
 		    }
 		    else
@@ -353,7 +353,7 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 		    do {
 			compound = msg_item_is_string_compound (&dst_item);
 			TRACEF ("compund=%d  more=%d\n",
-				dst_item.is_string_compound (),
+				msg_item_is_string_compound (&dst_item),
 				dst_item.more_strings ());
 
 			// Calculate position of next string item
@@ -402,9 +402,9 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 				IPC_STRING_ITEM,
 				"  dst: substrings=%d (idx=%d)"
 					"  len=%p %s\n",
-					dst_item.get_string_ptr_count (),
+					msg_item_get_string_ptr_count (&dst_item),
 					dst_ptridx, src_len,
-					dst_item.is_string_compound () ?
+					msg_item_is_string_compound (&dst_item) ?
 					"compound" : "");
 			}
 			else

@@ -43,7 +43,7 @@ void tcb_resources_x86_no_math_exception (thread_resources_t *self, tcb_t *tcb);
 void tcb_save_state (tcb_t *self);
 void tcb_restore_state (tcb_t *self);
 
-/* C form of get_kernel_descriptor()->kernel_id.get_raw() (the KIP-read path). */
+/* C form of get_kernel_descriptor()->kernel_id.raw (the KIP-read path). */
 static word_t kip_get_kernel_id_raw (kernel_interface_page_t *kip)
 {
     kernel_descriptor_t *kd =
@@ -62,8 +62,8 @@ bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)
 	return false;
 
     TRACEPOINT (EXCEPTION_IPC, "exception ipc at %x, %T (%p) -> %T \n",
-		frame->regs[X86_EXC_IPREG], current->get_global_id().get_raw(),
-		current, current->get_exception_handler().get_raw());
+		frame->__base.regs[X86_EXC_IPREG], tcb_get_global_id (current).raw,
+		current, tcb_get_exception_handler (current).raw);
 
     /* setup exception IPC */
     word_t saved_mr[NUM_EXC_REGS-IPC_NUM_SAVED_MRS];
@@ -199,12 +199,12 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     case 0xee:  /* out %al,        port %dx (byte)  */
     case 0x6c:  /* insb		   port %dx (byte)  */
     case 0x6e:  /* outsb           port %dx (byte)  */
-	return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
+	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
     case 0xed:  /* in  %eax,   port %dx (dword) */
     case 0xef:  /* out %eax,   port %dx (dword) */
     case 0x6d:  /* insd	       port %dx (dword) */
     case 0x6f:  /* outsd       port %dx (dword) */
-	return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
+	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
     case 0x66:
     {
 	if (!readmem (space, addr_offset(instr, 1), &i[1]))
@@ -223,7 +223,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0xef:  /* out %ax, port %dx  (word) */
 	case 0x6d:  /* insw     port %dx  (word) */
 	case 0x6f:  /* outsw    port %dx  (word) */
-	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
 	}
     }
     case 0xf3:
@@ -251,12 +251,12 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
         case 0xee:  /* out %al,    port %dx (byte)  */
         case 0x6c:  /* insb        port %dx (byte)  */
         case 0x6e:  /* outsb       port %dx (byte)  */
-	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
         case 0xed:  /* in  %eax,   port %dx (dword) */
         case 0xef:  /* out %eax,   port %dx (dword) */
         case 0x6d:  /* insd        port %dx (dword) */
         case 0x6f:  /* outsd       port %dx (dword) */
-	    return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
         case 0x66:
 	{
             /* operand size override prefix */
@@ -275,7 +275,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
             case 0xef:  /* out %ax, port %dx  (word) */
             case 0x6d:  /* insw	    port %dx  (word) */
             case 0x6f:  /* outsw    port %dx  (word) */
-		return handle_io_pagefault(current, frame->regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
+		return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
 	    }
 	}
 	}
@@ -368,7 +368,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
      */
     if ((frame->reason == X86_EXC_STACKSEG_FAULT ||
          frame->reason == X86_EXC_GENERAL_PROTECTION) &&
-        frame->error == 0 && space->is_small ())
+        frame->__base.error == 0 && space->is_small ())
     {
         space->make_large ();
         return true;
@@ -390,7 +390,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
 #endif
 
     TRACEPOINT (X86_GP, "general protection fault @ %p, error: %x\n",
-                frame->regs[X86_EXC_IPREG], frame->error);
+                frame->__base.regs[X86_EXC_IPREG], frame->__base.error);
 
 #if defined(CONFIG_X86_SMALL_SPACES) && defined(CONFIG_X86_SYSENTER)
     /*
@@ -426,7 +426,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
      * with appropriate values.
      */
 
-    if (frame->error == 0)
+    if (frame->__base.error == 0)
     {
         word_t fs, gs;
         asm ("	mov	%%fs, %w0	\n"
@@ -487,7 +487,7 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
     space_t * space = tcb_get_space (current);
     addr_t addr = (addr_t) frame->__base.regs[X86_EXC_IPREG];
 
-    TRACEPOINT (X86_UD, "x86_ud at %x (%x) (current=%x)", addr, space->get_from_user(addr), current);
+    TRACEPOINT (X86_UD, "x86_ud at %x (%x) (current=%x)", addr, space_get_from_user (space, addr), current);
 
     /* instruction emulation */
     switch( (u8_t) space_get_from_user (space, addr))
@@ -507,8 +507,8 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
                    This is necessary because they are not set in the initialization phase. */
                 x32::get_kip()->thread_info.set_system_base(get_kip()->thread_info.get_system_base());
                 x32::get_kip()->thread_info.set_user_base(get_kip()->thread_info.get_user_base());
-                frame->regs[X86_EXC_RDXREG] = x32::get_kip()->api_flags;
-                frame->regs[X86_EXC_IPREG] += 2;
+                frame->__base.regs[X86_EXC_RDXREG] = x32::get_kip()->api_flags;
+                frame->__base.regs[X86_EXC_IPREG] += 2;
                 return;
             }
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
@@ -537,7 +537,7 @@ X86_EXCNO_ERRORCODE(exc_nomath_coproc, X86_EXC_NOMATH_COPROC)
     tcb_t * current = get_current_tcb();
 
     TRACEPOINT(X86_NOMATH, "X86_NOMATH %t @ %p\n",
-               current, frame->regs[X86_EXC_IPREG]);
+               current, frame->__base.regs[X86_EXC_IPREG]);
 
     tcb_resources_x86_no_math_exception (&current->resources, current);
 }
