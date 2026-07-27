@@ -2025,3 +2025,66 @@ relocate into headers as dual-repped C inlines) and glue/v4-x86/space.cc (~30
 space_t bodies + the fpage_t/mem_region wrapper block, and it hosts the
 pgent_*/space_* wrapper DEFINITIONS the other files depend on -- so it flips
 last).
+
+
+## 63. glue/v4-x86/thread.cc -> C: second wrapper-host, the tcb_t bridge, foundation + flip (2026-07-27, commits 665f919 fb9e715)
+
+thread.cc (262 lines) is the tcb_t bridge-wrapper host: ~55 extern "C" wrappers
+that C api/v4 code calls, plus two out-of-line bodies (create_startup_stack,
+time_t::operator<) and the return_to_user asm stub.  The largest flip of the
+migration -- but most of it collapsed to trivial translation once the layers
+were mapped:
+
+  - utcb_t is ALREADY a plain C-visible struct (glue/v4-x86/utcb.h; only its
+    accessor methods are __cplusplus-guarded), so the ~14 utcb-delegating
+    wrappers become direct self->utcb->field access -- NO utcb C-form layer.
+  - stack accessors index tcb_get_stack_top()[KSTACK_*]; queue/lock use the
+    ENQUEUE_LIST/DEQUEUE_LIST macros (pure token ops) + existing
+    queue_state_*/spinlock_* C forms; timeout_get_snd/rcv, threadid_get_raw,
+    fpage_nilpage, threadid_nilthread C forms already existed.
+
+Foundation (part 1, 665f919, byte-identical): active_cpu_space_set (C accessor
+over the C++ active_cpu_space_t.set) + C prototypes for the already-C
+tcb_resources_save/load/release_copy_area (defined in resources.c).
+
+Flip (fb9e715).  The delicate arch bodies were translated VERBATIM from
+x64/tcb.h into C -- the inline asm ports unchanged, only the operand
+expressions become C forms:
+  - tcb_switch_to: the stack/cr3/%gs context switch.  resources.save/load ->
+    tcb_resources_save/load; tss.set_rsp0 -> tss.rsp[0]=; active_cpu_space.set
+    -> active_cpu_space_set; dest->get_local_id().get_raw() ->
+    threadid_get_raw(&dest->myself_local); OFS_TCB_* immediates unchanged.
+  - tcb_copy_mrs (rep movsq over &self->utcb->mr[start]), tcb_return_from_ipc /
+    _user_interruption (asm), the three tcb_notify stack-builders
+    (notify_prologue), tcb_do_ipc (calls the C sys_ipc from ipc.c directly).
+
+Definition-site gotchas:
+  - EXPECT_FALSE(self->resource_bits) has no implicit bool conversion in C ->
+    added resource_bits_have_resources() C accessor (maskvalue != 0).
+  - notify_prologue / active_cpu_space_set / present_list_lock /
+    global_present_list are declared C++-only in their headers -> local externs
+    in thread.c (the init.c "local externs" pattern).
+  - taking &self->utcb->xfer_timeout warns (packed member) -> copy to a local
+    first, then timeout_get_snd/rcv.
+
+Wrappers whose bodies still need a C++ method with a deep cascade were RELOCATED
+to space.cc (the sole remaining C++ TU, flips last) instead of translating the
+cascade now: tcb_copy_area_real_address / tcb_adjust_for_copy_area (resources
+copy-area -> page_table_index/x86_mmu/populate_copy_area), tcb_sched_set_timeout
+(sched_state), tcb_init_saved_state, is_privileged_space_c,
+acceptor_get_arch_specific_rcvwindow, time_lt (time_t::operator< inlined there --
+its only out-of-line definition had been in thread.cc).  space.cc gained
+INC_API(schedule.h) + generic-archmap.h so those inline method definitions link.
+(git recorded thread.c as add/delete, not rename -- the content is a near-total
+rewrite.)
+
+Verified: builds 355848, zero implicit declarations, no new warning kinds; boots
+through context-switch + AP bringup (a wrong switch_to operand would corrupt or
+crash immediately); boottest PASS; l4test test-region byte-identical -- every IPC
+transfer sub-test OK, same Local-destination-Id fault eip=0000000001000295.
+
+MILESTONE: the ONLY remaining built C++ is glue/v4-x86/space.cc -- the last
+wrapper-host.  It defines ~30 space_t out-of-line methods, hosts the
+pgent_*/space_* C wrapper definitions every flipped file depends on, and now also
+hosts the tcb_t/time_t wrappers relocated here from thread.cc.  Flipping it (and
+de-classing space_t/tcb_t/time_t's residual methods) is the final step.
