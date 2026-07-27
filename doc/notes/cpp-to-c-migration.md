@@ -2716,3 +2716,37 @@ way — `space_t`, `scheduler_t`, `x86_exceptionframe_t` are the other three.
 Verification: 333152 bytes, warning-clean, 0 implicit declarations, boottest
 PASS, and `t`/`T` driven three ways (basic dump, extended with UTCB + MRs +
 BRs, and a thread with no UTCB) identical to the corrected C++ baseline.
+
+## §79 — Audit: every base-composition dual-rep probed for the §78 bug
+
+Followed up §78 by measuring all of them, with conflicting-declaration probes
+compiled **inside the real build** (a standalone probe TU reports wrong numbers
+because the kernel headers are not configured the same way).
+
+| dual-rep (derived / base)                 | derived data members    | C (offset/size) | C++ (offset/size) | verdict |
+|-------------------------------------------|-------------------------|-----------------|-------------------|---------|
+| sched_ktcb_t / policy_sched_ktcb_t         | `scheduler`             | 88 / 96         | **86** / 96       | **was broken, fixed in §78** |
+| sync_entry_t / cpu_mb_entry_t              | `pending_mask`,`ack_mask` | 80 / 96       | 80 / 96           | OK |
+| space_t / x86_space_t                      | none                    | – / 4096        | – / 4096          | OK |
+| scheduler_t / policy_scheduler_t           | none                    | – / 2072        | – / 2072          | OK |
+| x86_exceptionframe_t / x86_exceptionregs_t | none                    | – / 176         | – / 176           | OK |
+
+**Two conditions must both hold for the bug to appear:**
+1. the base has tail padding, and
+2. the derived type adds at least one data member.
+
+`sched_ktcb_t` was the only case where both held — `rr_sched_ktcb_t` ended at 86
+and padded to 88. `sync_entry_t` adds members but `cpu_mb_entry_t` is exactly 80
+bytes with no tail padding, so there is nothing to reuse. The other three add no
+data members at all, so `sizeof(derived) == sizeof(base)` trivially.
+
+No automated guard was added: the natural one needs `offsetof` on a
+non-standard-layout type, which makes GCC emit `-Winvalid-offsetof` in every C++
+TU that includes the header. The probe recipe is recorded here instead — append
+to a real C TU and a real C++ TU that include the header:
+
+    char __p[__builtin_offsetof(T, first_derived_member)];  char __p[1];
+    char __s[sizeof(T)];                                    char __s[1];
+
+then read the sizes back out of the "conflicting declaration" notes. Re-run it
+whenever a field is added to a base that a dual-repped type derives from.
