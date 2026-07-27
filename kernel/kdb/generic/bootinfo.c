@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2004, 2010,  Karlsruhe University
  *                
- * File path:     kdb/generic/bootinfo.cc
+ * File path:     kdb/generic/bootinfo.c
  * Description:   Generic bootinfo dumping
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -44,38 +44,40 @@
 /**
  * Generic bootinfo record.
  */
-class bootrec_t
+struct bootrec_t
 {
     word_t	_type;
     word_t	_version;
     word_t	_offset_next;
-
-public:
-
-    enum type_e {
-	module		= 0x0001,
-	simple_exec	= 0x0002,
-	efitables	= 0x0101,
-	multiboot	= 0x0102,
-    };
-
-    type_e type (void)
-	{ return (type_e) _type; }
-
-    word_t version (void)
-	{ return _version; }
-
-    bootrec_t * next (void)
-	{ return (bootrec_t *) ((word_t) this + _offset_next); }
 };
+typedef struct bootrec_t bootrec_t;
+
+/* was bootrec_t::type_e */
+enum bootrec_type_e {
+    bootrec_module	= 0x0001,
+    bootrec_simple_exec	= 0x0002,
+    bootrec_efitables	= 0x0101,
+    bootrec_multiboot	= 0x0102,
+};
+
+/* The C++ form returned type_e, which GCC sizes as a 4-byte unsigned int, so
+   a garbage record's high 32 bits were dropped.  The (u32_t) cast keeps that
+   exact behaviour -- it shows up in the default case, which prints the type. */
+INLINE word_t bootrec_type (bootrec_t *self)
+{ return (u32_t) self->_type; }
+
+INLINE word_t bootrec_version (bootrec_t *self)
+{ return self->_version; }
+
+INLINE bootrec_t * bootrec_next (bootrec_t *self)
+{ return (bootrec_t *) ((word_t) self + self->_offset_next); }
 
 
 /**
  * Bootinfo record for simple binary file.
  */
-class boot_module_t
+struct boot_module_t
 {
-public:
     word_t	type;			// 0x01
     word_t	version;		// 1
     word_t	offset_next;
@@ -83,19 +85,19 @@ public:
     word_t	start;
     word_t	size;
     word_t	cmdline_offset;
-
-    const char * commandline (void)
-	{ return cmdline_offset ? (const char *) this + cmdline_offset : ""; }
 };
+typedef struct boot_module_t boot_module_t;
+
+INLINE const char * boot_module_commandline (boot_module_t *self)
+{ return self->cmdline_offset ? (const char *) self + self->cmdline_offset : ""; }
 
 
 /**
  * Bootinfo record for simple executable image loaded and relocated by
  * the bootloader.
  */
-class boot_simpleexec_t
+struct boot_simpleexec_t
 {
-public:
     word_t	type;			// 0x02
     word_t	version;		// 1
     word_t	offset_next;
@@ -113,18 +115,18 @@ public:
     word_t	flags;
     word_t	label;
     word_t	cmdline_offset;
-
-    const char * commandline (void)
-	{ return cmdline_offset ? (const char *) this + cmdline_offset : ""; }
 };
+typedef struct boot_simpleexec_t boot_simpleexec_t;
+
+INLINE const char * boot_simpleexec_commandline (boot_simpleexec_t *self)
+{ return self->cmdline_offset ? (const char *) self + self->cmdline_offset : ""; }
 
 
 /**
  * Bootinfo record for EFI table information.
  */
-class boot_efi_t
+struct boot_efi_t
 {
-public:
     word_t	type;			// 0x101
     word_t	version;		// 1
     word_t	offset_next;
@@ -135,26 +137,27 @@ public:
     word_t	memdesc_size;
     word_t	memdesc_version;
 };
+typedef struct boot_efi_t boot_efi_t;
 
 
 /**
  * Bootinfo record for multiboot info.
  */
-class boot_mbi_t
+struct boot_mbi_t
 {
-public:
     word_t	type;			// 0x102
     word_t	version;		// 1
     word_t	offset_next;
 
     word_t	address;
 };
+typedef struct boot_mbi_t boot_mbi_t;
 
 
 /**
  * Main structure for generic bootinfo.
  */
-class bootinfo_t
+struct bootinfo_t
 {
     word_t	_magic;
     word_t	_version;
@@ -162,24 +165,25 @@ class bootinfo_t
     word_t	_first_entry;
     word_t	_num_entries;
     word_t	__reserved[3];
-
-    word_t safe_get (word_t * fld)
-	{ return kdb.kdb_current->get_space ()->readmem_phys ((paddr_t)fld); }
-
-public:
-
-    bool is_valid (void)
-	{ return safe_get (&_magic) == L4_BOOTINFO_MAGIC; }
-    word_t size_safe (void)	{ return safe_get (&_size); }
-
-    word_t magic (void)		{ return _magic; }
-    word_t version (void)	{ return _version; }
-    word_t size (void)		{ return _size; }
-    word_t entries (void)	{ return _num_entries; }
-    bootrec_t * first_entry (void)
-	{ return (bootrec_t *) ((word_t) this + _first_entry); }
 };
+typedef struct bootinfo_t bootinfo_t;
 
+INLINE word_t bootinfo_safe_get (word_t * fld)
+{ return space_readmem_phys ((paddr_t) fld); }
+
+INLINE bool bootinfo_is_valid (bootinfo_t *self)
+{ return bootinfo_safe_get (&self->_magic) == L4_BOOTINFO_MAGIC; }
+
+INLINE word_t bootinfo_size_safe (bootinfo_t *self)
+{ return bootinfo_safe_get (&self->_size); }
+
+INLINE word_t bootinfo_magic (bootinfo_t *self)   { return self->_magic; }
+INLINE word_t bootinfo_version (bootinfo_t *self) { return self->_version; }
+INLINE word_t bootinfo_size (bootinfo_t *self)    { return self->_size; }
+INLINE word_t bootinfo_entries (bootinfo_t *self) { return self->_num_entries; }
+
+INLINE bootrec_t * bootinfo_first_entry (bootinfo_t *self)
+{ return (bootrec_t *) ((word_t) self + self->_first_entry); }
 
 
 /**
@@ -218,7 +222,7 @@ CMD (cmd_dump_bootinfo, cg)
 	    return CMD_NOQUIT;
 	}
 
-	if (! bi->is_valid ())
+	if (! bootinfo_is_valid (bi))
 	{
 	    printf ("Not a generic bootinfo record (bootinfo=%p).\n", bi);
 	    return CMD_NOQUIT;
@@ -229,7 +233,7 @@ CMD (cmd_dump_bootinfo, cg)
 	 * structure (easier to parse).
 	 */
 
-	word_t size = (bi->size_safe () + sizeof (word_t) - 1) &
+	word_t size = (bootinfo_size_safe (bi) + sizeof (word_t) - 1) &
 	    ~(sizeof (word_t) - 1);
 	word_t alloc_size = (1 << 12);
 	while (alloc_size < size)
@@ -239,11 +243,10 @@ CMD (cmd_dump_bootinfo, cg)
 	bootinfo_copy = (bootinfo_t *) 
 	    kmem_alloc(&kmem, kmem_misc, (1UL << alloc_size));
 
-	space_t * s = kdb.kdb_current->get_space ();
 	word_t * src = (word_t *) bi;
 	word_t * dst = (word_t *) bootinfo_copy;
 	for (;size > 0; size -= sizeof (word_t), src++, dst++)
-	    *dst = s->readmem_phys ((paddr_t) src);
+	    *dst = space_readmem_phys ((paddr_t) src);
 
 	bi = bootinfo_copy;
     }
@@ -258,16 +261,17 @@ CMD (cmd_dump_bootinfo, cg)
 	    "  version:      %d\n"
 	    "  size:         0x%x\n"
 	    "  num records:  %d\n\n",
-	    bi->magic (), bi->version (), bi->size (), bi->entries ());
+	    bootinfo_magic (bi), bootinfo_version (bi), bootinfo_size (bi),
+	    bootinfo_entries (bi));
 
-    word_t numrec = bi->entries ();
-    bootrec_t * rec = bi->first_entry ();
+    word_t numrec = bootinfo_entries (bi);
+    bootrec_t * rec = bootinfo_first_entry (bi);
 
-    for (word_t n = 1; numrec-- > 0; n++, rec = rec->next ())
+    for (word_t n = 1; numrec-- > 0; n++, rec = bootrec_next (rec))
     {
-	switch (rec->type ())
+	switch (bootrec_type (rec))
 	{
-	case bootrec_t::module:
+	case bootrec_module:
 	{
 	    boot_module_t * b = (boot_module_t *) rec;
 	    printf ("[%d] Simple module (version %d):\n"
@@ -275,11 +279,11 @@ CMD (cmd_dump_bootinfo, cg)
 		    "  size:      %p\n"
 		    "  cmdline:   %s\n\n",
 		    n, b->version, b->start, b->size,
-		    b->commandline ());
+		    boot_module_commandline (b));
 	    break;
 	}
 
-	case bootrec_t::simple_exec:
+	case bootrec_simple_exec:
 	{
 	    boot_simpleexec_t * e = (boot_simpleexec_t *) rec;
 	    printf ("[%d] Simple executable (version %d):\n"
@@ -294,11 +298,12 @@ CMD (cmd_dump_bootinfo, cg)
 		    e->text_pstart, e->text_vstart, e->text_size,
 		    e->data_pstart, e->data_vstart, e->data_size,
 		    e->bss_pstart,  e->bss_vstart,  e->bss_size,
-		    e->initial_ip, e->flags, e->label, e->commandline ());
+		    e->initial_ip, e->flags, e->label,
+		    boot_simpleexec_commandline (e));
 	    break;
 	}
 
-	case bootrec_t::efitables:
+	case bootrec_efitables:
 	{
 	    boot_efi_t * e = (boot_efi_t *) rec;
 	    printf ("[%d] EFI Tables (version %d):\n"
@@ -310,7 +315,7 @@ CMD (cmd_dump_bootinfo, cg)
 	    break;
 	}
 
-	case bootrec_t::multiboot:
+	case bootrec_multiboot:
 	{
 	    boot_mbi_t * m = (boot_mbi_t *) rec;
 	    printf ("[%d] Multiboot info (version %d):\n"
@@ -321,7 +326,7 @@ CMD (cmd_dump_bootinfo, cg)
 
 	default:
 	    printf ("[%d] Unknown record (type: 0x%x,  version: %d)\n\n", 
-		    n, rec->type (), rec->version ());
+		    n, bootrec_type (rec), bootrec_version (rec));
 	}
     }
 

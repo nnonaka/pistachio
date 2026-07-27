@@ -2628,3 +2628,36 @@ delayed 14s -> 17s and got exactly the pre-flip value (6094us), proving `curr ts
 tracks when the debugger is entered rather than the code. Every other field
 across all six dumps — TCB address, ID, priority, state, queues, space, pdir,
 pager, quanta, timeouts, resources, flags, partner, scheduler — is identical.
+
+## §77 — kdb/generic/bootinfo.cc → .c
+
+Self-contained: every class this file used (`bootrec_t`, `boot_module_t`,
+`boot_simpleexec_t`, `boot_efi_t`, `boot_mbi_t`, `bootinfo_t`) is declared
+*inside the file*, not in a shared header, so de-classing touched no headers at
+all. Members were already in declaration order, so layout is unchanged.
+
+`space_readmem_phys` already existed. Note `readmem_phys` is a *static* method,
+so the C++ `space_t * s = kdb.kdb_current->get_space (); s->readmem_phys (...)`
+was calling a static through an instance — the local becomes unused in C and is
+dropped.
+
+**Enum width, again.** The C++ `type()` returned `type_e`, which GCC sizes as a
+4-byte `unsigned int`, so a record with garbage in the high 32 bits had them
+silently dropped. A plain `word_t` C form would *not* truncate, and the
+difference is observable in the `default:` case, which prints the type. Added an
+explicit `(u32_t)` cast to preserve the original behaviour exactly. This is the
+third width-divergence found in this migration (see §69, §72) — worth checking
+on every enum-returning accessor, not just shifts.
+
+**Pre-existing bug left alone:** `kmem_alloc (&kmem, kmem_misc, (1UL << alloc_size))`
+shifts by `alloc_size`, which is already a *byte count* (>= 4096), not a log2.
+On x86 the shift count is masked to 6 bits, so this asks for `1UL << 0` = 1 byte
+and the copy loop then writes `size` bytes into it. Faithful migration means
+preserving it; flagging it here rather than fixing it under cover of a
+translation commit.
+
+Verification: 337112 bytes, warning-clean, 0 implicit declarations, boottest
+PASS, and the `B` command run twice against a pre-flip kernel
+(scratchpad/birun.sh) — identical. Running it twice matters: the first call
+takes the validate-and-copy path (`bootinfo_is_valid`, `bootinfo_size_safe`,
+the `space_readmem_phys` loop), the second uses the cached copy.

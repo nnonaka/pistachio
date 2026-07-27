@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES+=	kdb/generic/bootinfo.cc \
+SOURCES+=	kdb/generic/bootinfo.c \
 		kdb/generic/cmd.c \
 		kdb/generic/console.c \
 		kdb/generic/entry.cc \
