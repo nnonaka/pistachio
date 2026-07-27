@@ -35,7 +35,7 @@ SOURCES+=	kdb/generic/bootinfo.cc \
 		kdb/generic/entry.cc \
 		kdb/generic/init.cc \
 		kdb/generic/input.cc \
-		kdb/generic/kmemory.cc \
+		kdb/generic/kmemory.c \
 		kdb/generic/linker_set.cc \
 		kdb/generic/memdump.cc \
 		kdb/generic/print.cc \

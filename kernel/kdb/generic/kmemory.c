@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002,  Karlsruhe University
  *                
- * File path:     kdb/generic/kmemory.cc
+ * File path:     kdb/generic/kmemory.c
  * Description:   Kernel memory statistics dumper
  *                
  * Redistribution and use in source and binary forms, with or without
