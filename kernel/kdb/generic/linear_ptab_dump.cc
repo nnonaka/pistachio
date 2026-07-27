@@ -38,8 +38,12 @@
 #include INC_ARCH(pgent.h)
 #include INC_API(tcb.h)
 
+/* defined in C (kdb/glue/v4-x86/x64/space.c); pgsize_e is a 4-byte enum, which
+   is what the C side writes through its int* out-parameter. */
+BEGIN_DECLS
 void get_ptab_dump_ranges (addr_t * vaddr, word_t * num,
 			   pgent_t::pgsize_e * max_size);
+END_DECLS
 
 #if !defined(CONFIG_ARCH_X86)
 void get_ptab_dump_ranges (addr_t * vaddr, word_t * num,

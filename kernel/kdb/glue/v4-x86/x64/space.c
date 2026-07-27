@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2005, 2007,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/x64/space.cc
+ * File path:     kdb/glue/v4-x86/x64/space.c
  * Description:   Various space management stuff
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -35,49 +35,49 @@
 #include <kdb/input.h>
 #include <linear_ptab.h>
 
-void get_ptab_dump_ranges (addr_t * vaddr, word_t * num, pgent_t::pgsize_e *max_size)
+void get_ptab_dump_ranges (addr_t * vaddr, word_t * num, int *max_size)
 {
     switch (get_choice ("Memory area", "Complete/User/Kernel(w/o tcb&remap)/Tcb/Remap/Manual"
 			, 'c'))
     {
     case 'c':
 	*vaddr = (addr_t) 0;
-	*max_size = pgent_t::size_max;
-	*num = page_table_size (*max_size);	
+	*max_size = X86_PGSIZE_MAX;
+	*num = page_table_size ((word_t) *max_size);	
 	break;
     case 'u':
 	*vaddr = (addr_t) 0;
-	*max_size = pgent_t::size_max;
-	*num = page_table_index (*max_size, (addr_t) USER_AREA_END) - 
-	    page_table_index (*max_size, (addr_t) USER_AREA_START);
+	*max_size = X86_PGSIZE_MAX;
+	*num = page_table_index ((word_t) *max_size, (addr_t) USER_AREA_END) - 
+	    page_table_index ((word_t) *max_size, (addr_t) USER_AREA_START);
 	break;
     case 'k':
 	/*
 	 * we print kernel space w/o remap area
 	 */
 	*vaddr = (addr_t) REMAP_32BIT_END;
-	*max_size = pgent_t::size_1g;
+	*max_size = X86_PGSIZE_1G;
 	*num = 1;
 	break;
     case 'm':	
     {
 	*vaddr =   (addr_t) get_hex ("start address", 0UL, "0000000000000000");
 	addr_t end_vaddr =   (addr_t) get_hex ("  end address", 0UL, "0000000000000000");
-	*num = page_table_index (*max_size, (addr_t) ((word_t) end_vaddr - (word_t) *vaddr));
-	*max_size = pgent_t::size_1g;
+	*num = page_table_index ((word_t) *max_size, (addr_t) ((word_t) end_vaddr - (word_t) *vaddr));
+	*max_size = X86_PGSIZE_1G;
 	break;
     }
 
     case 't':
 	*vaddr = (addr_t) KTCB_AREA_START;
-	*max_size = pgent_t::size_1g;
+	*max_size = X86_PGSIZE_1G;
 	*num = 1;
 	break;
     case 'r':
 	*vaddr = (addr_t) REMAP_32BIT_START;
-	*max_size = pgent_t::size_1g;
-	*num = page_table_index (*max_size, (addr_t) REMAP_32BIT_END) - 
-	    page_table_index (*max_size, (addr_t) REMAP_32BIT_START);
+	*max_size = X86_PGSIZE_1G;
+	*num = page_table_index ((word_t) *max_size, (addr_t) REMAP_32BIT_END) - 
+	    page_table_index ((word_t) *max_size, (addr_t) REMAP_32BIT_START);
 	break;
 
     }
