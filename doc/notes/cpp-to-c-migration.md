@@ -3035,3 +3035,48 @@ Verification: byte-identical kernel size (332136) across a forced full rebuild,
 boottest PASS, command loop identical — the last matters here because every
 `DECLARE_SET` iteration in the command dispatcher goes through
 `linker_set_reset`/`_next`.
+
+## §87 — Toward tracebuffer: a scratch CONFIG_TRACEBUFFER build, and what it found
+
+Set up `build/scratch-tbuf` (a copy of the working build with
+CONFIG_TRACEPOINTS/CONFIG_TRACEBUFFER forced on) to migrate
+`kdb/generic/tracebuffer.cc`. Deleting `config/config.h` to regenerate it does
+**not** work — the regenerated file is incomplete (`#error undefined
+architecture width`); copy the working `config.h` and patch the two macros
+directly, and edit `config/.config` too so the Makeconf `ifeq` picks up the
+extra SOURCES.
+
+The scratch build immediately found three things, none of them in
+tracebuffer.cc:
+
+**1. `kdb/generic/tracepoints.c` was broken C.** It was renamed to `.c` earlier
+in the migration but its body still called `tp_list.size()`, `.get()`,
+`.next()`, `.reset()` — C++ method syntax in a `.c` file. It is only compiled
+under CONFIG_TRACEPOINTS, so nothing ever built it. Same class of gap as the
+ctrlxfer block in §84, and the second one found this way. **Fixed.**
+
+**2. `class tracepoint_list_t` in `src/kdb/tracepoints.h`** was the last C++
+consumer of the `linker_set_t` methods removed in §86 — so that collapse did
+break something after all, just nothing this config compiles. The gate in §85
+("does any `.cc` include it?") was too narrow: the real question is whether any
+*code guarded by an inactive option* uses the C++ spelling. Collapsed the class
+to a plain struct plus `tracepoint_list_reset/_next/_size/_get`. **Fixed.**
+
+**3. `src/kdb/tracebuffer.h` and `src/arch/x86/tracebuffer.h` are pure C++** —
+unguarded `class`, never dual-repped, because CONFIG_TRACEBUFFER has always been
+off. They fail immediately when a C TU (`asmsyms.c`) pulls them in.
+
+### Remaining work for tracebuffer, honestly scoped
+
+    src/kdb/tracebuffer.h        238 lines   dual-rep/collapse (4 classes)
+    src/arch/x86/tracebuffer.h   142 lines   dual-rep/collapse
+    kdb/generic/tracebuffer.cc   921 lines   migrate
+                                ~1300 lines total
+
+That is a whole file-set, not a single flip, so it is left for its own pass
+rather than started here. `build/scratch-tbuf` is left in place as the harness
+(it is gitignored); rebuild it with `.depend` deleted after each change.
+
+Verification of the two fixes: the **main** config rebuilds byte-identical
+(332136) with boottest PASS, confirming both changes are confined to code that
+this config does not compile.

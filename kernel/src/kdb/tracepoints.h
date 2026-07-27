@@ -93,27 +93,25 @@ extern void init_tracepoints();
  * Wrapper class for accessing tracepoint set.
  */
 
-#if defined(__cplusplus)
-class tracepoint_list_t
+struct tracepoint_list_t
 {
-public:
     linker_set_t	*tp_set;
-
-    inline void reset (void)
-	{ tp_set->reset (); }
-
-    inline tracepoint_t * next (void)
-	{ return (tracepoint_t *) tp_set->next (); }
-
-    inline word_t size (void)
-	{ return tp_set->size (); }
-
-    inline tracepoint_t * get (word_t n)
-	{ return (tracepoint_t *) tp_set->get (n); }
 };
+typedef struct tracepoint_list_t tracepoint_list_t;
+
+INLINE void tracepoint_list_reset (tracepoint_list_t *self)
+{ linker_set_reset (self->tp_set); }
+
+INLINE tracepoint_t * tracepoint_list_next (tracepoint_list_t *self)
+{ return (tracepoint_t *) linker_set_next (self->tp_set); }
+
+INLINE word_t tracepoint_list_size (tracepoint_list_t *self)
+{ return linker_set_size (self->tp_set); }
+
+INLINE tracepoint_t * tracepoint_list_get (tracepoint_list_t *self, word_t n)
+{ return (tracepoint_t *) linker_set_get (self->tp_set, n); }
 
 extern tracepoint_list_t tp_list;
-#endif
 
 #if defined(CONFIG_TRACEPOINTS)
 

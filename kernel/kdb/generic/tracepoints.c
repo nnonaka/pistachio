@@ -40,18 +40,18 @@
 
 void SECTION(SEC_KDEBUG) list_tp_choices (void)
 {
-    word_t size = tp_list.size ();
+    word_t size = tracepoint_list_size (&tp_list);
 
     for (word_t i = 0; i <= size / 2; i++)
     {
 	if (i == 0)
 	    printf ("%3d - %28s", 0, "List choices");
 	else
-	    printf ("%3d - %28s", i, tp_list.get (i - 1)->name);
+	    printf ("%3d - %28s", i, tracepoint_list_get (&tp_list, i - 1)->name);
 
 	if (i + (size / 2) < size)
 	    printf ("%3d - %s\n", i + (size / 2) + 1,
-		    tp_list.get (i + (size / 2))->name);
+		    tracepoint_list_get (&tp_list, i + (size / 2))->name);
     }
     printf ("\n");
 }
@@ -60,7 +60,7 @@ void init_tracepoints()
 {
     tracepoint_t * tp;
     word_t id = 1;
-    while ((tp = tp_list.next ()) != NULL)
+    while ((tp = tracepoint_list_next (&tp_list)) != NULL)
 	tp->id = id++;
 }
 
@@ -115,8 +115,8 @@ CMD(cmd_tp_list, cg)
     printf("Counter\n");
 #endif
 
-    tp_list.reset ();
-    for (int i = 0; (tp = tp_list.next ()) != NULL; i++)
+    tracepoint_list_reset (&tp_list);
+    for (int i = 0; (tp = tracepoint_list_next (&tp_list)) != NULL; i++)
     {
 	printf ("%3d   %28s  %c    %c ",
 		i+1, tp->name, tp->enabled ? 'y' : 'n',
@@ -144,9 +144,9 @@ CMD(cmd_tp_enable, cg)
 	    list_tp_choices ();
 	else if (n == ABORT_MAGIC)
 	    return CMD_NOQUIT;
-	else if (n <= tp_list.size ())
+	else if (n <= tracepoint_list_size (&tp_list))
 	{
-	    tracepoint_t * tp = tp_list.get (n - 1);
+	    tracepoint_t * tp = tracepoint_list_get (&tp_list, n - 1);
 #if defined(CONFIG_SMP)
 	    word_t cpu_mask = get_hex("Processor Mask", ~0UL, "all");
 #else	    
@@ -181,9 +181,9 @@ CMD(cmd_tp_disable, cg)
 	    list_tp_choices ();
 	else if (n == ABORT_MAGIC)
 	    return CMD_NOQUIT;
-	else if (n <= tp_list.size ())
+	else if (n <= tracepoint_list_size (&tp_list))
 	{
-	    tracepoint_t * tp = tp_list.get (n - 1);
+	    tracepoint_t * tp = tracepoint_list_get (&tp_list, n - 1);
 	    tp->enabled = tp->enter_kdb = false;
 	    tracepoint_reset_counter (tp);
 
@@ -207,8 +207,8 @@ CMD(cmd_tp_enable_all, cg)
 {
     tracepoint_t * tp;
 
-    tp_list.reset ();
-    while ((tp = tp_list.next ()) != NULL)
+    tracepoint_list_reset (&tp_list);
+    while ((tp = tracepoint_list_next (&tp_list)) != NULL)
     {
 	tp->enabled = ~0UL;
 	tp->enter_kdb = 0;
@@ -229,8 +229,8 @@ CMD(cmd_tp_disable_all, cg)
 {
     tracepoint_t * tp;
 
-    tp_list.reset ();
-    while ((tp = tp_list.next ()) != NULL)
+    tracepoint_list_reset (&tp_list);
+    while ((tp = tracepoint_list_next (&tp_list)) != NULL)
 	tp->enabled = tp->enter_kdb = 0;
 
     return CMD_NOQUIT;
@@ -246,8 +246,8 @@ CMD(cmd_tp_reset, cg)
 {
     tracepoint_t * tp;
 
-    tp_list.reset ();
-    while ((tp = tp_list.next ()) != NULL)
+    tracepoint_list_reset (&tp_list);
+    while ((tp = tracepoint_list_next (&tp_list)) != NULL)
 	tracepoint_reset_counter (tp);
     
     return CMD_NOQUIT;
