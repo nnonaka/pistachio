@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2004, 2006-2007,  Karlsruhe University
  *                
- * File path:     kdb/platform/pc99/intctrl.cc
+ * File path:     kdb/platform/pc99/intctrl.c
  * Description:   IO-APIC analysis
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -41,12 +41,12 @@ CMD(cmd_apic, cg)
 {
     intctrl_t * ctrl = get_interrupt_ctrl();
     printf("\nInterrupt controller dump (%d IRQs)\n", 
-	   ctrl->get_number_irqs());
+	   intctrl_get_number_irqs());
 
 #if defined(CONFIG_IOAPIC)
     for (unsigned idx = 0; idx < NUM_REDIR_ENTRIES; idx++)
     {
-	if (!ctrl->redir[idx].is_valid())
+	if (ctrl->redir[idx].ioapic == NULL)
 	    continue;
 	
 	printf("IRQ %2d: IOAPIC %d, Line %2d: ", idx, 
@@ -63,8 +63,8 @@ CMD(cmd_apic, cg)
 	       ctrl->redir[idx].entry.x.dest.physical.physical_dest	   
 	    );
 
-	ioapic_redir_t redir = ctrl->redir[idx].ioapic->i82093->
-		get_redir_entry(ctrl->redir[idx].line);
+	ioapic_redir_t redir = i82093_get_redir_entry (ctrl->redir[idx].ioapic->i82093,
+						       ctrl->redir[idx].line);
 	
 	if ( redir.raw[0] != ctrl->redir[idx].entry.raw[0] || 
 	     redir.raw[1] != ctrl->redir[idx].entry.raw[1] )
