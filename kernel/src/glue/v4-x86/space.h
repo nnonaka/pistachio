@@ -75,7 +75,7 @@ public:
     /* reference counting */
     void add_tcb(tcb_t * tcb, cpuid_t cpu = current_cpu);
     bool remove_tcb(tcb_t * tcb, cpuid_t cpu = current_cpu);
-    void move_tcb(tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu);
+    void move_tcb(tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu) __asm__ ("space_move_tcb");
 
     /* space control */
     word_t space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid) __asm__ ("space_t_space_control");
@@ -112,11 +112,11 @@ public:
     /* generic page table walker */
     pgent_t * pgent (word_t num);
     pgent_t * pgent (word_t num, word_t cpu);
-    void add_mapping(addr_t vaddr, addr_t paddr, pgent_t::pgsize_e size, 
-		     bool writable, bool kernel, bool global, bool cacheable = true);
+    void add_mapping(addr_t vaddr, addr_t paddr, pgent_t::pgsize_e size,
+		     bool writable, bool kernel, bool global, bool cacheable = true) __asm__ ("space_add_mapping");
     void remap_area(addr_t vaddr, addr_t paddr, pgent_t::pgsize_e pgsize, 
 		    word_t len, bool writable, bool kernel, bool global);
-    bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg, pgent_t::pgsize_e *r_size, cpuid_t cpu);
+    bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg, pgent_t::pgsize_e *r_size, cpuid_t cpu) __asm__ ("space_lookup_mapping");
     bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg, pgent_t::pgsize_e *r_size)
 	{ return lookup_mapping(vaddr, r_pg, r_size, (cpuid_t) data.reference_ptab); }
     void release_kernel_mapping (addr_t vaddr, addr_t paddr, word_t log2size);
@@ -536,6 +536,7 @@ void      space_switch_to_kernel_space (cpuid_t cpu);
 space_t * space_allocate_space (void);
 void      space_free_space (space_t *space);
 bool      mem_region_is_empty (struct mem_region_t *self);
+void      align_memregion (struct mem_region_t *region, word_t size);
 bool      fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end);
 /* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
    C symbol would corrupt the many external callers). This wrapper bridges it for

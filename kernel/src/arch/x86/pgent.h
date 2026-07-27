@@ -417,6 +417,8 @@ void      pgent_flush          (pgent_t *self, struct space_t *s, word_t pgsize,
 word_t    pgent_idx            (pgent_t *self);
 bool      pgent_is_cpulocal    (pgent_t *self, struct space_t *s, word_t pgsize);
 void      pgent_smp_sync       (pgent_t *self, struct space_t *s, word_t pgsize);
+word_t    pgent_smp_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, addr_t vaddr);
+void      pgent_make_cpu_subtree (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel);
 END_DECLS
 
 #if !defined(__cplusplus)

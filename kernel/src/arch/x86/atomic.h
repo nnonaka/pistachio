@@ -78,5 +78,14 @@ struct atomic_t {
 
 typedef struct atomic_t atomic_t;
 
+#if !defined(__cplusplus)
+/* C forms of the atomic_t operators (val is C-visible). */
+INLINE word_t atomic_inc (atomic_t *self)
+{ __asm__ __volatile__(X86_LOCK "add%z0 $1, %0" : "+m"(self->val)); return self->val; }
+INLINE word_t atomic_dec (atomic_t *self)
+{ __asm__ __volatile__(X86_LOCK "sub%z0 $1, %0" : "+m"(self->val)); return self->val; }
+INLINE word_t atomic_read (const atomic_t *self) { return self->val; }
+#endif
+
 
 #endif /* !__ARCH__X86__ATOMIC_H__ */
