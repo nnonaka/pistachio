@@ -51,6 +51,78 @@
 #define X86_AMDHWCR_START_FID      (63 << 19)  /* startup FID status */
 
 
+#if !defined(__cplusplus)
+/*
+ * C forms of the x86_amdhwcr_t static methods.  dump_hwcr was a header inline
+ * whose only caller was kdb/arch/x86/x64/x86.cc, so it is re-implemented here
+ * natively rather than asm-name bridged (a header inline is never emitted once
+ * its last C++ caller goes away).  Note that seven of these predicates negate
+ * a *DIS* bit -- transcribed from the bodies, not inferred from the names.
+ */
+INLINE bool amdhwcr_is_smm_locked (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_SMMLOCK) != 0; }
+INLINE bool amdhwcr_is_slowfence_enabled (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_SLOWFENCE) != 0; }
+INLINE bool amdhwcr_is_ptemem_cached (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_TLBCACHEDIS); }
+INLINE bool amdhwcr_is_invd_wbinvd (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_INVD_WBINVD) != 0; }
+INLINE bool amdhwcr_is_flushfilter_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_FFDIS); }
+INLINE bool amdhwcr_is_lockprefix_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_DISLOCK); }
+INLINE bool amdhwcr_is_ignne_emulation_enabled (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_IGNNE_EM) != 0; }
+INLINE bool amdhwcr_is_hltx_spc_enabled (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_HLTXSPCYCEN) != 0; }
+INLINE bool amdhwcr_is_smi_spc_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_SMISPCYCDIS); }
+INLINE bool amdhwcr_is_rsm_spc_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_RSMSPCYCDIS); }
+INLINE bool amdhwcr_is_sse_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_SSEDIS); }
+INLINE bool amdhwcr_is_wrap32_enabled (void)
+{ return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_WRAP32DIS); }
+INLINE bool amdhwcr_is_mci_status_write_enabled (void)
+{ return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_MCIS_WREN) != 0; }
+INLINE u8_t amdhwcr_get_startup_fid_status (void)
+{ return (u8_t) ((x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_START_FID) >> 19); }
+
+INLINE void amdhwcr_dump_hwcr (void)
+{
+    printf("AMDHWCR register:\n");
+
+    printf("\tsmmlock: %s\n"
+           "\tslowfence: %s\n"
+           "\ttlbcache: %s\n"
+           "\tinvd_wbinvd: %s\n"
+           "\tflush filter: %s\n"
+           "\tlock prefix: %s\n"
+           "\tignne emulation: %s\n"
+           "\texit from hlt special bus cycle: %s\n"
+           "\tsmi special bus cycle: %s\n"
+           "\trsm special bus cycle: %s\n"
+           "\tsse: %s\n"
+           "\t32-bit address wrap: %s\n"
+           "\tmci status write: %s\n"
+           "\tstartup fid status: %x\n",
+           (amdhwcr_is_smm_locked () ? "enabled" : "disabled" ),
+           (amdhwcr_is_slowfence_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_ptemem_cached () ? "enabled" : "disabled" ),
+           (amdhwcr_is_invd_wbinvd () ? "enabled" : "disabled" ),
+           (amdhwcr_is_flushfilter_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_lockprefix_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_ignne_emulation_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_hltx_spc_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_smi_spc_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_rsm_spc_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_sse_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_wrap32_enabled () ? "enabled" : "disabled" ),
+           (amdhwcr_is_mci_status_write_enabled () ? "enabled" : "disabled" ),
+           amdhwcr_get_startup_fid_status ());
+}
+#endif /* !__cplusplus */
+
 #if defined(__cplusplus)
 class x86_amdhwcr_t
 {

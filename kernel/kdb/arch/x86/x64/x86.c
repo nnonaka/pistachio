@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2008,  Karlsruhe University
  *                
- * File path:     kdb/arch/x86/x64/x86.cc
+ * File path:     kdb/arch/x86/x64/x86.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -54,11 +54,14 @@ CMD(cmd_idt, cg)
     printf("\nIDT-dump: idt at %x\n", &idt);
     for (word_t i = 0; i < sizeof(idt)/sizeof(x86_idtdesc_t); i++)
     {
-	x86_idtdesc_t e = idt.get_descriptor(i);
+	x86_idtdesc_t e = idt.descriptors[i];
 	if (e.x.d.p)
+	    /* offset_high is a 48-bit bitfield.  C gives such an expression a
+	       48-bit type (C++ used the declared u64_t), so the shift must be
+	       widened explicitly or the top 16 bits of the address are lost. */
 	    printf("%2x -> %4x:%x, dpl=%d, %s (%16x:%16x)\n", i,
 		   e.x.d.selector,
-		   e.x.d.offset_low | (e.x.d.offset_high << 16),
+		   e.x.d.offset_low | ((u64_t) e.x.d.offset_high << 16),
 		   e.x.d.dpl,
 		   ((const char*[]){0,0,0,0,0,0,0,0,0,0,0,0,0,0,"INT ","TRAP"})[e.x.d.type],
 		   e.x.raw[0], e.x.raw[1]);
@@ -103,7 +106,7 @@ CMD(cmd_gdt, cg)
             printf("code %cC %cR ",
                     ent->x.d.type & 0x4 ? ' ' : '!',
                     ent->x.d.type & 0x2 ? ' ' : '!');
-        else if ( ent->x.d.type == x86_segdesc_t::inv)
+        else if ( ent->x.d.type == X86_SEGDESC_INV)
             printf("inv        ");
 	else
             printf("data E%c R%c ",
@@ -144,7 +147,7 @@ DECLARE_CMD (cmd_cpu, arch, 'C', "cpu", "dump CPU features");
 
 CMD(cmd_cpu, cg)
 {
-    boot_cpu_ft.dump_features();
+    x86_x64_cpu_features_dump (&boot_cpu_ft);
     return CMD_NOQUIT;
 }
 
@@ -155,7 +158,7 @@ DECLARE_CMD (cmd_amdhwcr, arch, 'h', "hwcr", "dump AMD's HWCR contents");
 
 CMD(cmd_amdhwcr, cg)
 {
-    x86_amdhwcr_t::dump_hwcr();
+    amdhwcr_dump_hwcr ();
     return CMD_NOQUIT;
 }
 
@@ -168,13 +171,13 @@ DECLARE_CMD (cmd_pgtcalc, arch, 'P', "pgtcalc", "calculate page table indices");
 
 CMD(cmd_pgtcalc, cg)
 {
-    addr_t addr = (addr_t) get_hex ("Virtual address", NULL);
+    addr_t addr = (addr_t) get_hex ("Virtual address", 0, NULL);
     printf("%p -> %d, %d, %d, %d\n",
 	   addr,
-	   page_table_index(pgent_t::size_512g, addr),
-	   page_table_index(pgent_t::size_1g, addr),
-	   page_table_index(pgent_t::size_2m, addr),
-	   page_table_index(pgent_t::size_4k, addr));
+	   page_table_index(X86_PGSIZE_512G, addr),
+	   page_table_index(X86_PGSIZE_1G, addr),
+	   page_table_index(X86_PGSIZE_2M, addr),
+	   page_table_index(X86_PGSIZE_4K, addr));
     
 	   
     return CMD_NOQUIT;

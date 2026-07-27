@@ -2780,3 +2780,43 @@ PASS, and the `V` screendump driven against a pre-flip kernel
 identical apart from one line: the on-screen kickstart text quotes the kernel's
 own size, which legitimately changed (333152 -> 332944). The console driver
 itself needs no separate test — every character of the session is proof it works.
+
+## §81 — kdb/arch/x86/x64/x86.cc → .c (the dump_hwcr blocker, resolved)
+
+This file was reverted earlier in the migration because
+`x86_amdhwcr_t::dump_hwcr()` is a **header inline** whose only caller it was —
+once the caller became C, nothing would emit it, and `__attribute__((used))`
+does not help. The rule established then applies directly: **re-implement
+natively in the C block rather than asm-name bridging**. Added
+`amdhwcr_dump_hwcr` plus the fourteen predicates it uses; all the
+`X86_AMDHWCR_*` bit macros were already outside the `__cplusplus` guard.
+
+Transcribed the predicate bodies rather than inferring them from the bit names:
+**seven of the fourteen negate a *DIS* bit** (`is_ptemem_cached`,
+`is_flushfilter_enabled`, `is_lockprefix_enabled`, `is_smi_spc_enabled`,
+`is_rsm_spc_enabled`, `is_sse_enabled`, `is_wrap32_enabled`). Guessing from the
+names would have inverted half the output.
+
+The other two apparent blockers had already been solved: `dump_features` has a
+C form (`x86_x64_cpu_features_dump`), and `idt.get_descriptor(i)` is just
+`idt.descriptors[i]` — a plain member.
+
+### The wide-bitfield shift trap, again (§72)
+
+The IDT dump initially printed `ffffc0c02dc0` where the pre-flip kernel printed
+`ffffffffc0c02dc0` — top 16 bits gone. `x86_idtdesc_t::offset_high` is
+`u64_t offset_high : 48`, and C gives that expression a 48-bit type, so
+`offset_high << 16` truncates; C++ used the declared `u64_t`. Fixed with an
+explicit `(u64_t)` cast.
+
+Note this file *already* carried two hand-written comments about widening
+bit-fields before shifting, for the GDT base/limit fields — those were needed in
+C++ too because those fields are `u32_t`. The IDT one did **not** need it in
+C++ and only became wrong in C. So the C++ code being careful about a widening
+issue nearby is not evidence that the rest is safe.
+
+Verification: 332648 bytes, warning-clean, 0 implicit declarations, boottest
+PASS, and all five commands this file owns driven against a pre-flip kernel
+(scratchpad/x64run.sh) — `idt` (256 entries), `gdt` (10 descriptors + TSS +
+FS/GS MSRs), `cpu`, `hwcr` (all 14 fields; QEMU reports AuthenticAMD so the MSR
+reads work), and `pgtcalc` — output identical.
