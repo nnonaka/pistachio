@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2004, 2007-2010, 2012,  Karlsruhe University
  *                
- * File path:     kdb/api/v4/thread.cc
+ * File path:     kdb/api/v4/thread.c
  * Description:   Kdebug stuff for V4 threads
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -34,84 +34,79 @@
 #include INC_API(tcb.h)
 
 
-/* From generic/print.c (C now) -- C linkage; the default arguments are a
-   caller-side C++ convenience and stay here. */
-BEGIN_DECLS
+/* addr_to_tcb is inside tcb.h's __cplusplus block */
+INLINE tcb_t * to_tcb (addr_t addr) { return (tcb_t *) ((word_t) addr & KTCB_MASK); }
+
+/* From generic/print.c (C now -- no linkage decoration needed here) */
 
 int print_hex (const word_t val,
 	       int width,
 	       int precision,
-	       bool adjleft = false,
-	       bool nullpad = false,
-               bool uppercase = false);
-int print_string (const char * s,
-		  const int width = 0,
-		  const int precision = 0);
+	       bool adjleft,
+	       bool nullpad,
+               bool uppercase);
+int print_string (const char * s, const int width, const int precision);
 int print_hex_sep (const word_t val,
 		   const int bits,
 		   const char *sep);
-int print_dec (const word_t val,
-	       const int width = 0,
-	       const char pad = ' ');
+int print_dec (const word_t val, const int width, const char pad);
     
 
-END_DECLS
 
-BEGIN_DECLS
 int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 {
     tcb_t * tcb;
     threadid_t tid;
 
 #if 0
-    print_string ("<");
+    print_string ("<", 0, 0);
     print_dec (width);
-    print_string (":");
+    print_string (":", 0, 0);
     print_dec (precision);
-    print_string (">");
+    print_string (">", 0, 0);
 #endif
 
     // If val is within TCB area, treat it as a tcb address.  If not,
     // treat it as a thread ID.
 
-    if (tcb_t::is_tcb ((addr_t) val) || 
-	addr_to_tcb((addr_t) val) == get_idle_tcb() || 
-	addr_to_tcb((addr_t) val) == get_kdebug_tcb())
+    if (space_is_tcb_area ((addr_t) val) || 
+	to_tcb ((addr_t) val) == get_idle_tcb_c() || 
+	to_tcb ((addr_t) val) == get_kdebug_tcb())
     {
-        tcb = addr_to_tcb ((addr_t) val);
-	tid = tcb->get_global_id ();
+        tcb = to_tcb ((addr_t) val);
+	tid = tcb_get_global_id (tcb);
     }
     else
     {
-	tid.set_raw (val);
-	tcb = tcb_t::get_tcb (tid);
+	threadid_set_raw (&tid, val);
+	tcb = tcb_get_tcb (tid);
     }
 
     if (kdb_tid_format.X.human)
     {
 	// Convert special thread IDs to human readable form
 	threadid_t ktid;
-	ktid.set_global_id (get_kip ()->thread_info.get_system_base (), 1);
+	threadid_set_global_id (&ktid, thread_info_get_system_base (&get_kip ()->thread_info), 1);
 
-	if (tid == ktid)
+	if (threadid_equals (&tid, &ktid))
 	    return print_string ("KRN_THRD", (int) width, (int) precision);
 
-	if (tid == IDLETHREAD)
-	    return print_string ("IDLETHRD", (int) width, (int) precision);
+	{ threadid_t idl = IDLETHREAD; if (threadid_equals (&tid, &idl))
+	    return print_string ("IDLETHRD", (int) width, (int) precision); }
 
-	if (tid.is_nilthread ())
+	if (threadid_is_nilthread (&tid))
 	    return print_string ("NIL_THRD", (int) width, (int) precision);
 
-	if (tid.is_anythread())
+	if (threadid_is_anythread (&tid))
 	    return print_string ("ANY_THRD", (int) width, (int) precision);
 
-	if (tid.is_interrupt ())
+	if (threadid_is_interrupt (&tid))
 	{
-	    print_string ("IRQ_");
-	    return 4 + print_dec (tid.get_irqno(), (int) (width - 4), '0');
+	    print_string ("IRQ_", 0, 0);
+	    return 4 + print_dec (threadid_get_irqno (&tid), (int) (width - 4), '0');
 	}
-	word_t base_id = tid.get_threadno () -
-	    get_kip()->thread_info.get_user_base ();
+	word_t base_id = threadid_get_threadno (&tid) -
+	    thread_info_get_user_base (&get_kip()->thread_info);
 	if (base_id < 3)
 	{
 	    const char *names[3] = { "SIGMA0", "SIGMA1", "ROOTTASK" };
@@ -142,44 +137,43 @@ int print_tid (word_t val, word_t width, word_t precision, bool adjleft)
 	    // Do not separate version from threadno
 	    if (kdb_tid_format.X.sep != 0)
 		// Insert a separator into threadno
-		n = print_hex_sep (tid.get_raw (),
+		n = print_hex_sep (threadid_get_raw (&tid),
 				   kdb_tid_format.X.sep +
 				   L4_GLOBAL_VERSION_BITS, ".");
 	    else
 		// No separator at all
-		n = print_hex (tid.get_raw (), 0, sizeof (word_t) * 2);
+		n = print_hex (threadid_get_raw (&tid), 0, sizeof (word_t) * 2, false, false, false);
 	}
 	else
 	{
 	    if (kdb_tid_format.X.sep != 0)
 		// Insert a separator into threadno
-		n = print_hex_sep (tid.get_threadno (),
+		n = print_hex_sep (threadid_get_threadno (&tid),
 				   kdb_tid_format.X.sep, ".");
 	    else
 		// Print threadno without separator
-		n = print_hex (tid.get_threadno (),
+		n = print_hex (threadid_get_threadno (&tid),
 			       f_both || f_ver ? 0 : (int) width,
-			       0, adjleft);
+			       0, adjleft, 0, 0);
 
 	    if (f_ver)
 	    {
 		// Add a separator between threadno and version
-		n += print_string ("v");
-//		print_dec (width); print_string (">");
+		n += print_string ("v", 0, 0);
+//		print_dec (width); print_string (">", 0, 0);
 		width -= width > n ? n : 0;
-		n += print_hex (tid.get_version (),
-				f_both ? 0 : (int) width, 0, true);
+		n += print_hex (threadid_get_version (&tid),
+				f_both ? 0 : (int) width, 0, true, 0, 0);
 	    }
 	}
     }
 
     if (f_both)
-	n += print_string ("/");
+	n += print_string ("/", 0, 0);
 
     if (f_tcb || f_both)
 	// Print plain TCB address
-	n += print_hex ((word_t) tcb, 0, sizeof (word_t) * 2);
+	n += print_hex ((word_t) tcb, 0, sizeof (word_t) * 2, false, false, false);
 
     return (int) n;
 }
-END_DECLS
