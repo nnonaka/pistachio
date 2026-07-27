@@ -3275,3 +3275,41 @@ one, and that a paired-directive check is worth doing before building.
 Verification: main config byte-identical (332136) with boottest PASS and the
 command loop identical; the scratch CONFIG_TRACEBUFFER config also still builds
 (417920). Both configs matter now — the second is what keeps the collapse honest.
+
+## §93 — Does powerpc build today? No, and it cannot be checked here
+
+Asked because the remaining ~72 guarded headers are arch-shared, so the collapse
+gate depends on whether powerpc is a live consumer. Three findings:
+
+**1. It cannot be built in this environment.** No powerpc cross-compiler is
+installed (`powerpc-linux-gnu-gcc`, `powerpc64-linux-gnu-gcc`, `powerpc-elf-gcc`
+all absent), and the only configured build trees are `x86-x64-p4-smp` and the
+`scratch-tbuf` copy. So "does it still build?" is unanswerable by compiling, for
+this migration or any other change.
+
+**2. It is already broken, provably, by static evidence.** `kdb/arch/powerpc64/
+prepost.cc` and `kdb/glue/v4-powerpc/prepost.cc` still define `kdb_t::pre()` and
+`kdb_t::post()` — but `class kdb_t` was deleted in §85. Six powerpc kdb files
+also use `.interact()`, `->reset()`, `->next()` or `tp_list.`, all of which were
+removed from the shared kdb headers during this session. Those files cannot
+compile against the current headers regardless of toolchain.
+
+**3. It was already stale before any of this.** `kdb/arch/powerpc/` was last
+touched in **2010**. The only recent commit under `src/glue/v4-powerpc` is
+incidental fallout from an x86 flip, not powerpc work.
+
+### Consequence for the collapse gate
+
+**powerpc is not a constraint.** It is neither buildable nor currently correct
+here, so "will collapsing this header break powerpc?" has no meaningful answer —
+it is already broken, and no test in this environment can distinguish more broken
+from less. The honest gate for the remaining headers is therefore:
+
+  - does any code reachable in a **configurable x86 build** still use the C++
+    spelling? (the §92 form, which the scratch build can actually answer)
+  - and record, per header, that powerpc/ofppc consumers were knowingly left
+    behind rather than silently assumed fine.
+
+Reviving powerpc would mean migrating its 53 `.cc` files as a project of its own,
+with a cross-compiler in the loop. That is a decision for whoever owns those
+ports, not something to infer from an x86-only tree.
