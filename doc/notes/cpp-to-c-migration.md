@@ -2558,3 +2558,42 @@ command, group navigation, and modeswitch back. Output identical.
 Not covered: the multi-match TAB listing path. Attempts to trigger it completed
 uniquely to `dumpframe` and executed it, cascading page faults and making the
 run nondeterministic, so the probe was dropped rather than left flaky.
+
+## §75 — kdb/arch/x86/x86.cc → .c (template dependencies)
+
+This file used `local_apic_t<APIC_MAPPINGS_START>` — a C++ *template* — in four
+places, plus `nmi_t` whose methods use a second template, `rtc_t<0x70>`.
+Templates cannot be bridged by asm name, so both were re-implemented natively
+in C, following the existing C block in `arch/x86/apic.h` (which already had
+`local_apic_eoi`, the timer helpers, `local_apic_id` and the `LAPIC_LVT_*`
+constants from earlier work).
+
+New C forms:
+  - `arch/x86/apic.h`: `local_apic_disable`, `local_apic_read_vector`,
+    `local_apic_send_nmi` (+ `X86_LAPIC_SVR`). Bit positions transcribed from
+    `command_reg_t`: vector 0:7, delivery_mode 8:10, destination_mode 11,
+    delivery_status 12, level 14, trigger_mode 15, destination 18:19.
+  - `platform/pc99/nmi.h`: `nmi_mask` / `nmi_unmask`, with `rtc_t<0x70>::read`
+    inlined as the two port accesses it performs.
+  - `arch/x86/atomic.h`: `atomic_set`, mirroring `operator= (word_t)`.
+
+`cpu_get`/`cpu_is_valid`/`cpu_get_id` and `x86_exceptionframe_dump` already
+existed.
+
+Verification: 337184 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. Two scripted sessions against a rebuilt pre-flip kernel, both identical:
+`frame`, `ctrlregs`, `lvt`, `dumpmsrs`, `ports` (scratchpad/x86run.sh) and the
+`enable_nmi` disable/enable pair (scratchpad/nmirun.sh). The `lvt` case is the
+strong one — six `local_apic_read_vector` results match the template's output
+exactly, confirming the register offsets.
+
+**Not verified at runtime:** `cmd_reset` (reboots the machine),
+`cmd_send_nmi` and `cmd_switch_cpus` (need a second CPU, and `-smp 2` triggers
+the pre-existing assertion loop from §68). So `local_apic_send_nmi` and
+`local_apic_disable` are verified by transcription against the template
+source, not by execution.
+
+The `CONFIG_X_X86_HVM` block is off in this config and so is preprocessed away.
+It was translated by inspection and names `space_is_hvm_space`,
+`space_get_hvm_space` and `hvm_lookup_gphys_addr`, none of which exist yet — an
+HVM port must supply them. Same honest-undefined-name approach as §70.

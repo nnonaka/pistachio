@@ -31,4 +31,4 @@
 ######################################################################
 SOURCES+=	kdb/arch/x86/breakpoints.c
 SOURCES+=	kdb/arch/x86/stepping.c
-SOURCES+=	kdb/arch/x86/x86.cc
+SOURCES+=	kdb/arch/x86/x86.c

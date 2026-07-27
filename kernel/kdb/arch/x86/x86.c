@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2007-2010,  Karlsruhe University
  *                
- * File path:     kdb/arch/x86/x86.cc
+ * File path:     kdb/arch/x86/x86.c
  * Description:   
  *                
  * @LICENSE@
@@ -46,8 +46,8 @@ DECLARE_CMD (cmd_reset, root, '6', "reset", "Reset system");
 
 bool x86_reboot_scheduled;
 
-extern void x86_reset();
-void x86_reset_wrapper()
+extern void x86_reset(void);
+void x86_reset_wrapper(void)
 {
     asm volatile (
 	".global x86_reset				\n\t"			
@@ -62,8 +62,7 @@ void x86_reset_wrapper()
 CMD(cmd_reset, cg)
 {  
 #if defined(CONFIG_IOAPIC)
-    local_apic_t<APIC_MAPPINGS_START> local_apic;
-    local_apic.disable();
+    local_apic_disable();
 #endif
 #if defined(CONFIG_X_X86_HVM)
     // Have to disable VMX Root Mode to reboot CPU.
@@ -132,7 +131,7 @@ DECLARE_CMD (cmd_dump_current_frame, root, ' ', "frame",
 CMD (cmd_dump_current_frame, cg)
 { 
     debug_param_t * param = (debug_param_t*)kdb.kdb_param;
-    param->frame->dump();
+    x86_exceptionframe_dump (param->frame);
     return CMD_NOQUIT;
 }
 
@@ -181,14 +180,13 @@ DECLARE_CMD (cmd_enable_nmi, arch, 'n', "enable_nmi", "enable/disable NMI in chi
 
 CMD(cmd_enable_nmi, cg)  
 {  
-    nmi_t nmi;  
     switch (get_choice("NMI", "Enable/Disable", 'd')) 
     {
     case 'd': 
-	nmi.mask(); 
+	nmi_mask(); 
 	break;      
     case 'e': 
-	nmi.unmask(); 
+	nmi_unmask(); 
 	break;    
     }
     return CMD_NOQUIT; 
@@ -208,14 +206,13 @@ CMD(cmd_send_nmi, cg)
     // user supplied id has to be validated first -- same guard as
     // cmd_switch_cpus below.
     if (cpuid >= CONFIG_SMP_MAX_CPUS ||
-	!cpu_t::get((cpuid_t) cpuid)->is_valid())
+	!cpu_is_valid (cpu_get ((cpuid_t) cpuid)))
 	return CMD_NOQUIT;
-    cpu_t* cpu = cpu_t::get((cpuid_t) cpuid);
-    local_apic_t<APIC_MAPPINGS_START> local_apic;
+    cpu_t* cpu = cpu_get ((cpuid_t) cpuid);
     // don't nmi ourselfs
-    if (cpu->get_id() == local_apic.id())
+    if (cpu_get_id (cpu) == local_apic_id())
 	return CMD_NOQUIT;
-    local_apic.send_nmi((u8_t) cpu->get_id());
+    local_apic_send_nmi((u8_t) cpu_get_id (cpu));
     return CMD_NOQUIT;
 }
 
@@ -230,19 +227,18 @@ CMD(cmd_switch_cpus, cg)
     word_t dst_cpu = get_dec("CPU id", 0, NULL);
     if (dst_cpu >= CONFIG_SMP_MAX_CPUS ||
 	dst_cpu == cpu || 
-	!cpu_t::get((cpuid_t) dst_cpu)->is_valid())
+	!cpu_is_valid (cpu_get ((cpuid_t) dst_cpu)))
 	return CMD_NOQUIT;
 
-    kdb_current_cpu = dst_cpu;
-    local_apic_t<APIC_MAPPINGS_START> local_apic;
-    local_apic.send_nmi((u8_t) dst_cpu);
+    atomic_set (&kdb_current_cpu, dst_cpu);
+    local_apic_send_nmi((u8_t) dst_cpu);
     
     /* Execute a dummy iret to receive NMIs again, then sleep */
     x86_iret_self();
     x86_sleep_uninterruptible();
     /* Unmask NMIs again */
 
-    if (kdb_current_cpu == cpu)
+    if (atomic_read (&kdb_current_cpu) == cpu)
     {
 	printf("--- Switched to CPU %d ---\n", cpu);
 	return CMD_ABORT;
@@ -261,20 +257,23 @@ DECLARE_CMD(cmd_show_lvt, arch, 'l', "lvt",
 
 CMD(cmd_show_lvt, cg)
 {
-    local_apic_t<APIC_MAPPINGS_START> local_apic;
 
-    printf("  timer:   0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_timer));
-    printf("  lin0:    0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_lint0));
-    printf("  lin1:    0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_lint1));
-    printf("  error:   0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_error));
-    printf("  perf:    0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_perfcount));
-    printf("  thermal: 0x%8x\n", local_apic.read_vector (local_apic_t<APIC_MAPPINGS_START>::lvt_thermal_monitor));
+    printf("  timer:   0x%8x\n", local_apic_read_vector (LAPIC_LVT_TIMER));
+    printf("  lin0:    0x%8x\n", local_apic_read_vector (LAPIC_LVT_LINT0));
+    printf("  lin1:    0x%8x\n", local_apic_read_vector (LAPIC_LVT_LINT1));
+    printf("  error:   0x%8x\n", local_apic_read_vector (LAPIC_LVT_ERROR));
+    printf("  perf:    0x%8x\n", local_apic_read_vector (LAPIC_LVT_PERFCOUNT));
+    printf("  thermal: 0x%8x\n", local_apic_read_vector (LAPIC_LVT_THERMAL_MONITOR));
 
     return CMD_NOQUIT;
 }
 #endif
 
 
+/* CONFIG_X_X86_HVM is off in this config, so this block is preprocessed away
+   and cannot be compiled or exercised; translated to C by inspection only.
+   space_is_hvm_space / space_get_hvm_space / hvm_lookup_gphys_addr do not
+   exist yet -- an HVM port must supply them. */
 #if defined(CONFIG_X_X86_HVM)
 DECLARE_CMD(cmd_dump_gva, arch, 'd', "d",
 	    "dump HVM virtual address");
@@ -283,7 +282,7 @@ extern void memdump_loop (space_t * space, addr_t addr);
 
 CMD(cmd_dump_gva, cg)
 {
-    word_t addr = get_hex ("Dump GV address", kdb.last_dump);
+    word_t addr = get_hex ("Dump GV address", kdb.last_dump, NULL);
      
     if (addr == ABORT_MAGIC)
 	return CMD_NOQUIT;
@@ -293,12 +292,12 @@ CMD(cmd_dump_gva, cg)
     addr_t gvaddr = (addr_t) addr;
     
     space_t *space = get_space ("Space");
-    if (!space->is_hvm_space())
+    if (!space_is_hvm_space (space))
 	return CMD_NOQUIT;
 
     addr_t gpaddr;
     
-    if (! space->get_hvm_space()->lookup_gphys_addr (gvaddr, &gpaddr))
+    if (! hvm_lookup_gphys_addr (space_get_hvm_space (space), gvaddr, &gpaddr))
 	return CMD_NOQUIT;
     
     memdump_loop (space, gpaddr);

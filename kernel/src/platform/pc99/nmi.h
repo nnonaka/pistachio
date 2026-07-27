@@ -62,6 +62,40 @@ public:
 	    rtc_t<0x70>().read(0);
 	};
 };
+#else /* !__cplusplus */
+
+/* C forms of nmi_t::mask/unmask.  rtc_t<0x70>::read(reg) is inlined here as
+   the two port accesses it performs (select register, then read 0x71). */
+INLINE u8_t rtc_read_0x70 (u8_t reg)
+{
+    out_u8 (0x70, reg);
+    return in_u8 (0x71);
+}
+
+INLINE void nmi_mask (void)
+{
+    /* disable NMI with read from rtc port < 0x80 */
+    rtc_read_0x70 (0);
+
+    /* clear and disable IOCHK and PCI SERR# */
+    out_u8 (0x61, (in_u8 (0x61) & 0x03) | 0x0c);
+}
+
+INLINE void nmi_unmask (void)
+{
+    /* clear and disable IOCHK and PCI SERR# */
+    out_u8 (0x61, (in_u8 (0x61) & 0x03) | 0x0c);
+
+    /* waste some time */
+    x86_wait_cycles (10000000);
+
+    /* enable IOCHK and PCI SERR# */
+    out_u8 (0x61, in_u8 (0x61) & 0x03);
+
+    /* enable NMI with read from rtc port < 0x80 */
+    rtc_read_0x70 (0);
+}
+
 #endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__NMI_H__ */

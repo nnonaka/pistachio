@@ -497,6 +497,7 @@ INLINE void local_apic_t<base>::broadcast_nmi(bool self)
  * Register offsets and bit layout match the template's regno_t/command_reg_t.
  */
 #if !defined(__cplusplus)
+#define X86_LAPIC_SVR		0x0F0
 #define X86_LAPIC_EOI		0x0B0
 #define X86_LAPIC_INTR_CMD1	0x300
 #define X86_LAPIC_INTR_CMD2	0x310
@@ -543,6 +544,46 @@ INLINE void local_apic_timer_set_divisor (u32_t divisor)
 	val = val | ((divisor << 1) & 0x8) | (divisor & 0x3);
     }
     *reg = val;
+}
+
+/* Mirrors local_apic_t<base>::disable(): clears spurious_int_vector_reg_t
+   enabled (bit 8) and returns its previous value. */
+INLINE bool local_apic_disable (void)
+{
+    volatile u32_t *svr = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_SVR);
+    u32_t raw = *svr;
+    bool enabled = (raw >> 8) & 1;
+    *svr = raw & ~(1u << 8);
+    return enabled;
+}
+
+/* Mirrors local_apic_t<base>::read_vector(): LVT registers start at 0x320
+   (APIC_LVT_TIMER) and are 0x10 apart, indexed by the LAPIC_LVT_* values. */
+INLINE u32_t local_apic_read_vector (word_t lvt)
+{
+    return *(volatile u32_t *)(APIC_MAPPINGS_START + 0x320 + (lvt * 0x10));
+}
+
+/* Mirrors local_apic_t<base>::send_nmi().  command_reg_t bit positions:
+   vector 0:7, delivery_mode 8:10, destination_mode 11, delivery_status 12,
+   level 14, trigger_mode 15, destination 18:19. */
+INLINE void local_apic_send_nmi (u8_t apic_id)
+{
+    volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD1);
+    volatile u32_t *cmd2 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD2);
+    u32_t reg = *cmd1;
+    if (reg & (1u << 12))		/* delivery_status */
+	return;
+
+    *cmd2 = (u32_t) apic_id << (56 - 32);
+    reg = *cmd1;
+    reg &= ~0xffu;			/* vector = 0 */
+    reg = (reg & ~(0x7u << 8)) | (4u << 8);   /* delivery_mode = nmi (4) */
+    reg &= ~(1u << 11);			/* destination_mode = 0 */
+    reg &= ~(0x3u << 18);		/* destination = 0 */
+    reg |= (1u << 14);			/* level = 1 */
+    reg |= (1u << 15);			/* trigger_mode = 1 */
+    *cmd1 = reg;
 }
 
 INLINE void local_apic_send_ipi (u8_t apic_id, u8_t vector)

@@ -85,6 +85,7 @@ INLINE word_t atomic_inc (atomic_t *self)
 INLINE word_t atomic_dec (atomic_t *self)
 { __asm__ __volatile__(X86_LOCK "sub%z0 $1, %0" : "+m"(self->val)); return self->val; }
 INLINE word_t atomic_read (const atomic_t *self) { return self->val; }
+INLINE word_t atomic_set (atomic_t *self, word_t val) { return self->val = val; }
 #endif
 
 
