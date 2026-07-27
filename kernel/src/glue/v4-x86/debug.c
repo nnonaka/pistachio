@@ -78,15 +78,7 @@ void sync_debug (word_t address)
 #endif
 
 
-/* Local mirror of debug.h's C++-only debug_param_t (identical layout; the kdb
-   entry point casts the passed pointer back to its own debug_param_t). */
-typedef struct debug_param_t
-{
-    word_t exception;
-    space_t * space;
-    tcb_t * tcb;
-    x86_exceptionframe_t * frame;
-} debug_param_t;
+/* debug_param_t now comes from glue/v4-x86/debug.h (dual-repped there). */
 
 /* Per-CPU KDB control block (was class cpu_kdb_t). */
 typedef struct cpu_kdb_t

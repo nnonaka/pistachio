@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2003, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/arch/x86/stepping.cc
+ * File path:     kdb/arch/x86/stepping.c
  * Description:   Single stepping for IA-32
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,7 @@
  ********************************************************************/
 #include <debug.h>
 #include <kdb/kdb.h>
+#include INC_GLUE(debug.h)
 #include INC_ARCH(trapgate.h)
 #include INC_ARCH(cpu.h)
 
@@ -46,8 +47,8 @@ CMD(cmd_singlestep, cg)
     x86_exceptionframe_t* f = param->frame;
     
     x86_kdb_singlestep = true;
-    x86_kdb_last_ip = f->regs[x86_exceptionframe_t::ipreg];
-    f->regs[x86_exceptionframe_t::freg] |= (1 << 8) + (1 << 16); /* RF + TF */
+    x86_kdb_last_ip = f->__base.regs[X86_EXC_IPREG];
+    f->__base.regs[X86_EXC_FREG] |= (1 << 8) + (1 << 16); /* RF + TF */
 
     return CMD_QUIT;
 }
@@ -62,7 +63,7 @@ CMD (cmd_branchstep, cg)
     debug_param_t * param = (debug_param_t*)kdb.kdb_param;
     x86_exceptionframe_t* f = param->frame;
 
-    f->regs[x86_exceptionframe_t::freg] |= (1 << 8) + (1 << 16); /* RF + TF */
+    f->__base.regs[X86_EXC_FREG] |= (1 << 8) + (1 << 16); /* RF + TF */
     x86_wrmsr (X86_MSR_DEBUGCTL, ((1 << 0) + (1 << 1))); /* LBR + BTF */
     x86_kdb_branchstep = true;
 

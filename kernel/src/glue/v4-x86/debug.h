@@ -58,18 +58,11 @@ INLINE void spin_forever(int pos = 0)
 #endif /* defined(CONFIG_SPIN_WHEELS) */
 }
 
+#if defined(__cplusplus)
 class space_t;
 class tcb_t;
+#endif
 
-class debug_param_t 
-{
-   
-public:
-    word_t exception;
-    space_t * space;
-    tcb_t * tcb;
-    x86_exceptionframe_t * frame;
-};
 
 INLINE void spin(int pos, int cpu = 0)
 {
@@ -87,6 +80,24 @@ INLINE void spin(int pos, int cpu)
 #endif /* defined(CONFIG_SPIN_WHEELS) */
 }
 #endif /* defined(__cplusplus) */
+
+#if !defined(__cplusplus)
+struct space_t; typedef struct space_t space_t;
+struct tcb_t;   typedef struct tcb_t tcb_t;
+#endif
+
+/* plain data -- shared by the C++ kdb entry path and the C kdb files */
+struct debug_param_t
+{
+    word_t exception;
+    space_t * space;
+    tcb_t * tcb;
+    x86_exceptionframe_t * frame;
+};
+#if !defined(__cplusplus)
+typedef struct debug_param_t debug_param_t;
+#endif
+
 
 #define enter_kdebug(arg...)                    \
     __asm__ __volatile__ (                      \
