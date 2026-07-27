@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2004, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/resources.cc
+ * File path:     kdb/glue/v4-x86/resources.c
  * Description:   resource dumping
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -32,28 +32,28 @@
 #include <debug.h>
 #include INC_API(tcb.h)
 
-void thread_resources_t::dump (tcb_t * tcb)
+void tcb_resources_dump (thread_resources_t *self, tcb_t * tcb)
 {
-    if (tcb->resource_bits.have_resource(FPU))
+    if (resource_bits_have_resource(&tcb->resource_bits, FPU))
 	printf("FPU ");
-    if (tcb->resource_bits.have_resource(COPY_AREA))
+    if (resource_bits_have_resource(&tcb->resource_bits, COPY_AREA))
     {
 	printf("COPYAREA (");
 	for (word_t i = 0;  i < COPY_AREA_COUNT; i++)
 	    for (word_t j = 0; j < COPY_AREA_PDIRS; j++)
-		printf(" %x ", copy_area_pdir_idx(i,j));
+		printf(" %x ", self->pdir_idx[i][j]);
 	printf(") ");
     }
 #if defined(CONFIG_SMP)
-    if (tcb->resource_bits.have_resource(SMP_PAGE_TABLE))
+    if (resource_bits_have_resource(&tcb->resource_bits, SMP_PAGE_TABLE))
 	printf("SMPPGT ");
 #endif
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-    if (tcb->resource_bits.have_resource(COMPATIBILITY_MODE))
+    if (resource_bits_have_resource(&tcb->resource_bits, COMPATIBILITY_MODE))
 	printf("COMPATIBILITY_MODE ");
 #endif
 #if defined(CONFIG_X_X86_HVM)
-    if (tcb->resource_bits.have_resource (HVM))
+    if (resource_bits_have_resource(&tcb->resource_bits, HVM))
 	printf("HVM");
 #endif
 

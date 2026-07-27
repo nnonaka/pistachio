@@ -57,7 +57,7 @@ public:
        call sites resolve directly to the C symbols (no forwarders, matching
        ABI: 'this' is the leading pointer argument). save/load are also called
        from trap.S by these same names. */
-    void dump(tcb_t * tcb);
+    void dump(tcb_t * tcb) __asm__ ("tcb_resources_dump");
     void save(tcb_t * tcb) __asm__ ("tcb_resources_save");
     void load(tcb_t * tcb) __asm__ ("tcb_resources_load");
     void purge(tcb_t * tcb) __asm__ ("tcb_resources_purge");
@@ -98,6 +98,7 @@ BEGIN_DECLS
 void tcb_resources_save (thread_resources_t *self, tcb_t *tcb);
 void tcb_resources_load (thread_resources_t *self, tcb_t *tcb);
 void tcb_resources_release_copy_area (thread_resources_t *self, tcb_t *tcb, bool disable_copyarea);
+void tcb_resources_dump (thread_resources_t *self, tcb_t *tcb);
 END_DECLS
 
 
