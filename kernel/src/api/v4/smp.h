@@ -135,6 +135,16 @@ INLINE void cpu_mb_entry_set (cpu_mb_entry_t *self, xcpu_handler_t handler,
     self->param[2] = param2;
 }
 
+INLINE void cpu_mb_entry_set_many (cpu_mb_entry_t *self, xcpu_handler_t handler,
+				   tcb_t *tcb, word_t p0, word_t p1, word_t p2, word_t p3,
+				   word_t p4, word_t p5, word_t p6, word_t p7)
+{
+    self->handler = handler;
+    self->tcb = tcb;
+    self->param[0] = p0; self->param[1] = p1; self->param[2] = p2; self->param[3] = p3;
+    self->param[4] = p4; self->param[5] = p5; self->param[6] = p6; self->param[7] = p7;
+}
+
 /**
  * Asynchronous XCPU mailbox
  * currently not very efficient using a spin-lock for the mailbox
@@ -201,6 +211,23 @@ typedef struct cpu_mb_t cpu_mb_t;
 /* C free-function API for the OOL cpu_mb_t methods (defined in smp.c). */
 BEGIN_DECLS
 void cpu_mb_walk_mailbox(cpu_mb_t *self);
+#if !defined(__cplusplus)
+/* C forms of cpu_mb_t::alloc / ::commit (the data above is C-visible). */
+INLINE cpu_mb_entry_t * cpu_mb_alloc (cpu_mb_t *self)
+{
+    spinlock_lock (&self->lock);
+    if (((self->first_free + 1) % MAX_MAILBOX_ENTRIES) == self->first_alloc)
+    {
+	spinlock_unlock (&self->lock);
+	return NULL;
+    }
+    unsigned idx = self->first_free;
+    self->first_free = (self->first_free + 1) % MAX_MAILBOX_ENTRIES;
+    return &self->entries[idx];
+}
+INLINE void cpu_mb_commit (cpu_mb_t *self, cpu_mb_entry_t *entry)
+{ (void) entry; spinlock_unlock (&self->lock); }
+#endif
 void cpu_mb_dump_mailbox(cpu_mb_t *self, word_t cpu);
 END_DECLS
 

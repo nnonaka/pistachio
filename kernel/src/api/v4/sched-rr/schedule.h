@@ -184,7 +184,7 @@ public:
  
 	    tcb_t * tcb = tcb_list;
 	    tcb_list = tcb->sched_state.requeue;
-	    tcb->sched_state.base.requeue = NULL;
+	    tcb->sched_state.requeue = NULL;
 		
 	    TRACE_SCHEDULE_DETAILS("smp_requeue:dequeue_head %t (s=%s) cpu %d (head %t)", 
 	    	    tcb, tcb->get_state().string(), tcb->get_cpu(), tcb_list);
@@ -324,7 +324,8 @@ protected:
         
     tcb_t * wakeup_list;
     prio_queue_t root_prio_queue;
-    static volatile u64_t current_time;
+    /* defined in C (sched-rr/schedule.c) as rr_sched_current_time */
+    static volatile u64_t current_time __asm__ ("rr_sched_current_time");
 
 };
 

@@ -198,6 +198,10 @@ INLINE bool thread_state_is_waiting (const thread_state_t *self)
     { return self->state == THREAD_STATE_WAITING_FOREVER || self->state == THREAD_STATE_WAITING_TIMEOUT; }
 INLINE bool thread_state_is_polling (const thread_state_t *self)
     { return self->state == THREAD_STATE_POLLING; }
+INLINE bool thread_state_is_waiting_forever (const thread_state_t *self)
+    { return self->state == THREAD_STATE_WAITING_FOREVER; }
+INLINE bool thread_state_is_waiting_with_timeout (const thread_state_t *self)
+    { return self->state == THREAD_STATE_WAITING_TIMEOUT; }
 INLINE bool thread_state_is_locked_running (const thread_state_t *self)
     { return self->state == THREAD_STATE_LOCKED_RUNNING; }
 INLINE bool thread_state_is_locked_waiting (const thread_state_t *self)

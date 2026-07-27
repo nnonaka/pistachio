@@ -941,6 +941,9 @@ void       tcb_adjust_for_copy_area (tcb_t *self, tcb_t *dst, addr_t *saddr, add
 void       migrate_interrupt_start_c (tcb_t *tcb);
 bool   is_privileged_space_c (space_t *space);
 void   spin_forever_c (int pos);
+/* asm-named tcb_t methods (the C++ decls above carry the __asm__ labels). */
+bool   tcb_migrate_to_processor (tcb_t *self, cpuid_t processor);
+bool   tcb_is_interrupt_thread (tcb_t *self);
 END_DECLS
 
 #if defined(__cplusplus)

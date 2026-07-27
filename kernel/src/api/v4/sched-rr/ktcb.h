@@ -266,6 +266,10 @@ INLINE void   rr_sched_set_priority (rr_sched_ktcb_t *self, prio_t prio)
     if (self->sensitive_prio < prio)
 	rr_sched_set_sensitive_prio (self, prio);
 }
+/* time_t::period(625,4) as a C initializer (mantissa 625, exponent 4, type 0) */
+INLINE time_t rr_default_timeslice (void)
+{ time_t t; t.raw = 0; t.time.mantissa = 625; t.time.exponent = 4; t.time.type = 0; return t; }
+
 INLINE void   rr_sched_init_timeslice (rr_sched_ktcb_t *self, time_t timeslice)
 {
     ASSERT (timeslice.time.type == 0);  /* is_period */
