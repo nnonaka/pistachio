@@ -262,9 +262,14 @@
 #define IDT_IOAPIC_MAX		0xf0
 #define IDT_IOAPIC_SPURIOUS	0xfb
 
-/* Page size for APIC and ACPI mappings */
+/* Page size for APIC and ACPI mappings (pgsize_e in C++, X86_PGSIZE_* in C) */
+#if defined(__cplusplus)
 #define APIC_PGENTSZ	        pgent_t::size_4k
 #define ACPI_PGENTSZ	        pgent_t::size_2m
+#else
+#define APIC_PGENTSZ	        X86_PGSIZE_4K
+#define ACPI_PGENTSZ	        X86_PGSIZE_2M
+#endif
 
 /* spurious int must have lowermost 4 bits set */
 #define IDT_LAPIC_SPURIOUS_INT  0x3f

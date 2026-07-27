@@ -578,6 +578,14 @@ INLINE void local_apic_set_task_prio (u8_t prio, u8_t subprio)
     *r = (*r & ~(u32_t) 0xff) | (((u32_t) (prio & 0xf)) << 4) | (u32_t) (subprio & 0xf);
 }
 
+/* lvt_t enum values */
+#define LAPIC_LVT_TIMER			0
+#define LAPIC_LVT_THERMAL_MONITOR	1
+#define LAPIC_LVT_PERFCOUNT		2
+#define LAPIC_LVT_LINT0			3
+#define LAPIC_LVT_LINT1			4
+#define LAPIC_LVT_ERROR			5
+
 INLINE void local_apic_mask_lvt (word_t lvt)
 {
     volatile u32_t *r = (volatile u32_t *)(APIC_MAPPINGS_START + 0x320 + (lvt * 0x10));

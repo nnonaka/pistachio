@@ -133,7 +133,7 @@ public:
     void init_arch();
     void init_cpu();
     
-    word_t get_number_irqs();
+    word_t get_number_irqs() __asm__("intctrl_t_get_number_irqs");
     bool is_irq_available(word_t irq);
 
     void mask(word_t irq);
@@ -189,6 +189,55 @@ public:
     
     friend class kdb_t;
 };
+
+#else /* !__cplusplus */
+
+/* C mirror of intctrl_t and its nested types.  generic_intctrl_t is an empty
+   base (methods only) so it contributes nothing to the layout; the members are
+   restated in declaration order.  local_apic is a static member (no storage). */
+struct intctrl_ioapic_t {
+    word_t	id;
+    i82093_t *	i82093;
+    spinlock_t	lock;
+};
+typedef struct intctrl_ioapic_t intctrl_ioapic_t;
+
+struct intctrl_redir_table_t {
+    ioapic_redir_t	entry;
+    intctrl_ioapic_t *	ioapic;
+    word_t		line;
+    bool		pending;
+};
+typedef struct intctrl_redir_table_t intctrl_redir_table_t;
+
+struct intctrl_t {
+    intctrl_ioapic_t	 ioapics[CONFIG_MAX_IOAPICS];
+    intctrl_redir_table_t redir[NUM_REDIR_ENTRIES];
+
+    word_t	num_intsources;
+    word_t	max_intsource;
+
+    /* apic id handling */
+    word_t	num_ioapics;
+    word_t	num_cpus;
+    spinlock_t	idt_lock;
+
+    bool	pmtimer_available;
+    word_t	pmtimer_ioport;
+};
+typedef struct intctrl_t intctrl_t;
+
+/* sync_redir_part_e */
+#define INTCTRL_SYNC_LOW	0
+#define INTCTRL_SYNC_HIGH	1
+#define INTCTRL_SYNC_ALL	2
+
+#define INTCTRL_PMTIMER_TICKS	3579545
+#define INTCTRL_PMTIMER_MASK	0xFFFFFF
+
+extern intctrl_t intctrl;
+INLINE intctrl_t * get_interrupt_ctrl (void) { return &intctrl; }
+
 #endif /* __cplusplus */
 
 
