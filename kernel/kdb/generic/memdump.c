@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2003, 2008,  Karlsruhe University
  *                
- * File path:     kdb/generic/memdump.cc
+ * File path:     kdb/generic/memdump.c
  * Description:   Memory dumping code
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,36 @@ void memdump (space_t * space, addr_t addr);
  */
 static word_t memdump_wordsize = sizeof (word_t);
 
+/* readmem<T> from generic/linear_ptab.h is a template; this is the same body
+   with the access width passed explicitly. */
+static bool readmem_sz (space_t * space, addr_t vaddr, void * v, word_t size)
+{
+    if (! space_is_user_area (vaddr))
+    {
+	switch (size)
+	{
+	case 1: *(u8_t  *) v = *(u8_t  *) vaddr; break;
+	case 2: *(u16_t *) v = *(u16_t *) vaddr; break;
+	case 4: *(u32_t *) v = *(u32_t *) vaddr; break;
+	default: *(u64_t *) v = *(u64_t *) vaddr; break;
+	}
+	return true;
+    }
+
+    word_t w;
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+
+    switch (size)
+    {
+    case 1: *(u8_t  *) v = (u8_t)  (w & 0xff); break;
+    case 2: *(u16_t *) v = (u16_t) (w & 0xffff); break;
+    case 4: *(u32_t *) v = (u32_t) (w & 0xffffffff); break;
+    default: *(u64_t *) v = (u64_t) w; break;
+    }
+    return true;
+}
+
 
 
 
@@ -77,13 +107,13 @@ DECLARE_CMD (cmd_memdump, root, 'd', "memdump", "dump memory");
 
 CMD (cmd_memdump, cg)
 {
-    word_t addr = get_hex ("Dump address", kdb.last_dump);
+    word_t addr = get_hex ("Dump address", kdb.last_dump, NULL);
 
     if (addr == ABORT_MAGIC)
 	return CMD_NOQUIT;
 
     kdb.last_dump = addr;
-    memdump_loop (kdb.kdb_current->get_space (), (addr_t) addr);
+    memdump_loop (tcb_get_space (kdb.kdb_current), (addr_t) addr);
 
     return CMD_NOQUIT;
 }
@@ -97,7 +127,7 @@ DECLARE_CMD (cmd_memdump_remote, root, 'D', "memdump",
 
 CMD(cmd_memdump_remote, cg)
 {
-    word_t addr = get_hex ("Dump address", kdb.last_dump);
+    word_t addr = get_hex ("Dump address", kdb.last_dump, NULL);
 
     if (addr == ABORT_MAGIC)
 	return CMD_NOQUIT;
@@ -112,7 +142,7 @@ CMD(cmd_memdump_remote, cg)
 void memdump_loop (space_t * space, addr_t addr)
 {
     if (!space)
-	space = get_kernel_space();
+	space = get_kernel_space_c();
     do {
 	memdump (space, addr);
 	addr = addr_offset (addr, 16*16);
@@ -133,7 +163,7 @@ void memdump (space_t * space, addr_t addr)
 	    for (int i = 0; i < 16; i++, x++)
 	    {
 		if (i == 8) printf (" ");
-		if (! readmem (space, x, &v))
+		if (! readmem_sz (space, x, &v, sizeof (v)))
 		    printf ("## ");
 		else
 		    printf ("%02x ", v);
@@ -146,7 +176,7 @@ void memdump (space_t * space, addr_t addr)
 	    for (int i = 0; i < 8; i++, x++)
 	    {
 		if (i == 4) printf (" ");
-		if (! readmem (space, x, &v))
+		if (! readmem_sz (space, x, &v, sizeof (v)))
 		    printf ("#### ");
 		else
 		    printf ("%04x ", v);
@@ -158,7 +188,7 @@ void memdump (space_t * space, addr_t addr)
 	    u32_t v, *x = (u32_t *) addr;
 	    for (int i = 0; i < 4; i++, x++)
 	    {
-		if (! readmem (space, x, &v))
+		if (! readmem_sz (space, x, &v, sizeof (v)))
 		    printf ("######## ");
 		else
 		    printf ("%08x ", v);
@@ -171,7 +201,7 @@ void memdump (space_t * space, addr_t addr)
 	    u64_t v, *x = (u64_t *) addr;
 	    for (int i = 0; i < 2; i++, x++)
 	    {
-		if (! readmem (space, x, &v))
+		if (! readmem_sz (space, x, &v, sizeof (v)))
 		    printf ("################ ");
 		else
 		    printf ("%016x ", v);
@@ -187,7 +217,7 @@ void memdump (space_t * space, addr_t addr)
 	{
 	    u8_t v, *x = (u8_t *) c;
 	    if (i == 8) printf (" ");
-	    if (! readmem (space, x, &v))
+	    if (! readmem_sz (space, x, &v, sizeof (v)))
 		printf ("#");
 	    else
 		printf ("%c", ((v >= 32 && v < 127) ||
