@@ -222,6 +222,36 @@ INLINE bool readmem_u8 (space_t * space, addr_t vaddr, u8_t * v)
     return true;
 }
 
+INLINE bool readmem_u32 (space_t * space, addr_t vaddr, u32_t * v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(u32_t *) vaddr;
+	return true;
+    }
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+    *v = (u32_t) (w & 0xffffffff);
+    return true;
+}
+
+INLINE bool readmem_s32 (space_t * space, addr_t vaddr, s32_t * v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(s32_t *) vaddr;
+	return true;
+    }
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+    *v = (s32_t) (w & 0xffffffff);
+    return true;
+}
+
 INLINE bool readmem_word (space_t * space, addr_t vaddr, word_t * v)
 {
     word_t w;

@@ -586,6 +586,23 @@ INLINE void local_apic_send_nmi (u8_t apic_id)
     *cmd1 = reg;
 }
 
+/* Mirrors local_apic_t<base>::broadcast_nmi(); destination 2|1 = all-excluding-
+   self, 2|0 = all-including-self.  See send_nmi above for the bit positions. */
+INLINE void local_apic_broadcast_nmi (bool self)
+{
+    volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD1);
+    u32_t reg = *cmd1;
+    if (reg & (1u << 12))		/* delivery_status */
+	return;
+
+    reg = 0;
+    reg |= (4u << 8);			/* delivery_mode = nmi (4) */
+    reg |= (1u << 11);			/* destination_mode = 1 */
+    reg |= ((u32_t) (2 | (self ? 0 : 1)) << 18);   /* destination */
+    reg |= (1u << 14);			/* level = 1 */
+    *cmd1 = reg;
+}
+
 INLINE void local_apic_send_ipi (u8_t apic_id, u8_t vector)
 {
     volatile u32_t *cmd1 = (volatile u32_t *)(APIC_MAPPINGS_START + X86_LAPIC_INTR_CMD1);

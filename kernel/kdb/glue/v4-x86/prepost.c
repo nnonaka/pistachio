@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2010,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/prepost.cc
+ * File path:     kdb/glue/v4-x86/prepost.c
  * Description:   IA-32 specific handlers for KDB entry and exit
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -49,16 +49,16 @@
 extern space_t *current_disas_space;
 
 #if defined(CONFIG_KDB_DISAS)
-extern "C" int disas(addr_t pc);
-INLINE void disas_addr (addr_t ip, const char * str = "")
+int disas(addr_t pc);
+INLINE void disas_addr (addr_t ip, const char * str)
 {
     printf ("%p    ", ip);
-    current_disas_space =  kdb.kdb_current->get_space();
+    current_disas_space =  tcb_get_space (kdb.kdb_current);
     disas (ip);
     printf ("\n");
 }
 #else
-INLINE void disas_addr (addr_t ip, const char * str = "")
+INLINE void disas_addr (addr_t ip, const char * str)
 {
     printf ("ip=%p -- %s\n", ip, str);
 }
@@ -81,21 +81,21 @@ atomic_t kdb_current_cpu;
 KDEBUG_INIT(kdb_prepost_init);
 void kdb_prepost_init()
 {
-    kdb_current_cpu = CONFIG_SMP_MAX_CPUS; 
+    atomic_set (&kdb_current_cpu, CONFIG_SMP_MAX_CPUS); 
 }
 #endif
 
 
-bool kdb_t::pre() 
+bool kdb_pre (void)
 {
     bool enter_kernel_debugger = true;
-    debug_param_t * param = (debug_param_t*) kdb_param;
+    debug_param_t * param = (debug_param_t*) kdb.kdb_param;
     x86_exceptionframe_t* f = param->frame;
-    kdb_current = param->tcb;
+    kdb.kdb_current = param->tcb;
 
 
 #if defined(CONFIG_SMP)
-    while (!kdb_current_cpu.cmpxchg(CONFIG_SMP_MAX_CPUS, current_cpu))
+    while (!atomic_cmpxchg (&kdb_current_cpu, CONFIG_SMP_MAX_CPUS, current_cpu))
     {
 	/* Execute a dummy iret to receive NMIs again, then sleep */
 	x86_iret_self();
@@ -109,20 +109,19 @@ bool kdb_t::pre()
 	if (param->exception == X86_EXC_NMI)
 	{
 	    cpuid_t cpu = get_current_cpu();
-	    if (kdb_current_cpu == cpu)
+	    if (atomic_read (&kdb_current_cpu) == cpu)
 	    {
 		printf("--- Switched to CPU %d ---\n", cpu);
 		return true;
 	    }
-	    else if (kdb_current_cpu == CONFIG_SMP_MAX_CPUS)
+	    else if (atomic_read (&kdb_current_cpu) == CONFIG_SMP_MAX_CPUS)
 		return false;
 	}
     }
     
     if (param->exception != X86_EXC_NMI)
     {
-	local_apic_t<APIC_MAPPINGS_START> local_apic;
-	local_apic.broadcast_nmi();
+	local_apic_broadcast_nmi (false);
     }
     
 #endif
@@ -131,7 +130,7 @@ bool kdb_t::pre()
     {
     case X86_EXC_DEBUG:	/* single step, hw breakpoints */
     {
-	if (f->regs[x86_exceptionframe_t::freg] & (1 << 8))
+	if (f->__base.regs[X86_EXC_FREG] & (1 << 8))
 	{
 	    x86_kdb_singlestep = false;
 #if defined(CONFIG_CPU_X86_I686) || defined(CONFIG_CPU_X86_P4) 
@@ -157,13 +156,13 @@ bool kdb_t::pre()
 		last_branch_ip = (addr_t) (word_t) x86_rdmsr(lbipmsr);
 #endif
 		disas_addr (last_branch_ip, "branch to");
-		x86_kdb_last_ip = f->regs[x86_exceptionframe_t::ipreg];
+		x86_kdb_last_ip = f->__base.regs[X86_EXC_IPREG];
 	    }
 #endif
 	    if (x86_kdb_last_ip != ~0U)
-		disas_addr ((addr_t) x86_kdb_last_ip);
+		disas_addr ((addr_t) x86_kdb_last_ip, "");
 	    
-	    f->regs[x86_exceptionframe_t::freg] &= ~((1 << 8) + (1 << 16));	/* !RF + !TF */
+	    f->__base.regs[X86_EXC_FREG] &= ~((1 << 8) + (1 << 16));	/* !RF + !TF */
 	    x86_kdb_last_ip = ~0U;
 	}
 	else
@@ -175,7 +174,7 @@ bool kdb_t::pre()
 	    X86_GET_DR(6, db6);
 	    dbnum = ((db6 & 8) ? 3 : ((db6 & 4) ? 2 : ((db6 & 2) ? 1 : 0)));
 	    db = x86_dr_read(dbnum);
-	    space_t *space = kdb.kdb_current->get_space();
+	    space_t *space = tcb_get_space (kdb.kdb_current);
 	    if (!space)
 		space = get_kernel_space();
 	    
@@ -183,12 +182,12 @@ bool kdb_t::pre()
 	    word_t content;
 	    ENABLE_TRACEPOINT(X86_BREAKPOINT, x86_breakpoint_cpumask, 0);
 
-	    if  (! readmem(space, (addr_t) db, &content) )
+	    if  (! readmem_word (space, (addr_t) db, &content) )
 		TRACEPOINT(X86_BREAKPOINT, "breakpoint dr%d ip: %x addr %x content ########", 
-			   dbnum, f->regs[x86_exceptionframe_t::ipreg], db);
+			   dbnum, f->__base.regs[X86_EXC_IPREG], db);
 	    else
 		TRACEPOINT(X86_BREAKPOINT, "breakpoint dr%d ip: %x addr %x content %x", 
-			   dbnum, f->regs[x86_exceptionframe_t::ipreg], db, content);
+			   dbnum, f->__base.regs[X86_EXC_IPREG], db, content);
 	    
 	    enter_kernel_debugger = ((x86_breakpoint_cpumask_kdb & (1 << get_current_cpu())) != 0);
 #else
@@ -214,14 +213,14 @@ bool kdb_t::pre()
     break;
     case X86_EXC_BREAKPOINT: /* int3 */
     {
-	space_t * space = kdb.kdb_current->get_space();
-	if (!space) space = get_kernel_space();
+	space_t * space = tcb_get_space (kdb.kdb_current);
+	if (!space) space = get_kernel_space_c ();
 
-	addr_t addr = (addr_t)(f->regs[x86_exceptionframe_t::ipreg]);
+	addr_t addr = (addr_t)(f->__base.regs[X86_EXC_IPREG]);
 	
 	unsigned char c;
 	
-	if (! readmem(space, addr, &c) )
+	if (! readmem_u8 (space, addr, &c) )
 	    break;
 
 	if (c == 0x90)
@@ -230,7 +229,7 @@ bool kdb_t::pre()
 	    enter_kernel_debugger = false;
 	}
 
-	if (! readmem(space, addr, &c) )
+	if (! readmem_u8 (space, addr, &c) )
 	    break;
 
 	/*
@@ -248,7 +247,7 @@ bool kdb_t::pre()
 	 */
 	if (c == 0xeb) /* jmp rel */
 	{
-	    if (! readmem(space, addr_offset(addr, 2), &c) )
+	    if (! readmem_u8 (space, addr_offset(addr, 2), &c) )
 		break;
 
 	    addr_t user_addr = NULL;
@@ -257,11 +256,11 @@ bool kdb_t::pre()
 	    if (c == 0xb8)
 	    {
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-		if (space->is_compatibility_mode() && space->is_user_area(addr))
+		if (space_is_compatibility_mode (space) && space_is_user_area (addr))
                 {
                     u32_t user_word32 = 0;
 		    /* movl addr32, %eax */
-		    mapped = readmem (space, addr_offset(addr, 3), &user_word32);
+		    mapped = readmem_u32 (space, addr_offset(addr, 3), &user_word32);
                     
                     user_addr = (addr_t) user_word32;
                 }
@@ -270,21 +269,21 @@ bool kdb_t::pre()
                 {
                     word_t user_word = 0;
                     /* mov addr, AREG  */
-		    mapped = readmem (space, addr_offset(addr, 3), &user_word);
+		    mapped = readmem_word (space, addr_offset(addr, 3), &user_word);
                     
                     user_addr = (addr_t) user_word;
                 }
 	    }
 	    else if (c == 0x48)
 	    {
-		if (! readmem(space, addr_offset(addr, 3), &c) )
+		if (! readmem_u8 (space, addr_offset(addr, 3), &c) )
 		    break;
  
 		if (c == 0xc7)
 		{
 		    /* movq addr32, %rax */
 		    s32_t suser_addr = 0;
-		    mapped = readmem (space, addr_offset(addr, 5), (s32_t *) &suser_addr);
+		    mapped = readmem_s32 (space, addr_offset(addr, 5), &suser_addr);
 		    // sign-extend the 32-bit displacement to a full address
 		    user_addr = (addr_t) (word_t) suser_addr;
 		}
@@ -300,7 +299,7 @@ bool kdb_t::pre()
 		    printf("[string address not mapped]");
 		else
 		{
-		    while (readmem(space, user_addr, &c) && (c != 0))
+		    while (readmem_u8 (space, user_addr, &c) && (c != 0))
 		    {
 			putc(c);
 			user_addr = addr_offset(user_addr, 1);
@@ -311,8 +310,8 @@ bool kdb_t::pre()
 		    
 		    printf("\" ---\n"
 				    "--------------------------------- (eip=%p, esp=%p) ---\n", 
-				    f->regs[x86_exceptionframe_t::ipreg] - 1, 
-				    f->regs[x86_exceptionframe_t::spreg]);
+				    f->__base.regs[X86_EXC_IPREG] - 1, 
+				    f->__base.regs[X86_EXC_SPREG]);
 		}
 	    }
 	}
@@ -327,7 +326,7 @@ bool kdb_t::pre()
 	{
 	    enter_kernel_debugger = false;
 	    
-	    if (!readmem (space, addr_offset(addr, 1), &c))
+	    if (!readmem_u8 (space, addr_offset(addr, 1), &c))
 		break;
 
 	    switch (c)
@@ -337,7 +336,7 @@ bool kdb_t::pre()
 		// KDB_PrintChar()
 		//
 		// the character to print is passed in the low byte of the register
-		putc((char) f->regs[x86_exceptionframe_t::areg]);
+		putc((char) f->__base.regs[X86_EXC_RAXREG]);
 		break;
 
 	    case 0x1:
@@ -345,8 +344,8 @@ bool kdb_t::pre()
 		//
 		// KDB_PrintString()
 		//
-		addr_t user_addr = (addr_t) f->regs[x86_exceptionframe_t::areg];
-		while (readmem (space, user_addr, &c) && (c != 0))
+		addr_t user_addr = (addr_t) f->__base.regs[X86_EXC_RAXREG];
+		while (readmem_u8 (space, user_addr, &c) && (c != 0))
 		{
 		    putc(c);
 		    user_addr = addr_offset (user_addr, 1);
@@ -373,35 +372,35 @@ bool kdb_t::pre()
 		//
 		// KDB_ReadChar_Blocked()
 		//
-	    	f->regs[x86_exceptionframe_t::areg] = getc (true); 
+	    	f->__base.regs[X86_EXC_RAXREG] = getc (true); 
 		break;
 		
 	    case 0x8:
 		//
 		// KDB_ReadChar()
 		//
-	    	f->regs[x86_exceptionframe_t::areg] = getc (false);
+	    	f->__base.regs[X86_EXC_RAXREG] = getc (false);
 		break;
 
 
 	    default:
 		enter_kernel_debugger = true;
 		printf("kdb: unknown opcode: int3, cmpb %d\n",
-				space->get_from_user(addr_offset(addr, 1)));
+				space_get_from_user (space, addr_offset(addr, 1)));
 		break;
 	    }
 	}
 	else
 	{
 	    printf("kdb: unknown kdb op: %x ip %x\n", 
-			    c, f->regs[x86_exceptionframe_t::ipreg]);
+			    c, f->__base.regs[X86_EXC_IPREG]);
 	}
     }
     break;
     default:
     {
 	printf("--- KD# unknown reason %d ip %x ---\n", 
-	       f->reason, f->regs[x86_exceptionframe_t::ipreg]);
+	       f->__base.reason, f->__base.regs[X86_EXC_IPREG]);
 	break;
     } /* switch */
     }
@@ -410,34 +409,26 @@ bool kdb_t::pre()
 };
 
 
-void kdb_t::post() {
+void kdb_post (void) {
 
-    debug_param_t * param = (debug_param_t*)kdb_param;
+    debug_param_t * param = (debug_param_t*) kdb.kdb_param;
     
     if (param->exception == X86_EXC_DEBUG)
     {
 	/* Set RF in EFLAGS. This will disable breakpoints for one
 	   instruction. The processor will reset it afterwards. */
-	param->frame->regs[x86_exceptionframe_t::freg] |= (1 << 16);
+	param->frame->__base.regs[X86_EXC_FREG] |= (1 << 16);
 
     } /* switch */
 
 #if defined(CONFIG_SMP) 
 
-    if (kdb_current_cpu == get_current_cpu())
+    if (atomic_read (&kdb_current_cpu) == get_current_cpu())
     {
-	kdb_current_cpu = CONFIG_SMP_MAX_CPUS;
+	atomic_set (&kdb_current_cpu, CONFIG_SMP_MAX_CPUS);
 	
-	local_apic_t<APIC_MAPPINGS_START> local_apic;
-	local_apic.broadcast_nmi();
+	local_apic_broadcast_nmi (false);
 	
     }
 #endif
 };
-
-
-/* Thin C-linkage forwarders so kdb/generic/entry.c (now C) can drive pre/post
-   while this file is still C++.  When prepost.cc itself is flipped these
-   become the definitions and kdb_t::pre/post disappear. */
-extern "C" bool kdb_pre (void)  { return kdb.pre (); }
-extern "C" void kdb_post (void) { kdb.post (); }
