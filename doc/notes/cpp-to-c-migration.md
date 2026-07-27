@@ -2325,3 +2325,41 @@ STAGED PLAN (avoids a 32-file atomic flip):
     to the existing C forms.  Remember to change the Makeconf generator filters
     from `%.cc` to `%.c` (and SOURCES) as files move -- the greps are extension-
     filtered, so a half-renamed tree silently loses command declarations.
+
+## §68 — kdb/api/v4/sigma0.cc → .c (and two shared prerequisites)
+
+Two prerequisites had to land with this file, both shared by every remaining
+kdb command file:
+
+1. **`cmd_group_t::interact` asm-name bridge.** Every submenu-invoking command
+   calls `group.interact(cg, name)`. Gave the C++ method
+   `__asm__ ("cmd_group_interact")` and declared the matching C prototype
+   (leading `self` pointer) in `src/kdb/cmd.h`. Same pattern as `input.h`.
+
+2. **`kdb_class_helper.h` needs `BEGIN_DECLS`.** The generator greps
+   `DECLARE_CMD(` out of the sources and emits plain declarations for every
+   command function. A `.c` file reads those as C (unmangled); a `.cc` file
+   that *defines* the command reads them as C++ (mangled) — so the moment a
+   command declared in one language is defined in the other, the link fails
+   (`undefined reference to cmd__prior/cmd__abort/cmd__help`). Wrapping the
+   generated header in `BEGIN_DECLS`/`END_DECLS` in `kdb/Makeconf` makes both
+   languages agree. Regenerate with `rm -f include/kdb_class_helper.h`.
+
+File-local translations: `enum sigma0_request_e` needed a `typedef` (C has no
+implicit enum-tag type name); the `word_t arg = 0` default argument was spelled
+out at both call sites; `get_dec ("Verbose level", 1)` became
+`get_dec (..., 1, NULL)` — the C form takes all three parameters, and `NULL` is
+exactly the C++ default for `defstr`.
+
+Verification: 342232 bytes, warning-clean, 0 implicit declarations, boottest
+PASS. l4test compared against a **rebuilt pre-flip kernel run through the
+identical harness** — the only diffs are the build timestamp and CPU-speed
+calibration jitter. Drove the command itself: `0` opens the sigma0 submenu,
+`?` lists `m`/`v`, `m` and `v` both execute, and `v` prints `Verbose level [1]:`
+confirming the `get_dec` default-argument translation is faithful.
+
+**Note on the l4test harness:** under `-smp 2` the interactive menu produces a
+loop of `tcb_get_cpu (self) == tcb_get_cpu (dest)` assertion failures at
+`glue/v4-x86/thread.c:285`. This is **pre-existing**, not a migration
+regression — the HEAD kernel reproduces it identically (30 assertions, 188
+lines). Use `-smp 1` when driving kdb commands interactively.

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2006-2007, 2009-2010,  Karlsruhe University
  *                
- * File path:     kdb/api/v4/sigma0.cc
+ * File path:     kdb/api/v4/sigma0.c
  * Description:   Sigma0 interaction
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -51,9 +51,10 @@ enum sigma0_request_e {
     s0_verbose =	1,
     s0_dumpmem =	2,
 };
+typedef enum sigma0_request_e sigma0_request_e;
 
 
-static void sigma0_send (sigma0_request_e type, word_t arg = 0);
+static void sigma0_send (sigma0_request_e type, word_t arg);
 
 
 DECLARE_CMD_GROUP (s0_interact);
@@ -66,7 +67,7 @@ DECLARE_CMD (cmd_sigma0, root, '0', "sigma0", "sigma0 interaction");
 
 CMD (cmd_sigma0, cg)
 {
-    return s0_interact.interact (cg, "sigma0");
+    return cmd_group_interact (&s0_interact, cg, "sigma0");
 }
 
 
@@ -78,7 +79,7 @@ DECLARE_CMD (cmd_s0_verbose, s0_interact, 'v', "verbose",
 
 CMD (cmd_s0_verbose, cg)
 {
-    sigma0_send (s0_verbose, get_dec ("Verbose level", 1));
+    sigma0_send (s0_verbose, get_dec ("Verbose level", 1, NULL));
     return CMD_NOQUIT;
 }
 
@@ -91,7 +92,7 @@ DECLARE_CMD (cmd_s0_dumpmem, s0_interact, 'm', "dumpmem",
 
 CMD (cmd_s0_dumpmem, cg)
 {
-    sigma0_send (s0_dumpmem);
+    sigma0_send (s0_dumpmem, 0);
     return CMD_NOQUIT;
 }
 
@@ -102,22 +103,22 @@ static void sigma0_ipc (word_t type, word_t arg)
 
     // Create message.
     msg_tag_t tag;
-    tag.set (0, 2, (word_t) SIGMA0_EXTPROT_ID << 4);
-    current->set_mr (0, tag.raw);
-    current->set_mr (1, type);
-    current->set_mr (2, arg);
+    msg_tag_set (&tag, 0, 2, (word_t) SIGMA0_EXTPROT_ID << 4);
+    tcb_set_mr (current, 0, tag.raw);
+    tcb_set_mr (current, 1, type);
+    tcb_set_mr (current, 2, arg);
 
     // Send to sigma0.
     threadid_t s0id;
-    s0id.set_global_id (get_kip ()->thread_info.get_user_base (), 1);
-    tag = current->do_ipc (s0id, NILTHREAD, timeout_t::never());
+    threadid_set_global_id (&s0id, thread_info_get_user_base (&get_kip ()->thread_info), 1);
+    tag = tcb_do_ipc (current, s0id, NILTHREAD, timeout_never ());
 
     // Abort kernel thread execution.
-    current->set_space (NULL);
-    current->set_state (thread_state_t::aborted);
-    get_current_scheduler ()->deschedule (current);
-    current->sched_state.init (sktcb_lo);
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_handoff);
+    tcb_set_space (current, NULL);
+    tcb_set_state (current, THREAD_STATE_ABORTED);
+    sched_deschedule (current);
+    sched_ktcb_init (&current->sched_state, sktcb_lo);
+    sched_schedule (get_idle_tcb_c (), sched_handoff);
 }
 
 
@@ -131,16 +132,16 @@ static void sigma0_ipc (word_t type, word_t arg)
 static void sigma0_send (sigma0_request_e type, word_t arg)
 {
     threadid_t ktid;
-    ktid.set_global_id (get_kip ()->thread_info.get_system_base (), 1);
+    threadid_set_global_id (&ktid, thread_info_get_system_base (&get_kip ()->thread_info), 1);
 
     // Make kernel thread invoke IPC sending stub.
-    tcb_t * tcb = tcb_t::get_tcb (ktid);
-    tcb->init_stack ();
-    tcb->notify (sigma0_ipc, (word_t) type, arg);
+    tcb_t * tcb = tcb_get_tcb (ktid);
+    tcb_init_stack (tcb);
+    tcb_notify_word2 (tcb, sigma0_ipc, (word_t) type, arg);
 
     // Make kernel thread run on highest prio.
-    tcb->sched_state.init (sktcb_hi);
-    tcb->set_space (get_kernel_space ());
-    tcb->set_state (thread_state_t::running);
-    get_current_scheduler ()->schedule (tcb, sched_current);
+    sched_ktcb_init (&tcb->sched_state, sktcb_hi);
+    tcb_set_space (tcb, get_kernel_space_c ());
+    tcb_set_state (tcb, THREAD_STATE_RUNNING);
+    sched_schedule (tcb, sched_current);
 }

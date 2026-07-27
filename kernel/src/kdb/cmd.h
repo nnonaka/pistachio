@@ -115,7 +115,7 @@ struct cmd_group_t
     const char 		*name;
 
 #if defined(__cplusplus)
-    cmd_ret_t interact (cmd_group_t * myparent, const char * myname);
+    cmd_ret_t interact (cmd_group_t * myparent, const char * myname) __asm__ ("cmd_group_interact");
     void reset (void) { cmd_set->reset (); }
     cmd_t * next (void) { return (cmd_t *) cmd_set->next (); }
 
@@ -130,6 +130,10 @@ private:
  * DECLARE_CMD_GROUP: Declares a new command group.  Initializes group
  * with a help, abort and mode switch command.
  */
+BEGIN_DECLS
+cmd_ret_t cmd_group_interact (cmd_group_t *self, cmd_group_t *myparent, const char *myname);
+END_DECLS
+
 #define DECLARE_CMD_GROUP(group)					\
     DECLARE_SET(__kdb_group_##group);					\
     cmd_group_t group = { &__kdb_group_##group, NULL, NULL };		\
