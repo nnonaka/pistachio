@@ -2208,3 +2208,60 @@ these): api/v4/sched-rr/schedule.cc (scheduler policy; hosts the sched_* wrapper
 defs), arch/x86/x64/init32.cc (32-bit boot init), generic/acpi.cc,
 platform/generic/intctrl-apic.cc.  Plus config-gated/unbuilt: io_space/mdb_io/
 vrt_io/hvm-space/timer/mdb/mdb_mem.
+
+
+## 66. acpi.cc + intctrl-apic.cc -> C: ACPI tables and the APIC/IOAPIC controller (2026-07-27, commits a3a9875 a9985cf 94c8846 855b7c0 405b689)
+
+The interrupt-controller chain, done foundation-first.  intctrl-apic.cc could not
+be flipped alone: init_arch drives the whole ACPI/MADT walk through acpi.cc's
+C++ classes (25 coupling sites), so acpi.cc had to go first.
+
+Foundations (each byte-identical, committed separately):
+  a3a9875  arch/x86/apic.h -- C forms of the 8 local_apic_t<base> template
+           methods intctrl uses (id/set_id/version/set_task_prio/mask/enable/
+           error_setup/read_error).  The template's register structs are
+           C++-only nested classes, so the C forms open-code the register
+           access over APIC_MAPPINGS_START + the regno_t offsets, with the
+           bit positions taken from the reg-struct bitfields.
+  a9985cf  generic/acpi.cc -> acpi.c + a C mirror of every ACPI table class.
+           They are plain packed data, so the C structs restate the members in
+           order.  The 7 acpi_madt_t methods got __asm__ labels so the (then
+           still C++) intctrl-apic kept linking.
+  94c8846  platform/pc99/82093.h -- C mirrors of ioapic_redir_t and i82093_t
+           (redirection-entry bitfields + the register-select/data-window pokes,
+           including the masked-entry reread quirk); acpi_rsdp_locate;
+           acpi_rsdp_rsdt/_xsdt and acpi_rsdt_find/acpi_xsdt_find/acpi_rsdt_list
+           (the acpi__sdt_t<T> template methods, one pair per pointer width).
+  855b7c0  local_apic_send_init_ipi/_send_startup_ipi; and HW_IRQ() spelled
+           `extern "C"` unconditionally -> hoisted to __HWIRQ_EXTERN_C so the
+           hwirq stubs can be emitted from a C file.
+
+The flip (405b689): intctrl_t + its nested ioapic_t/ioapic_redir_table_t mirrored
+in C (generic_intctrl_t is an empty base -> contributes nothing); the ~18 methods
+translated; APIC_PGENTSZ/ACPI_PGENTSZ were pgent_t::size_* -> X86_PGSIZE_* in C;
+LAPIC_LVT_* macros for the lvt_t values.  get_number_irqs keeps an __asm__ label
+(kdb's platform/pc99/intctrl.cc calls it); handle_irq already had one because the
+hwirq_common asm stub calls it by name with $intctrl in the first arg register.
+
+Bug class caught again: generic/intctrl.h declared handle_interrupt inside a
+BEGIN_DECLS block that was itself *inside* the `#if defined(__cplusplus)` guard,
+so the C file got an implicit declaration.  Moved out.  (Same latent-bug class as
+the earlier interrupt.c one -- always sweep for "implicit declaration" after a
+flip; it is the only signal that a cross-TU call is going out untyped.)
+
+Verified: builds 350136 (-4.5K -- no more template instantiations/mangled
+thunks), zero implicit declarations kernel-wide, warning-clean; boots through
+ACPI parsing + IOAPIC/LAPIC bringup; boottest PASS; l4test test-region
+byte-identical.  The whole test suite is delivered over IOAPIC interrupts, so
+this path is well exercised.
+
+ACCURATE REMAINING-C++ INVENTORY (from a full rebuild, grepping the compile
+lines -- earlier lists in these notes were taken by scanning kernel/src only and
+so MISSED the kdb tree entirely, which is a separate top-level directory):
+  kernel/src/api/v4/sched-rr/schedule.cc   scheduler policy (hosts sched_* wrappers)
+  kernel/src/arch/x86/x64/init32.cc        32-bit early boot init
+  kernel/kdb/**                            32 files -- the entire kernel debugger
+                                           (generic/, api/v4/, arch/x86/, glue/,
+                                           platform/pc99/)
+Total 34 files.  The kdb tree is a whole subsystem in its own right and is the
+bulk of what is left; it is also the least boot-critical (debugger only).
