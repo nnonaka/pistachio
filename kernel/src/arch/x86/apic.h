@@ -554,6 +554,64 @@ INLINE void local_apic_send_ipi (u8_t apic_id, u8_t vector)
     *cmd2 = (u32_t) apic_id << 24;	/* destination in high dword bits 56:56 */
     *cmd1 = vector;			/* raw = 0 with vector in low 8 bits */
 }
+
+/* C forms mirroring the local_apic_t<base> methods used by platform/generic/
+   intctrl-apic.c.  Register offsets are the regno_t enum values; bit positions
+   match the reg-struct bitfields (SVR vector[0:7]/enabled[8]/focus[9],
+   DEST_FORMAT model[28:31], PRIO subprio[0:3]/prio[4:7], VERSION version[0:7],
+   lint_vector masked[16]). */
+INLINE u8_t local_apic_id (void)
+{ return (u8_t) (*(volatile u32_t *)(APIC_MAPPINGS_START + 0x020) >> 24); }
+
+INLINE void local_apic_set_id (u8_t id)
+{
+    volatile u32_t *r = (volatile u32_t *)(APIC_MAPPINGS_START + 0x020);
+    *r = (*r & 0x00ffffff) | ((u32_t) id << 24);
+}
+
+INLINE u8_t local_apic_version (void)
+{ return (u8_t) (*(volatile u32_t *)(APIC_MAPPINGS_START + 0x030) & 0xff); }
+
+INLINE void local_apic_set_task_prio (u8_t prio, u8_t subprio)
+{
+    volatile u32_t *r = (volatile u32_t *)(APIC_MAPPINGS_START + 0x080);
+    *r = (*r & ~(u32_t) 0xff) | (((u32_t) (prio & 0xf)) << 4) | (u32_t) (subprio & 0xf);
+}
+
+INLINE void local_apic_mask_lvt (word_t lvt)
+{
+    volatile u32_t *r = (volatile u32_t *)(APIC_MAPPINGS_START + 0x320 + (lvt * 0x10));
+    *r |= (1u << 16);
+}
+
+INLINE bool local_apic_enable (u8_t spurious_int_vector)
+{
+    if ((local_apic_version () & 0xf0) != 0x10)
+	return false;
+    if ((spurious_int_vector & 0xf) != 0xf)
+	if (local_apic_version () != 0x14)
+	    return false;
+    /* SVR: set enabled, clear focus_processor, set vector */
+    volatile u32_t *svr = (volatile u32_t *)(APIC_MAPPINGS_START + 0x0F0);
+    *svr = (*svr & ~(u32_t) 0x3ff) | (1u << 8) | (u32_t) spurious_int_vector;
+    /* DEST_FORMAT: flat model */
+    volatile u32_t *dest = (volatile u32_t *)(APIC_MAPPINGS_START + 0x0E0);
+    *dest = (*dest & ~((u32_t) 0xf << 28)) | ((u32_t) 0xf << 28);
+    return true;
+}
+
+INLINE void local_apic_error_setup (u8_t irq)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x370) = irq;	/* LVT_ERROR */
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280) = 0;	/* ERR_STATUS */
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280) = 0;
+}
+
+INLINE word_t local_apic_read_error (void)
+{
+    *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280) = 0;
+    return *(volatile u32_t *)(APIC_MAPPINGS_START + 0x280);
+}
 #endif /* !__cplusplus */
 
 #endif /* !__ARCH__X86__APIC_H__ */
