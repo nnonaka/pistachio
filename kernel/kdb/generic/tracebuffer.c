@@ -36,6 +36,7 @@
 #include <kdb/input.h>
 #include <kdb/tracepoints.h>
 #include <kdb/tracebuffer.h>
+#include <kdb/init.h>
 #include INC_API(thread.h)
 #include INC_API(tcb.h)
 #include INC_GLUE(schedule.h)
@@ -110,6 +111,17 @@ static u64_t pmc_delta(u64_t cur, u64_t old)
 
 
 DECLARE_CMD_GROUP (tracebuf);
+
+/* The C++ tbuf_handler_t() constructor called invalidate_filters() during
+   static construction.  C has no such hook, so it is registered explicitly --
+   without it cpumask/typemask stay 0 and every record is filtered out. */
+static void tbuf_handler_invalidate_filters (void);
+
+KDEBUG_INIT (tbuf_handler_init);
+void tbuf_handler_init (void)
+{
+    tbuf_handler_invalidate_filters ();
+}
 
 
 #define TBUF_MAX_FILTERS 4

@@ -3206,3 +3206,43 @@ PASS, full l4test identical to the reference.
 **Not verified: the tracebuffer code has never been run.** The scratch kernel
 links but was not booted, so `tb`/`tp` command behaviour is unproven. That is
 the remaining gap for anyone enabling this option.
+
+## §91 — Booted the scratch tracebuffer kernel: a real bug that only running found
+
+The §90 kernel linked but had never been run. Booting it and driving the
+commands found a genuine defect that compiling could never catch.
+
+`showfilters` reported:
+
+    CPU:      [0]          <- should be ffffffffffffffff
+    Typemask: [0]          <- should be ffffffffffffffff
+
+**Cause: a dropped constructor.** `tbuf_handler_t()` called
+`invalidate_filters()` during C++ static construction, which sets
+`cpumask = typemask = ~0UL`. De-classing removed the constructor, and C
+zero-initialises the global instead — so every CPU and every record type was
+filtered *out*. The tracebuffer would have silently recorded and displayed
+nothing. §90 flagged the constructor as something needing an explicit init hook
+and then did not wire one up.
+
+Fixed by registering the init properly with the existing kdb mechanism:
+
+    KDEBUG_INIT (tbuf_handler_init);
+    void tbuf_handler_init (void) { tbuf_handler_invalidate_filters (); }
+
+`showfilters` now reports `ffffffffffffffff` for both, matching the C++
+behaviour.
+
+Commands exercised on the scratch kernel: the `tracebuffer` group help (all 12
+commands present), `counters`, `reset`, `showfilters` (which is what caught the
+bug — it is the only command that displays the constructor's work), `dump`, and
+the `tracepoints` group with `list`.
+
+**Lesson worth keeping: dropped constructors are invisible to the compiler.**
+Every other de-classing in this migration either had no constructor or had one
+already converted (`boot_cpu_ft`, `idt_init`). This is the first one that was
+silently lost, and only a command that *prints the initialised state* revealed
+it. Any remaining class with a constructor deserves the same check.
+
+Verification: main config still byte-identical (332136) with boottest PASS;
+scratch kernel 417920 bytes, boots, and behaves correctly.
