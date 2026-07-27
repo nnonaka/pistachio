@@ -103,6 +103,39 @@ typedef struct rr_scheduler_t
 } rr_scheduler_t;
 typedef rr_scheduler_t policy_scheduler_t;
 typedef void policy_sched_next_thread_t;
+
+#if defined(CONFIG_SMP)
+/* C rep of smp_requeue_t (same layout: list head + pad, lock + pad). */
+typedef struct smp_requeue_t
+{
+    tcb_t *	tcb_list;
+    char	cache_pad0[CACHE_LINE_SIZE - sizeof(tcb_t*)];
+    spinlock_t	lock;
+    char	cache_pad1[CACHE_LINE_SIZE - sizeof(spinlock_t)];
+} smp_requeue_t;
+
+INLINE bool smp_requeue_is_empty (smp_requeue_t *self)
+{ return self->tcb_list == NULL; }
+
+INLINE void smp_requeue_enqueue_head (smp_requeue_t *self, tcb_t *tcb)
+{
+    ASSERT (spinlock_is_locked (&self->lock));
+    ASSERT (tcb);
+    tcb->sched_state.requeue = self->tcb_list;
+    self->tcb_list = tcb;
+}
+
+INLINE tcb_t * smp_requeue_dequeue_head (smp_requeue_t *self)
+{
+    ASSERT (spinlock_is_locked (&self->lock));
+    ASSERT (!smp_requeue_is_empty (self));
+
+    tcb_t *tcb = self->tcb_list;
+    self->tcb_list = tcb->sched_state.requeue;
+    tcb->sched_state.requeue = NULL;
+    return tcb;
+}
+#endif /* defined(CONFIG_SMP) */
 #else /* __cplusplus: the C++ scheduler classes + inline methods */
 
 #if defined(CONFIG_SMP)
