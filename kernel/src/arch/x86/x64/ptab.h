@@ -227,6 +227,51 @@ public:
 };
 typedef struct x86_pgent_t x86_pgent_t;
 
+#if !defined(__cplusplus)
+/* C forms of the x86_pgent_t bit-twiddling methods (the pg4k/pg2m/raw union is
+   C-visible above); used by the pgent_t C API in glue/v4-x86/space.c.  size is
+   X86_PGSIZE_4K/2M. */
+INLINE bool x86_pgent_is_valid (x86_pgent_t *self)		{ return self->pg4k.present == 1; }
+INLINE bool x86_pgent_is_writable (x86_pgent_t *self)		{ return self->pg4k.rw == 1; }
+INLINE bool x86_pgent_is_executable (x86_pgent_t *self)		{ return self->pg4k.nx == 0; }
+INLINE bool x86_pgent_is_accessed (x86_pgent_t *self)		{ return self->pg4k.accessed == 1; }
+INLINE bool x86_pgent_is_dirty (x86_pgent_t *self)		{ return self->pg4k.dirty == 1; }
+INLINE bool x86_pgent_is_global (x86_pgent_t *self)		{ return self->pg4k.global == 1; }
+INLINE bool x86_pgent_is_cpulocal (x86_pgent_t *self)		{ return self->pg4k.cpulocal == 1; }
+INLINE bool x86_pgent_is_superpage (x86_pgent_t *self)		{ return self->pg2m.super == 1; }
+INLINE bool x86_pgent_is_kernel (x86_pgent_t *self)		{ return self->pg4k.privilege == 0; }
+INLINE bool x86_pgent_is_write_through (x86_pgent_t *self)	{ return self->pg4k.write_through == 1; }
+INLINE bool x86_pgent_is_cache_disabled (x86_pgent_t *self)	{ return self->pg4k.cache_disabled == 1; }
+INLINE word_t x86_pgent_is_pat (x86_pgent_t *self, word_t size)	{ return (size == X86_PGSIZE_4K ? self->pg4k.pat : self->pg2m.pat); }
+INLINE addr_t x86_pgent_get_address (x86_pgent_t *self, word_t size)
+{ return (addr_t) (size == X86_PGSIZE_4K ? (self->raw & X86_PAGE_MASK) : (self->raw & X86_SUPERPAGE_MASK)); }
+INLINE x86_pgent_t * x86_pgent_get_ptab (x86_pgent_t *self)	{ return (x86_pgent_t *) (self->raw & X86_X64_PTE_MASK); }
+INLINE u64_t x86_pgent_get_raw (x86_pgent_t *self)		{ return self->raw; }
+INLINE void x86_pgent_clear (x86_pgent_t *self)			{ self->raw = 0; }
+INLINE void x86_pgent_set_entry (x86_pgent_t *self, addr_t addr, word_t size, u64_t attrib)
+{
+    if (size == X86_PGSIZE_4K)
+	self->raw = (((u64_t) addr & X86_PAGE_MASK) | (attrib & X86_PAGE_FLAGS_MASK));
+    else
+	self->raw = (((u64_t) addr & X86_SUPERPAGE_MASK) | X86_PAGE_SUPER | (attrib & X86_SUPERPAGE_FLAGS_MASK));
+}
+INLINE void x86_pgent_set_cacheability (x86_pgent_t *self, bool cacheable, word_t size)
+{
+    self->pg4k.cache_disabled = !cacheable;
+    if (size == X86_PGSIZE_4K) self->pg4k.pat = 0; else self->pg2m.pat = 0;
+}
+INLINE void x86_pgent_set_pat (x86_pgent_t *self, word_t pat, word_t size)
+{
+    self->pg4k.write_through  = (pat & 1) ? 1 : 0;
+    self->pg4k.cache_disabled = (pat & 2) ? 1 : 0;
+    if (size == X86_PGSIZE_4K) self->pg4k.pat = (pat & 4) ? 1 : 0; else self->pg2m.pat = (pat & 4) ? 1 : 0;
+}
+INLINE void x86_pgent_set_global (x86_pgent_t *self, bool global)	{ self->pg4k.global = global; }
+INLINE void x86_pgent_set_cpulocal (x86_pgent_t *self, bool local)	{ self->pg4k.cpulocal = local; }
+INLINE void x86_pgent_set_ptab_entry (x86_pgent_t *self, addr_t addr, u32_t attrib)
+{ self->raw = ((u64_t) addr & X86_X64_PTE_MASK) | X86_PAGE_VALID | (attrib & X86_X64_PTE_FLAGS_MASK); }
+#endif /* !__cplusplus */
+
 #endif /* !ASSEMBLY */
 
 
