@@ -2446,3 +2446,54 @@ an instruction breakpoint at 0x1000628, dump again — output identical, with
 DR7 going 0x400 -> 0x402 and DR0 taking the address, so both the read path
 (X86_GET_DR) and the write path (get_choice/get_hex/x86_dr_write/X86_SET_DR)
 are covered.
+
+## §72 — kdb/api/v4/kernelinterface.cc → .c, and a real bug in shipped C code
+
+The flip itself was routine: ~20 missing C accessors added to the already
+dual-repped `api/v4/kernelinterface.h` (api_version, api_flags, clock_info,
+page_info, processor_info, kernel_id, kernel_gen_date, kernel_version,
+kernel_descriptor), plus `MEMDESC_MAX_TYPE`. `processor_info_get_procdesc` and
+`memory_info_get_memdesc` already existed as out-of-line C functions.
+
+### THE WIDE-BITFIELD SHIFT TRAP (new, and it had already bitten us)
+
+Comparing the `K` dump against the pre-flip kernel showed three wrong lines:
+
+      0x0000000000000000 - 0xffffffffffffffff   shared     (C++, correct)
+      0x0000000000000000 - 0x003fffffffffffff   shared     (C, wrong)
+
+**C and C++ disagree on the type of a bitfield expression.** For a bitfield
+wider than `int`, C++ uses the declared type (`word_t`), but GCC in C gives the
+expression the bitfield's own width. So for a 54-bit field, `f << 10` keeps only
+54 bits in C and the top 10 are discarded. Reduced case:
+
+    struct m { word_t pad:10; word_t _high : 64-10; };
+    (x._high << 10) + 0x3ff   ->  C: 003fffffffffffff   C++: ffffffffffffffff
+
+This is **not** a translation slip — the C and C++ sources were textually
+identical. Any `INLINE` C form that left-shifts a bitfield wider than `int` is
+silently wrong.
+
+Critically, this was **already live in committed code**: `memdesc_low`,
+`memdesc_high` and `memdesc_size` were converted in an earlier session and are
+called by `glue/v4-x86/init.c` when it walks memory descriptors and tests
+`memdesc_high (md) <= KERNEL_AREA_END`. Boot output happens not to change
+(the descriptors that decide the outcome are all below 2^54), so nothing ever
+failed visibly — but the truncation was real and would misjudge any region at
+or above 2^54. Fixed by casting to `word_t` before the shift, in `memdesc_low`,
+`memdesc_high`, `memdesc_size` and `page_info_get_page_size_mask`.
+
+Audited every other `self->field << n` C form in the tree: the rest
+(`id << 24`, `subid << 16`, `version << 24`, `subversion << 16`,
+`word_size << 2`) are all narrow fields that promote to `int` identically in
+both languages, so they are unaffected.
+
+**Rule going forward: when writing a C form for any bitfield wider than `int`,
+cast to `word_t` before shifting.**
+
+Verification: 337816 bytes, warning-clean, 0 implicit declarations, boottest
+PASS, boot output identical (normalised), full l4test run identical apart from
+build timestamp and CPU-frequency calibration jitter, and the `K` dump matches
+the pre-flip kernel line for line. Note the pre-existing `Local destination Id:
+FAILED` in l4test under `-smp 1` reproduces identically on the pre-flip kernel —
+not a regression.

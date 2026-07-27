@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2003,  Karlsruhe University
  *                
- * File path:     pistachio.cvs/kernel/kdb/api/v4/kernelinterface.cc
+ * File path:     pistachio.cvs/kernel/kdb/api/v4/kernelinterface.c
  * Description:   Kernel interface page dump command
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -69,23 +69,23 @@ CMD(cmd_dump_kip, cg)
 
     printf ("  %16s 0x%2x.0x%2x\n",
 	    "API version",
-	    kip->api_version.get_version (),
-	    kip->api_version.get_subversion ());
+	    api_version_get_version (&kip->api_version),
+	    api_version_get_subversion (&kip->api_version));
 
     printf ("  %16s %s-endian, %d-bit\n",
 	    "API flags",
-	    kip->api_flags.get_endian () == 0 ? "litte" : "big",
-	    kip->api_flags.get_word_size () == 0 ? 32 : 64);
+	    api_flags_get_endian (&kip->api_flags) == 0 ? "litte" : "big",
+	    api_flags_get_word_size (&kip->api_flags) == 0 ? 32 : 64);
 
     printf ("  %16s min size: %dKB, alignment: %d, UTCB size: %d\n",
 	    "UTCB area info",
-	    kip->utcb_info.get_minimal_size () / 1024,
-	    kip->utcb_info.get_utcb_alignment (),
-	    kip->utcb_info.get_utcb_size ());
+	    utcb_info_get_minimal_size (&kip->utcb_info) / 1024,
+	    utcb_info_get_utcb_alignment (&kip->utcb_info),
+	    utcb_info_get_utcb_size (&kip->utcb_info));
 
     printf ("  %16s min size: %dKB\n",
 	    "KIP area info",
-	    kip->kip_area_info.get_size () / 1024);
+	    kip_area_info_get_size (&kip->kip_area_info) / 1024);
 
     printf ("  %16s 0x%p\n",
 	    "Boot info",
@@ -93,25 +93,25 @@ CMD(cmd_dump_kip, cg)
 
     printf ("  %16s read prec: 0x%4x, schedule prec: 0x%4x\n",
 	    "Clock info",
-	    kip->clock_info.get_read_precision (),
-	    kip->clock_info.get_schedule_precision ());
+	    clock_info_get_read_precision (&kip->clock_info),
+	    clock_info_get_schedule_precision (&kip->clock_info));
 
     printf ("  %16s user base: 0x%3x, system base: 0x%3x, thread bits: %d\n",
 	    "Thread info",
-	    kip->thread_info.get_user_base (),
-	    kip->thread_info.get_system_base (),
-	    kip->thread_info.get_significant_threadbits ());
+	    thread_info_get_user_base (&kip->thread_info),
+	    thread_info_get_system_base (&kip->thread_info),
+	    thread_info_get_significant_threadbits (&kip->thread_info));
 
     printf ("  %16s sizes:", "Page info");
-    for (word_t mask = kip->page_info.get_page_size_mask () >> 10, n = 0;
+    for (word_t mask = page_info_get_page_size_mask (&kip->page_info) >> 10, n = 0;
 	 mask != 0;
 	 mask >>= 1, n++)
 	if (mask & 0x01)
 	    printf(" %s", sizenames[n]);
     printf (", rights: %s%s%s\n",
-	    kip->page_info.get_access_rights () & 4 ? "r" : "",
-	    kip->page_info.get_access_rights () & 2 ? "w" : "",
-	    kip->page_info.get_access_rights () & 1 ? "x" : "");
+	    page_info_get_access_rights (&kip->page_info) & 4 ? "r" : "",
+	    page_info_get_access_rights (&kip->page_info) & 2 ? "w" : "",
+	    page_info_get_access_rights (&kip->page_info) & 1 ? "x" : "");
 
     // Servers
     printf( "\nRoot servers:\n" );
@@ -135,20 +135,20 @@ CMD(cmd_dump_kip, cg)
 
     printf ("  %16s %d.%d\n",
 	    "Kernel ID",
-	    kdesc->kernel_id.get_id (),
-	    kdesc->kernel_id.get_subid ());
+	    kernel_id_get_id (&kdesc->kernel_id),
+	    kernel_id_get_subid (&kdesc->kernel_id));
 
     printf ("  %16s %s %d, %d\n",
 	    "Kernel gen date",	
-	    monthnames[kdesc->kernel_gen_date.get_month () - 1],
-	    kdesc->kernel_gen_date.get_day (),
-	    kdesc->kernel_gen_date.get_year ());
+	    monthnames[kernel_gen_date_get_month (&kdesc->kernel_gen_date) - 1],
+	    kernel_gen_date_get_day (&kdesc->kernel_gen_date),
+	    kernel_gen_date_get_year (&kdesc->kernel_gen_date));
 
     printf ("  %16s %d.%d.%d\n",
 	    "Kernel version",
-	    kdesc->kernel_version.get_ver (),
-	    kdesc->kernel_version.get_subver (),
-	    kdesc->kernel_version.get_subsubver ());
+	    kernel_version_get_ver (&kdesc->kernel_version),
+	    kernel_version_get_subver (&kdesc->kernel_version),
+	    kernel_version_get_subsubver (&kdesc->kernel_version));
 
     printf ("  %16s %c%c%c%c\n",
 	    "Kernel supplier",
@@ -159,10 +159,10 @@ CMD(cmd_dump_kip, cg)
 
     printf ("  %16s %s\n",
 	    "Version string",
-	    kdesc->get_version_string ());
+	    kernel_descriptor_get_version_string (kdesc));
 
     printf ("  %16s ", "Features");
-    char * f = kdesc->get_version_string ();
+    char * f = kernel_descriptor_get_version_string (kdesc);
     bool first_p = 1;
     while (*f++ != 0) {} // Skip kernel version string
     while (*f != 0)
@@ -194,8 +194,8 @@ CMD(cmd_dump_kip, cg)
 	    "Schedule", kip->schedule_syscall);
 
     // Processor descriptors
-    word_t nproc = kip->processor_info.get_num_processors ();
-    procdesc_t * pdesc = kip->processor_info.get_procdesc(0);
+    word_t nproc = processor_info_get_num_processors (&kip->processor_info);
+    procdesc_t * pdesc = processor_info_get_procdesc (&kip->processor_info, 0);
     printf ("\nProcessors %d:\n", nproc);
     for (word_t i = 0; i < nproc; i++)
     {
@@ -206,8 +206,8 @@ CMD(cmd_dump_kip, cg)
     }
 
     // Memory descriptors
-    word_t num_mdesc = kip->memory_info.get_num_descriptors ();
-    memdesc_t * mdesc = kip->memory_info.get_memdesc (0);
+    word_t num_mdesc = memory_info_get_num_descriptors (&kip->memory_info);
+    memdesc_t * mdesc = memory_info_get_memdesc (&kip->memory_info, 0);
     static const char * memtypes[] = {
 	"undefined", "conventional", "reserved", "dedicated", "shared"
     };
@@ -215,30 +215,30 @@ CMD(cmd_dump_kip, cg)
     printf ("\nMemory regions (%d):\n", num_mdesc);
     printf ("  %16s ", "Physical:");
     for (i = n = 0; i < num_mdesc; i++)
-	if (! (mdesc[i].low () == 0 && mdesc[i].high () == 0) &&
-	    ! mdesc[i].is_virtual ())
+	if (! (memdesc_low (&mdesc[i]) == 0 && memdesc_high (&mdesc[i]) == 0) &&
+	    ! memdesc_is_virtual (&mdesc[i]))
 	{
-	    word_t t = mdesc[i].type ();
+	    word_t t = memdesc_type (&mdesc[i]);
 	    if (n++ != 0) printf ("  %16s ", "");
 	    printf (t == 0xe || t == 0xf ?
 		    "0x%p - 0x%p   %s (%d)\n" : "0x%p - 0x%p   %s\n",
-		    mdesc[i].low (), mdesc[i].high (),
+		    memdesc_low (&mdesc[i]), memdesc_high (&mdesc[i]),
 		    t == 0xe ? "bootloader specific" :
 		    t == 0xf ? "architecture specific" :
-		    t >= memdesc_t::max_type ? "<unknown>" :
-		    memtypes[t], mdesc[i].subtype ());
+		    t >= MEMDESC_MAX_TYPE ? "<unknown>" :
+		    memtypes[t], memdesc_subtype (&mdesc[i]));
 	}
     if (n == 0) printf ("\n");
 
     printf ("  %16s ", "Virtual:");
     for (i = n = 0; i < num_mdesc; i++)
-	if (! (mdesc[i].low () == 0 && mdesc[i].high () == 0) &&
-	    mdesc[i].is_virtual ())
+	if (! (memdesc_low (&mdesc[i]) == 0 && memdesc_high (&mdesc[i]) == 0) &&
+	    memdesc_is_virtual (&mdesc[i]))
 	{
 	    if (n++ != 0) printf ("  %16s ", "");
-	    printf ("0x%p - 0x%p   %s\n", mdesc[i].low (), mdesc[i].high (),
-		    mdesc[i].type () >= memdesc_t::max_type ?
-		    "<unknown>" : memtypes[mdesc[i].type ()]);
+	    printf ("0x%p - 0x%p   %s\n", memdesc_low (&mdesc[i]), memdesc_high (&mdesc[i]),
+		    memdesc_type (&mdesc[i]) >= MEMDESC_MAX_TYPE ?
+		    "<unknown>" : memtypes[memdesc_type (&mdesc[i])]);
 	}
     if (n == 0) printf ("\n");
 
