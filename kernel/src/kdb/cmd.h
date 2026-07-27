@@ -44,8 +44,11 @@ typedef enum {
 } cmd_mode_t;
 
 
-/* From generic/entry.cc */
+/* Defined in generic/init.cc as the static member kdb_t::kdb_cmd_mode, which
+   carries an __asm__ label so both languages name the same symbol. */
+BEGIN_DECLS
 extern cmd_mode_t kdb_cmd_mode;
+END_DECLS
 
 
 
@@ -118,12 +121,13 @@ struct cmd_group_t
     cmd_ret_t interact (cmd_group_t * myparent, const char * myname) __asm__ ("cmd_group_interact");
     void reset (void) { cmd_set->reset (); }
     cmd_t * next (void) { return (cmd_t *) cmd_set->next (); }
-
-private:
-    cmd_t * interact_by_key (void);
-    cmd_t * interact_by_command (void);
 #endif
 };
+
+#if !defined(__cplusplus)
+INLINE void cmd_group_reset (cmd_group_t *self) { linker_set_reset (self->cmd_set); }
+INLINE cmd_t * cmd_group_next (cmd_group_t *self) { return (cmd_t *) linker_set_next (self->cmd_set); }
+#endif
 
 
 /**

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2004, 2007-2008,  Karlsruhe University
  *                
- * File path:     kdb/generic/cmd.cc
+ * File path:     kdb/generic/cmd.c
  * Description:   Command dialogs and standard command functions.
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -37,14 +37,16 @@
 
 /* Forward declared functions. */
 static int strncmp (char * s1, char * s2, int len);
+static cmd_t * interact_by_key (cmd_group_t * self);
+static cmd_t * interact_by_command (cmd_group_t * self);
 static void print_cmd_path (cmd_group_t * cg);
 
 
 
 /**
- * cmd_group_t::interact_by_key: Do user interaction by simple keystrokes.
+ * interact_by_key: Do user interaction by simple keystrokes.
  */
-cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_key (void)
+static cmd_t SECTION(SEC_KDEBUG) * interact_by_key (cmd_group_t * self)
 {
     cmd_t * cmd;
 
@@ -52,9 +54,9 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_key (void)
      * Loop until user performs a valid keystroke.
      */
     do {
-	char c = getc ();
-	reset ();
-	while ((cmd = next ()) != NULL)
+	char c = getc (true);
+	cmd_group_reset (self);
+	while ((cmd = cmd_group_next (self)) != NULL)
 	    if (cmd->key == c)
 		break;
     } while (cmd == NULL);
@@ -65,9 +67,9 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_key (void)
 
 
 /**
- * cmd_group_t::interact_by_command: Do user interaction by command line.
+ * interact_by_command: Do user interaction by command line.
  */
-cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
+static cmd_t SECTION(SEC_KDEBUG) * interact_by_command (cmd_group_t * self)
 {
     char cmdstr[64], c;
     cmd_t * cmd;
@@ -80,15 +82,15 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
     {
 	/* Loop until return key is pressed */
 	do {
-	    switch (c = getc ())
+	    switch (c = getc (true))
 	    {
 	    case KEY_TAB:
 	    {
 		/* Check number of matching commands */
 		cmd_t * match = NULL;
 		int nummatch = 0;
-		reset ();
-		while ((cmd = next ()) != NULL)
+		cmd_group_reset (self);
+		while ((cmd = cmd_group_next (self)) != NULL)
 		    if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0)
 			match = cmd, nummatch++;
 	    
@@ -105,13 +107,13 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 		{
 		    /* Print list of matching commands */
 		    putc ('\n');
-		    reset ();
-		    while ((cmd = next ()) != NULL)
+		    cmd_group_reset (self);
+		    while ((cmd = cmd_group_next (self)) != NULL)
 			if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0)
 			    printf ("%s\n", cmd->command);
 		    cmdstr[cmdlen] = 0;
 		    printf (TXT_BRIGHT);
-		    print_cmd_path (this);
+		    print_cmd_path (self);
 		    printf ("> " TXT_NORMAL "%s", cmdstr);
 		}
 		break;
@@ -136,8 +138,8 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 	} while (c != KEY_RETURN);
 
 	/* Check for matching command */
-	reset ();
-	while ((cmd = next ()) != NULL)
+	cmd_group_reset (self);
+	while ((cmd = cmd_group_next (self)) != NULL)
 	{
 	    if (strncmp ((char *) cmd->command, cmdstr, (int) cmdlen) == 0 &&
 		cmd->command[cmdlen] == 0)
@@ -148,7 +150,7 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 	if (cmdlen > 0)
 	    printf ("Unknown command: %s\n", cmdstr);
 	printf (TXT_BRIGHT);
-	print_cmd_path (this);
+	print_cmd_path (self);
 	printf ("> " TXT_NORMAL);
 	cmdlen = 0;
     }
@@ -159,29 +161,29 @@ cmd_t SECTION(SEC_KDEBUG) * cmd_group_t::interact_by_command (void)
 
 
 /**
- * cmd_group_t::interact: Perform user interaction on command group.
+ * cmd_group_interact: Perform user interaction on command group.
  */
-cmd_ret_t SECTION(SEC_KDEBUG) cmd_group_t::interact (cmd_group_t * myparent, const char * myname)
+cmd_ret_t SECTION(SEC_KDEBUG) cmd_group_interact (cmd_group_t * self, cmd_group_t * myparent, const char * myname)
 {
     cmd_t * cmd;
 
-    parent = myparent;
-    name = myname;
+    self->parent = myparent;
+    self->name = myname;
 
     for (;;)
     {
 	printf (TXT_BRIGHT);
-	print_cmd_path (this);
+	print_cmd_path (self);
 	printf ("> " TXT_NORMAL);
 
 	/* Determine command  */
-	if (kdb.kdb_cmd_mode == CMD_KEYMODE)
-	    cmd = interact_by_key ();
+	if (kdb_cmd_mode == CMD_KEYMODE)
+	    cmd = interact_by_key (self);
 	else
-	    cmd = interact_by_command ();
+	    cmd = interact_by_command (self);
 
 	/* Execute command */
-	cmd_ret_t r = cmd->function (this);
+	cmd_ret_t r = cmd->function (self);
 	if (r == CMD_QUIT)
 	    return r;
 	else if (r == CMD_ABORT)
@@ -197,10 +199,10 @@ CMD(cmd__help, cg)
 {
     cmd_t * cmd;
 
-    cg->reset ();
-    while ((cmd = cg->next ()) != NULL)
+    cmd_group_reset (cg);
+    while ((cmd = cmd_group_next (cg)) != NULL)
     {
-	if (kdb.kdb_cmd_mode == CMD_KEYMODE)
+	if (kdb_cmd_mode == CMD_KEYMODE)
 	{
 	    switch (cmd->key) {
 	    case KEY_RETURN:	printf (" RET "); break;
@@ -250,14 +252,14 @@ DECLARE_CMD (cmd_mode_switch, config, 'm', "modeswitch",
 
 CMD(cmd_mode_switch, cg)
 {
-    if (kdb.kdb_cmd_mode == CMD_KEYMODE)
+    if (kdb_cmd_mode == CMD_KEYMODE)
     {
-	kdb.kdb_cmd_mode = CMD_LINEMODE;
+	kdb_cmd_mode = CMD_LINEMODE;
 	printf ("KDB mode: Command line\n");
     }
     else
     {
-	kdb.kdb_cmd_mode = CMD_KEYMODE;
+	kdb_cmd_mode = CMD_KEYMODE;
 	printf ("KDB mode: Keystroke\n");
     }
 

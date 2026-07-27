@@ -30,7 +30,7 @@
 ##                
 ######################################################################
 SOURCES+=	kdb/generic/bootinfo.cc \
-		kdb/generic/cmd.cc \
+		kdb/generic/cmd.c \
 		kdb/generic/console.c \
 		kdb/generic/entry.cc \
 		kdb/generic/init.cc \

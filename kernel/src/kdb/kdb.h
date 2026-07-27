@@ -62,7 +62,9 @@ extern kdb_t kdb;
 class kdb_t {
 
 public:
-    static cmd_mode_t	kdb_cmd_mode;
+    /* __asm__ label so the C kdb files can name this static member
+       through the plain "kdb_cmd_mode" declaration in kdb/cmd.h. */
+    static cmd_mode_t	kdb_cmd_mode __asm__ ("kdb_cmd_mode");
     void *		kdb_param;
     tcb_t *		kdb_current;
     
