@@ -3246,3 +3246,32 @@ it. Any remaining class with a constructor deserves the same check.
 
 Verification: main config still byte-identical (332136) with boottest PASS;
 scratch kernel 417920 bytes, boots, and behaves correctly.
+
+## §92 — Collapse step 3: the four remaining kdb headers
+
+With tracebuffer.cc migrated (§90-91), the §86 blocker is gone. Re-ran the gate,
+now in its corrected form ("does *any* code, including behind an inactive
+option, still use the C++ spelling?"):
+
+  - `vrt.cc` includes none of the four.
+  - `acpi.cc` includes cmd.h and input.h; `ipc.cc` includes tracepoints.h.
+    Both were compiled as C++ to check — **already broken today**, 14 and 7
+    errors respectively, for reasons unrelated to language branching. So there
+    is no *working* C++ consumer to break.
+
+Collapsed all four: `cmd.h` (the `cmd_group_t` method block and the class/struct
+forward declarations), `input.h` (the default-argument declarations of
+get_hex/get_dec/get_space/get_thread/get_comspace/get_thrspace), `console.h`
+(`getc`'s default argument, and the typedef guard), `tracepoints.h`
+(`tracepoint_t::reset_counter`). **`src/kdb/*.h` is now free of `__cplusplus`
+guards** except `tracebuffer.h`, whose dual-rep is younger than its last C++
+consumer and can go in the next pass.
+
+Both collapses of a `#if/#else/#endif` forward-declaration block left a dangling
+`#else`/`#endif` — 63 "#endif without #if" errors. Trivially caught, but a
+reminder that deleting a guard branch means deleting *three* directives, not
+one, and that a paired-directive check is worth doing before building.
+
+Verification: main config byte-identical (332136) with boottest PASS and the
+command loop identical; the scratch CONFIG_TRACEBUFFER config also still builds
+(417920). Both configs matter now — the second is what keeps the collapse honest.

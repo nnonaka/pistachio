@@ -60,15 +60,10 @@ END_DECLS
 #define KEY_ESC			0x1b
 #define KEY_BS			0x8
 
-#if defined(__cplusplus)
-class cmd_t;
-class cmd_group_t;
-#else
 struct cmd_t;
 typedef struct cmd_t cmd_t;
 struct cmd_group_t;
 typedef struct cmd_group_t cmd_group_t;
-#endif
 
 
 
@@ -116,17 +111,10 @@ struct cmd_group_t
     cmd_group_t		*parent;
     const char 		*name;
 
-#if defined(__cplusplus)
-    cmd_ret_t interact (cmd_group_t * myparent, const char * myname) __asm__ ("cmd_group_interact");
-    void reset (void) { cmd_set->reset (); }
-    cmd_t * next (void) { return (cmd_t *) cmd_set->next (); }
-#endif
 };
 
-#if !defined(__cplusplus)
 INLINE void cmd_group_reset (cmd_group_t *self) { linker_set_reset (self->cmd_set); }
 INLINE cmd_t * cmd_group_next (cmd_group_t *self) { return (cmd_t *) linker_set_next (self->cmd_set); }
-#endif
 
 
 /**

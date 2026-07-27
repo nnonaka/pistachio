@@ -71,18 +71,11 @@ struct tracepoint_t
     word_t	enabled;
     word_t	enter_kdb;
     word_t	counter[CONFIG_SMP_MAX_CPUS];
-
-#if defined(__cplusplus)
-    void reset_counter ()
-	{ for (int cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; counter[cpu++] = 0); }
-#endif
 };
 typedef struct tracepoint_t tracepoint_t;
 
-#if !defined(__cplusplus)
 INLINE void tracepoint_reset_counter (tracepoint_t *self)
 { for (int cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; self->counter[cpu++] = 0); }
-#endif
 
 #define EXTERN_TRACEPOINT(tp)				\
     extern tracepoint_t __tracepoint_##tp

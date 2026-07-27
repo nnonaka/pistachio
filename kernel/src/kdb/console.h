@@ -34,11 +34,7 @@
 
 BEGIN_DECLS
 void putc (char) SECTION (".kdebug");
-#if defined(__cplusplus)
-char getc (bool block = true) SECTION (".kdebug");
-#else
 char getc (bool block) SECTION (".kdebug");
-#endif
 void init_console (void) SECTION (".init");
 END_DECLS
 
@@ -50,9 +46,7 @@ struct kdb_console_t
     void (*putc) (char c);
     char (*getc) (bool block);
 };
-#if !defined(__cplusplus)
 typedef struct kdb_console_t kdb_console_t;
-#endif
 
 #define KDB_NULL_CONSOLE { NULL, NULL, NULL, NULL }
 
