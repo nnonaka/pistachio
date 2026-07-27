@@ -2897,3 +2897,50 @@ headers is now dead code for this config, but other arches (powerpc, ofppc) and
 inactive options (CONFIG_TRACEPOINTS -> tracebuffer.cc, CONFIG_X_..., vrt.cc,
 acpi.cc) still reference `.cc` files, so collapsing them is a separate phase
 with its own risk profile — not something to fold into this commit.
+
+## §84 — Compile-checking the branches translated by inspection
+
+Several dead `#if` blocks were translated without ever being compiled. Checked
+each by re-running the file's *real* compile line with `-fsyntax-only` and an
+`-include` that forces the option on (placed after `-imacros config.h`, so it
+wins over the `#undef` there). **Grep for `implicit declaration` as well as
+`error:`** — a missing function is only a warning in C, so an "error-free"
+result can still mean a link failure.
+
+| forced option | file | result |
+|---------------|------|--------|
+| CONFIG_KDB_DISAS | prepost.c | **clean** |
+| CONFIG_KDB_BREAKIN | prepost.c | **clean** |
+| CONFIG_KDB_INPUT_HLT | prepost.c | **clean** |
+| CONFIG_CPU_X86_I686 | arch/x86/x86.c | **clean** |
+| CONFIG_X_CTRLXFER_MSG | api/v4/tcb.c | **real gap found — fixed** |
+| CONFIG_STATIC_TCBS | api/v4/input.c | `tcb_is_tcb` missing, exactly as §76 documented |
+| CONFIG_X86_COMPATIBILITY_MODE | prepost.c | blocked: `x32comp/` is un-migrated C++ (`namespace`) |
+| CONFIG_X_X86_HVM | arch/x86/x86.c | blocked: `arch/x86/x64/vmx.h` does not exist — HVM is x32-only |
+| CONFIG_X86_IO_FLEXPAGES | pc99/io.c | blocked: mdb/vrt subsystem is un-migrated C++ |
+
+### The real gap: ctrlxfer left as C++ inside a .c file
+
+`kdb/api/v4/tcb.c` still contained raw C++ in its `CONFIG_X_CTRLXFER_MSG`
+blocks — `tcb->flags.is_set (tcb_t::kernel_ctrlxfer_msg)`,
+`ctrlxfer_item_t::get_idname(...)`, `tcb->get_mr(...)`,
+`tcb->dump_ctrlxfer_state(...)`. It built only because the option is off. This
+was inconsistent with io.c, x86.c and linear_ptab_dump.c, where dead blocks
+*were* translated. Now translated the same way, adding
+`TCB_FLAG_KERNEL_CTRLXFER_MSG`; the names it reaches for
+(`msg_item_is_ctrlxfer_item`, `msg_item_get_ctrlxfer_id/_mask`,
+`tcb_dump_ctrlxfer_state`, `tcb_get_fault_ctrlxfer_items`,
+`ctrlxfer_item_get_idname/_hwregname/_fault_item_mask`) do not exist — the
+ctrlxfer subsystem in `api/v4/ipc.h` is still C++.
+
+Kernel size is unchanged (332136) and the `t`/`T` dumps are still identical,
+confirming the edit is confined to preprocessed-away code.
+
+### What the blocked cases actually mean
+
+Three options cannot be compile-checked in C at all, because each depends on a
+subsystem the migration never touched: `x32comp/` (compatibility mode), mdb/vrt
+(IO flexpages), and ctrlxfer. Those are the honest boundary of "the kernel is
+C" — true for this config, not for every config. HVM is different again: it is
+simply unavailable on x64 (`vmx.h` is x32-only), so its block is dead for
+reasons predating the migration.

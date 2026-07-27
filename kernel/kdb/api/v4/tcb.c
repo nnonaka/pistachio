@@ -144,11 +144,11 @@ void SECTION(SEC_KDEBUG) dump_tcb(tcb_t * tcb, bool extended)
     printf("%c", tcb_flags_is_set (tcb, TCB_FLAG_HAS_XFER_TIMEOUT)	? 'T' : 't');
     printf("%c", tcb_flags_is_set (tcb, TCB_FLAG_SCHEDULE_IN_PROGRESS) ? 'S' : 's');
 #if defined(CONFIG_X_CTRLXFER_MSG)
-    printf("%c", (tcb->flags.is_set (tcb_t::kernel_ctrlxfer_msg))      ? 'K' : 'k');
+    printf("%c", tcb_flags_is_set (tcb, TCB_FLAG_KERNEL_CTRLXFER_MSG) ? 'K' : 'k');
 #endif
     printf("]\n");
 #if defined(CONFIG_X_CTRLXFER_MSG)
-    tcb->dump_ctrlxfer_state(extended);
+    tcb_dump_ctrlxfer_state (tcb, extended);
 #endif
     printf("partner: %t, saved partner: %t, saved state: %s, scheduler: %t\n",
 	   TID(tcb_get_partner (tcb)), TID(tcb_get_saved_partner (tcb)),
@@ -195,6 +195,12 @@ void SECTION (SEC_KDEBUG) dump_utcb (tcb_t * tcb)
  * Dumps a message and buffer registers of a thread in human readable form
  * @param tcb	pointer to thread control block
  */
+/* The CONFIG_X_CTRLXFER_MSG blocks below are off in this config and are
+   translated to C by inspection only.  The ctrlxfer subsystem itself
+   (ctrlxfer_item_t in api/v4/ipc.h) is still C++ and un-migrated, so the names
+   used here -- msg_item_is_ctrlxfer_item, msg_item_get_ctrlxfer_id/_mask,
+   tcb_dump_ctrlxfer_state, tcb_get_fault_ctrlxfer_items,
+   ctrlxfer_item_get_idname/_hwregname/_fault_item_mask -- do not exist yet. */
 static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
 {
     msg_tag_t tag = get_msgtag (tcb);
@@ -245,21 +251,21 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
 	    printf(")\n");
 	}
 #if defined(CONFIG_X_CTRLXFER_MSG)
-	else if (item.is_ctrlxfer_item())
+	else if (msg_item_is_ctrlxfer_item (&item))
 	{
             
-            if (tcb->flags.is_set(tcb_t::kernel_ctrlxfer_msg))
+            if (tcb_flags_is_set (tcb, TCB_FLAG_KERNEL_CTRLXFER_MSG))
             {
-                ctrlxfer_mask_t mask = tcb->get_fault_ctrlxfer_items(item.get_ctrlxfer_id());
-                word_t id = item.get_ctrlxfer_id();
+                ctrlxfer_mask_t mask = tcb_get_fault_ctrlxfer_items (tcb, msg_item_get_ctrlxfer_id (&item));
+                word_t id = msg_item_get_ctrlxfer_id (&item);
 
-                printf( "ctrlxfer kernel msg fault %d mask %x\n", item.get_ctrlxfer_id(), (word_t) mask);
+                printf( "ctrlxfer kernel msg fault %d mask %x\n", msg_item_get_ctrlxfer_id (&item), (word_t) mask);
 
                 id = lsb(mask);	
                 
                 do {
-                    printf("\t id %d %s mask %x %x\n ", id, ctrlxfer_item_t::get_idname(id), 
-                           ctrlxfer_item_t::fault_item((ctrlxfer_item_t::id_e) id).get_ctrlxfer_mask(), (word_t) mask);
+                    printf("\t id %d %s mask %x %x\n ", id, ctrlxfer_item_get_idname (id),
+                           ctrlxfer_item_fault_item_mask (id), (word_t) mask);
                     mask -= id;
                     id = lsb(mask);	
                 } while (mask);
@@ -269,8 +275,8 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
             }
             else
             {
-                word_t mask = item.get_ctrlxfer_mask();
-                word_t id = item.get_ctrlxfer_id();
+                word_t mask = msg_item_get_ctrlxfer_mask (&item);
+                word_t id = msg_item_get_ctrlxfer_id (&item);
                 word_t num = 1, reg = 0;
                 
                 printf("ctrlxfer item: mask=%x, id=%d",  mask, id);
@@ -279,7 +285,7 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
                 {
                     if ((num-1) % 4 == 0) printf("\n\t");
                     while ((mask & 1) == 0) { mask >>= 1; reg++; } 
-                    printf("%s: %p ", ctrlxfer_item_t::get_hwregname(id, reg),  tcb->get_mr(offset + i + num));
+                    printf("%s: %p ", ctrlxfer_item_get_hwregname (id, reg), tcb_get_mr (tcb, offset + i + num));
                     mask >>= 1; reg++; num++;
                 }
                 i += num;
