@@ -37,6 +37,6 @@ SOURCES+=	src/generic/acpi.c
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")
-SOURCES+=	src/generic/vrt.cc 
+SOURCES+=	src/generic/vrt.c 
 endif
 

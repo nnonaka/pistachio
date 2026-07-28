@@ -4722,3 +4722,66 @@ transcription — but it is the next thing in the way of that config, and
 
 Gate: 0 errors, 709 symbols with identical bodies (the 709 including §112's
 three unused `pgent_*` wrappers), boots to userland.
+
+
+## §114 — The vrt component converted
+
+All five files of §108's component are C: `generic/vrt.h` (471 -> 259),
+`generic/vrt.c` (799 -> 807), `kdb/generic/vrt.c` (103 -> 104),
+`glue/v4-x86/vrt_io.h` (171 -> 150), `glue/v4-x86/vrt_io.c` (239 -> 236).
+
+This was blocked on §109-§113: `vrt.h` takes an `mdb_t::ctrl_t` by value and
+`vrt.c` drives everything through `get_mapdb()->map/flush/mapctrl`, so it could
+not be written until `mdb_ctrl_t`, `mdb_tree_map`, `mdb_tree_flush` and
+`mdb_tree_mapctrl` existed.
+
+`vrt_t` used the same ops-table shape §108 sketched and §110 had by then proved
+on `mdb_t`: nine function pointers, `ops` first so the struct reproduces the
+C++ vptr-then-data layout, and `struct vrt_io_t { vrt_t base; ... }` in place of
+`class vrt_io_t : public vrt_t`.
+
+### One simplification the ops table permitted
+
+`vrt_io_t::operator new` built a **throwaway stack instance** purely to reach a
+virtual:
+
+    vrt_io_t dummy;
+    vrt_table_t * table = new (dummy.get_radix (sizes[num_sizes - 1])) vrt_table_t;
+
+`dummy` is default-constructed, never initialised, and used only for dispatch.
+With the ops table the function is an ordinary one and is called directly. This
+is the one place the C is not a literal transcription; the behaviour is
+identical because `vrt_io_t::get_radix` reads only the file-scope `sizes[]`.
+
+### Two originals preserved rather than corrected
+
+  - `vrt_io_t::operator delete` frees `sizeof (mdb_node_t)`, not
+    `sizeof (vrt_io_t)`. Almost certainly a copy-paste slip, and a real
+    allocator bug if these are ever freed — but changing an allocation size is
+    not a transcription, so `vrt_io_free` frees exactly what the C++ did, with
+    a comment.
+  - `vrt_t::mapctrl` computes `status` but never assigns it, returning a
+    constant 0. Kept.
+
+### What verifies, and what does not
+
+`generic/vrt.c` and `kdb/generic/vrt.c` compile **0 errors, 0 warnings**
+against the gate config, which does not set `CONFIG_X86_IO_FLEXPAGES` and so
+does not drag in the io headers.
+
+`vrt_io.c` cannot be compiled yet. `glue/v4-x86/fpage.h:35` includes
+`INC_GLUE(io_fpage.h)`, so in the one configuration that builds any of this the
+whole io layer is in scope, and it is still C++:
+
+    src/glue/v4-x86/io_fpage.h   183     src/glue/v4-x86/io_space.cc  314
+    src/glue/v4-x86/io_space.h    70     src/glue/v4-x86/mdb_io.h      75
+    src/glue/v4-x86/mdb_io.cc    306                                  948
+
+Do not read `x86-x64-p4-iofp`'s error count as a regression: it went 61 -> 570
+because the build now gets *past* `vrt.h` and reaches files it never used to
+attempt. §98 records the same trap — error counts measure how far the compiler
+walked, not how broken the tree is. Objects built and files-with-errors are the
+honest measures, and the failing set is now exactly the io layer plus the
+pre-existing PIC path.
+
+Gate unaffected: 0 errors, 709 symbols with identical bodies.

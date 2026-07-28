@@ -48,7 +48,7 @@ SOURCES+=	kdb/generic/tracebuffer.c
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")
-SOURCES+=	kdb/generic/vrt.cc
+SOURCES+=	kdb/generic/vrt.c
 endif
 
 ifeq ("$(CONFIG_ACPI)","y")

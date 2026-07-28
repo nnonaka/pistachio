@@ -33,64 +33,43 @@
 #define __PLATFORM__PC99__VRT_IO_H__
 
 #include <vrt.h>
-#include <debug.h>
-#include INC_GLUE(mdb.h)
-
+#include <mdb.h>
 
 #define VRT_IO_SIZES		{ 0, 1, 3, 8, 16 }
 #define VRT_IO_NUMSIZES		4
 
-class vrt_io_t : public vrt_t
+struct space_t; typedef struct space_t space_t;
+
+/*
+ * was class vrt_io_t : public vrt_t.  The base is embedded as the first
+ * member, which reproduces the C++ layout (vptr then vrt_t's data), so a
+ * vrt_io_t * converts to its vrt_t * by address.
+ */
+struct vrt_io_t
 {
-    char name[sizeof ("io<>  ") + sizeof (word_t) * 2];
-    word_t count;
-    space_t *space;
-    
-public:
-    enum rights_e {
-	rw	   =	6,
-	fullrights =	6
-    };
-
-    static word_t sizes[];
-    static word_t num_sizes;
-
-    // Space management methods
-
-    void * operator new (word_t size);
-    void operator delete (void * v);
-    void init (void);
-    void populate_sigma0 (void);
-
-    void add_tcb (tcb_t * tcb);
-    bool remove_tcb (tcb_t * tcb);
-
-    // Generic VRT methods
-
-    word_t get_radix (word_t objsize);
-    word_t get_next_objsize (word_t objsize);
-    word_t get_vrt_size (void);
-    mdb_t * get_mapdb (void);
-    const char * get_name (void);
-
-    // Node specific methods
-    void set_object (vrt_node_t * n, word_t n_sz, word_t paddr,
-			     vrt_node_t * o, word_t o_sz, word_t access);
-
-    word_t get_address (vrt_node_t * n);
-    void dump (vrt_node_t * n);
-    word_t make_misc (vrt_node_t * obj, mdb_node_t * map);
-
-    // Helper methods
-
-    static rights_e get_rights (word_t object);
-    static word_t get_port (word_t object);
-    static void set_rights (vrt_node_t * n, rights_e rights);
-    bool is_vrt_io_t (void);
-    void set_space (space_t *s);
-    space_t * get_space ();
-
+    vrt_t	base;
+    char	name[sizeof ("io<>  ") + sizeof (word_t) * 2];
+    word_t	count;
+    space_t *	space;
 };
+typedef struct vrt_io_t vrt_io_t;
+
+/* was vrt_io_t::rights_e */
+#define VRT_IO_RW		6
+#define VRT_IO_FULLRIGHTS	6
+
+BEGIN_DECLS
+extern const vrt_ops_t vrt_io_ops;
+extern word_t vrt_io_sizes[];
+extern word_t vrt_io_num_sizes;
+
+/* space management; operator new/delete become named functions */
+vrt_io_t * vrt_io_alloc (void);
+void	   vrt_io_free (vrt_io_t *v);
+void	   vrt_io_init (vrt_io_t *self);
+void	   vrt_io_populate_sigma0 (vrt_io_t *self);
+END_DECLS
+
 
 /**
  * Get access rights for object.  Always return full rights.
@@ -99,9 +78,10 @@ public:
  *
  * @return access rights for object
  */
-INLINE vrt_io_t::rights_e vrt_io_t::get_rights (word_t object)
+INLINE word_t vrt_io_get_rights (word_t object)
 {
-    return vrt_io_t::fullrights;
+    (void) object;
+    return VRT_IO_FULLRIGHTS;
 }
 
 /**
@@ -110,8 +90,9 @@ INLINE vrt_io_t::rights_e vrt_io_t::get_rights (word_t object)
  * @param n		IO object node
  * @param rights	new access rights
  */
-INLINE void vrt_io_t::set_rights (vrt_node_t * n, rights_e rights)
+INLINE void vrt_io_set_rights (vrt_node_t *n, word_t rights)
 {
+    (void) n; (void) rights;
 }
 
 /**
@@ -122,7 +103,7 @@ INLINE void vrt_io_t::set_rights (vrt_node_t * n, rights_e rights)
  *
  * @return global thread number
  */
-INLINE word_t vrt_io_t::get_port (word_t object)
+INLINE word_t vrt_io_get_port (word_t object)
 {
     return object & 0xffff;
 }
@@ -134,19 +115,19 @@ INLINE word_t vrt_io_t::get_port (word_t object)
  *
  * @return true if this looks like a thread space, false otherwise
  */
-INLINE bool vrt_io_t::is_vrt_io_t (void)
+INLINE bool vrt_io_is_vrt_io_t (vrt_io_t *self)
 {
-    return name[0] == 'i' && name[1] == 'o' && name[2] == '<';
+    return self->name[0] == 'i' && self->name[1] == 'o' && self->name[2] == '<';
 }
 
 /**
  * Set the embedded space_t object. Needed for I/O bitmap manipulation
- * 
+ *
  * @param s	space_t object reference
  */
-INLINE void vrt_io_t::set_space (space_t * s)
+INLINE void vrt_io_set_space (vrt_io_t *self, space_t *s)
 {
-    space = s;
+    self->space = s;
 }
 
 /**
@@ -154,9 +135,9 @@ INLINE void vrt_io_t::set_space (space_t * s)
  *
  * @return space_t object reference
  */
-INLINE space_t * vrt_io_t::get_space (void)
+INLINE space_t * vrt_io_get_space (vrt_io_t *self)
 {
-    return space;
+    return self->space;
 }
 
 
@@ -164,8 +145,6 @@ INLINE space_t * vrt_io_t::get_space (void)
  * We use the VRT for IO-ports as our IO space.
  */
 typedef vrt_io_t	io_space_t;
-
-
 
 
 #endif /* !__PLATFORM__PC99__VRT_IO_H__ */

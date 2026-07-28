@@ -59,45 +59,47 @@ static const char * sz_suf (word_t sz)
 
 
 /**
- * Dump VRT table.
+ * Dump VRT table.  Was kdb_t::dump_vrt_table.
  *
  * @param vrt		VRT object
  * @param table		table to dump
  * @param depth		current recursion depth
  */
-STATIC void kdb_t::dump_vrt_table (vrt_t * vrt, vrt_table_t * t, word_t depth)
+void dump_vrt_table (vrt_t *vrt, vrt_table_t *t, word_t depth)
 {
     word_t paddr = t->prefix & ~((1UL << (t->objsize + t->radix)) - 1);
+    vrt_node_t *node;
+    word_t k;
 
     printf ("%s%p table [objsize=%d%s  radix=%d] (%p)\n",
 	    indent (depth), paddr,
 	    sz_num (t->objsize), sz_suf (t->objsize),
 	    1UL << t->radix, t);
 
-    vrt_node_t * node = t->get_node (0);
+    node = vrt_table_get_node (t, 0);
 
-    for (word_t k = 0;
-	 k < (1UL << t->get_radix ());
-	 k++, node++, paddr += (1UL << t->get_objsize ()))
+    for (k = 0;
+	 k < (1UL << vrt_table_get_radix (t));
+	 k++, node++, paddr += (1UL << vrt_table_get_objsize (t)))
     {
-	if (! node->is_valid ())
+	if (! vrt_node_is_valid (node))
 	    continue;
 
-	if (node->is_table ())
-	    dump_vrt_table (vrt, node->get_table (), depth + 1);
+	if (vrt_node_is_table (node))
+	    dump_vrt_table (vrt, vrt_node_get_table (node), depth + 1);
 	else
 	{
 	    printf ("%s%p ", indent (depth + 1), paddr);
-	    vrt->dump (node);
+	    vrt->ops->dump (vrt, node);
 	}
     }
 }
 
 /**
- * Dump VRT.
+ * Dump VRT.  Was kdb_t::dump_vrt.
  * @param vrt		VRT object
  */
-STATIC void kdb_t::dump_vrt (vrt_t * vrt)
+void dump_vrt (vrt_t *vrt)
 {
-    dump_vrt_table (vrt, vrt->get_table (), 0);
+    dump_vrt_table (vrt, vrt_get_table (vrt), 0);
 }

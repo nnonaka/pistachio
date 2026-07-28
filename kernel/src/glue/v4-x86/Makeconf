@@ -44,6 +44,6 @@ SOURCES += 	$(addprefix src/glue/$(API)-$(ARCH)/, hvm-space.cc)
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")
-SOURCES += $(addprefix src/glue/v4-x86/, mdb_io.cc vrt_io.cc io_space.cc)
+SOURCES += $(addprefix src/glue/v4-x86/, mdb_io.cc vrt_io.c io_space.cc)
 endif
 
