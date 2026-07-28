@@ -121,20 +121,20 @@ static void init_serial (void)
     if (!(fdt = get_dtree()))
         return;
     
-    if (!(node = fdt->find_subtree("/aliases")))
+    if (!(node = fdt_find_subtree (fdt, "/aliases")))
         return;
 
-    if (! (prop = fdt->find_property_node(node, "serial0")) )
+    if (! (prop = fdt_find_property_node_in (fdt, node, "serial0")) )
         return;
 
-    if (!(node = fdt->find_subtree(prop->get_string())))
+    if (!(node = fdt_find_subtree (fdt, fdt_property_get_string (prop))))
         return;
     
-    if (! (prop = fdt->find_property_node(node, "reg")) )
+    if (! (prop = fdt_find_property_node_in (fdt, node, "reg")) )
         return;
     
     // Serial bus is beyond 4GB
-    u64_t comport_phys = 0x100000000ULL | (u64_t) prop->get_word(0);
+    u64_t comport_phys = 0x100000000ULL | (u64_t) fdt_property_get_word (prop, 0);
     comport = (u8_t*)setup_console_mapping(comport_phys, 12);
     
 #endif /* CONFIG_COMPORT == 0 */
@@ -207,21 +207,19 @@ static bool check_breakin_serial ()
 **
 */
 
-class bgp_mailbox_t 
+enum mb_commands_e {
+    cmd_print = 2,
+};
+
+struct bgp_mailbox_t
 {
-public:
     volatile unsigned short command;	// comand; upper bit=ack
     unsigned short len;			// length (does not include header)
     unsigned short result;		// return code from reader
     unsigned short crc;			// 0=no CRC
     char data[0];
-
-public:
-    enum mb_commands_e {
-	cmd_print = 2,
-    };
-
 };
+typedef struct bgp_mailbox_t bgp_mailbox_t;
 
 typedef struct jtag_console_t 
 {
@@ -251,7 +249,7 @@ typedef struct jtag_console_t
 	
 	    if (mb->len >= size || c == '\n')
 	    {
-		send_command(bgp_mailbox_t::cmd_print);
+		send_command(cmd_print);
 		mb->len = 0;
 	    }
 	}
@@ -263,26 +261,26 @@ typedef struct jtag_console_t
 		return true;
 	    
 	    fdt_property_t *prop;
-	    fdt_node_t *node = fdt->find_subtree("/jtag/console0");
+	    fdt_node_t *node = fdt_find_subtree (fdt, "/jtag/console0");
 
-	    if (! (prop = fdt->find_property_node(node, "reg")) )
+	    if (! (prop = fdt_find_property_node_in (fdt, node, "reg")) )
 		return false;
 
-	    size = prop->get_word(2);
-	    mb_phys = prop->get_u64(0);
+	    size = fdt_property_get_word (prop, 2);
+	    mb_phys = fdt_property_get_u64 (prop, 0);
 #warning fix uboot
 	    mb_phys |= 0x700000000ULL;
 
-	    if (! (prop = fdt->find_property_node(node, "dcr-reg")) )
+	    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-reg")) )
 		return false;
 
-	    dcr_set = prop->get_word(0);
-	    dcr_clear = prop->get_word(1);
+	    dcr_set = fdt_property_get_word (prop, 0);
+	    dcr_clear = fdt_property_get_word (prop, 1);
 	    
-	    if (! (prop = fdt->find_property_node(node, "dcr-mask")) )
+	    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-mask")) )
 		return false;
 	    
-	    dcr_mask = prop->get_word(0);
+	    dcr_mask = fdt_property_get_word (prop, 0);
 
 	    mb = (bgp_mailbox_t*)setup_console_mapping(mb_phys, 14);
 	    return true;
@@ -361,23 +359,26 @@ struct bgtree_header_t
 	} bcast;
     };
 
-    void set_p2p(word_t pclass, word_t vector, bool irq = false)
-	{
-	    raw = 0;
-	    p2p.pclass = pclass;
-	    p2p.irq = irq;
-	    p2p.vector = vector;
-	    p2p.p2p = 1;
-	}
-
-    void set_broadcast(word_t pclass, word_t tag = 0, bool irq = false)
-	{
-	    raw = 0;
-	    bcast.pclass = pclass;
-	    bcast.irq = irq;
-	    bcast.tag = tag;
-	}
 } __attribute__((packed));
+typedef struct bgtree_header_t bgtree_header_t;
+
+/* irq defaulted to false, tag to 0. */
+INLINE void bgtree_header_set_p2p (bgtree_header_t *self, word_t pclass, word_t vector, bool irq)
+{
+    self->raw = 0;
+    self->p2p.pclass = pclass;
+    self->p2p.irq = irq;
+    self->p2p.vector = vector;
+    self->p2p.p2p = 1;
+}
+
+INLINE void bgtree_header_set_broadcast (bgtree_header_t *self, word_t pclass, word_t tag, bool irq)
+{
+    self->raw = 0;
+    self->bcast.pclass = pclass;
+    self->bcast.irq = irq;
+    self->bcast.tag = tag;
+}
 
 
 struct bgtree_status_t 
@@ -397,6 +398,7 @@ struct bgtree_status_t
 	};
     };
 } __attribute__((packed));
+typedef struct bgtree_status_t bgtree_status_t;
 
 /* link layer */
 struct bglink_hdr_t
@@ -409,83 +411,82 @@ struct bglink_hdr_t
     u16_t lnk_proto;	// 1 eth, 2 con, 3...
     u16_t optional;	// for encapsulated protocol use
 } __attribute__((packed));
+typedef struct bglink_hdr_t bglink_hdr_t;
 
-class bgtree_t
+/* Was bgtree_t's nested channel_t plus its static helpers.  C has no nested
+   types or class-scoped statics, so both move out. */
+INLINE void bgtree_fpu_memcpy_16 (void *dst, void *src)
 {
-public:
-    static void fpu_memcpy_16(void *dst, void *src)
-	{
-	    asm volatile("lfpdx 0,0,%0\n"
-			 "stfpdx 0,0,%1\n"
-			 :
-			 : "b"(src), "b"(dst)
-			 : "fr0", "memory");
-	}
+    asm volatile("lfpdx 0,0,%0\n"
+		 "stfpdx 0,0,%1\n"
+		 :
+		 : "b"(src), "b"(dst)
+		 : "fr0", "memory");
+}
 
-    static void in128(addr_t reg, void *ptr)
-	{ fpu_memcpy_16(ptr, reg); }
+INLINE void in128 (addr_t reg, void *ptr)  { bgtree_fpu_memcpy_16(ptr, reg); }
+INLINE void out128 (addr_t reg, void *ptr) { bgtree_fpu_memcpy_16(reg, ptr); }
 
-    static void out128(addr_t reg, void *ptr)
-	{ fpu_memcpy_16(reg, ptr); }
+struct bgtree_channel_t
+{
+    addr_t base;		// virtual base address of tree
+    paddr_t base_phys;		// phys location
+};
+typedef struct bgtree_channel_t bgtree_channel_t;
 
-    // device registers
-    struct channel_t 
-    {
-    public:
-	addr_t base;		// virtual base address of tree
-	paddr_t base_phys;	// phys location
-	
-	void send_header(bgtree_header_t *hdr)
-	    { out_be32(addr_offset(base, BGP_TRx_HI), hdr->raw); }
+INLINE void bgtree_channel_send_header (bgtree_channel_t *self, bgtree_header_t *hdr)
+{ out_be32(addr_offset(self->base, BGP_TRx_HI), hdr->raw); }
 
-	void send_payload_block(void *payload)
-	    { out128(addr_offset(base, BGP_TRx_DI), payload); }
+INLINE void bgtree_channel_send_payload_block (bgtree_channel_t *self, void *payload)
+{ out128(addr_offset(self->base, BGP_TRx_DI), payload); }
 
-	void rcv_payload_block(void *payload)
-	    { in128(addr_offset(base, BGP_TRx_DR), payload); }
+INLINE void bgtree_channel_rcv_payload_block (bgtree_channel_t *self, void *payload)
+{ in128(addr_offset(self->base, BGP_TRx_DR), payload); }
 
-	bgtree_header_t get_header()
-	    { 
-		bgtree_header_t hdr;
-		hdr.raw = in_be32(addr_offset(base, BGP_TRx_HR)); 
-		return hdr;
-	    }
-	
-	bgtree_status_t get_status()
-	    { 
-		bgtree_status_t status;
-		status.raw = in_be32(addr_offset(base, BGP_TRx_Sx)); 
-		return status;
-	    }
+INLINE bgtree_header_t bgtree_channel_get_header (bgtree_channel_t *self)
+{
+    bgtree_header_t hdr;
+    hdr.raw = in_be32(addr_offset(self->base, BGP_TRx_HR));
+    return hdr;
+}
 
-	bool init(int channel, paddr_t pbase, size_t size);
-	bool send(bgtree_header_t hdr, bglink_hdr_t &lnkhdr, void *payload);
-	bool poll(bglink_hdr_t *lnkhdr, void *payload);
-    };
+INLINE bgtree_status_t bgtree_channel_get_status (bgtree_channel_t *self)
+{
+    bgtree_status_t status;
+    status.raw = in_be32(addr_offset(self->base, BGP_TRx_Sx));
+    return status;
+}
 
-    channel_t channel[BGP_NUM_CHANNEL];
+bool bgtree_channel_init (bgtree_channel_t *self, int channel, paddr_t pbase, size_t size);
+/* lnkhdr was a bglink_hdr_t& */
+bool bgtree_channel_send (bgtree_channel_t *self, bgtree_header_t hdr,
+			  bglink_hdr_t *lnkhdr, void *payload);
+bool bgtree_channel_poll (bgtree_channel_t *self, bglink_hdr_t *lnkhdr, void *payload);
+
+struct bgtree_t
+{
+    bgtree_channel_t channel[BGP_NUM_CHANNEL];
 
     word_t dcr_base;
     word_t curr_conn;
     word_t node_id;	// self
-
-public:
-    bool init(fdt_t *fdt);
-    void init_link_hdr(bglink_hdr_t *hdr) 
-	{
-	    hdr->src_key = this->node_id;
-	    hdr->conn_id = this->curr_conn++;
-	}
-	    
-	
-
-    /* global instanciation */
-    static bgtree_t tree;
-    static bgtree_t* get_device(fdt_t *fdt, word_t handle) 
-	{ return &tree; }
 };
+typedef struct bgtree_t bgtree_t;
 
-bgtree_t bgtree_t::tree;
+bool bgtree_init (bgtree_t *self, fdt_t *fdt);
+
+INLINE void bgtree_init_link_hdr (bgtree_t *self, bglink_hdr_t *hdr)
+{
+    hdr->src_key = self->node_id;
+    hdr->conn_id = self->curr_conn++;
+}
+
+/* was the static member bgtree_t::tree */
+extern bgtree_t bgtree_tree;
+
+INLINE bgtree_t * bgtree_get_device (fdt_t *fdt, word_t handle) { return &bgtree_tree; }
+
+bgtree_t bgtree_tree;
 
 typedef struct {
     word_t data[4];
@@ -501,87 +502,87 @@ static inline void load_fr0(fpu_reg_t *fp)
     asm volatile("lfpdx 0,0,%0\n" : : "b"(fp));
 }
 
-bool bgtree_t::channel_t::send(bgtree_header_t hdr, bglink_hdr_t &lnkhdr, void *payload)
+bool bgtree_channel_send (bgtree_channel_t *self, bgtree_header_t hdr, bglink_hdr_t *lnkhdr, void *payload)
 {
-    if (get_status().inj_hdr >= 8)
+    if (bgtree_channel_get_status (self).inj_hdr >= 8)
 	return false;
 
     // XXX: fix stack alignment
     static fpu_reg_t fp0;
     store_fr0(&fp0);
 
-    send_header(&hdr);
-    send_payload_block((char*)&lnkhdr);
+    bgtree_channel_send_header (self, &hdr);
+    bgtree_channel_send_payload_block (self, (char*)&lnkhdr);
     for (int idx = 0; idx < 15; idx++) 
-	send_payload_block((char*)payload + idx * 16);
+	bgtree_channel_send_payload_block (self, (char*)payload + idx * 16);
     load_fr0(&fp0);
     return true;
 }
 
-bool bgtree_t::channel_t::poll(bglink_hdr_t *lnkhdr, void *payload)
+bool bgtree_channel_poll (bgtree_channel_t *self, bglink_hdr_t *lnkhdr, void *payload)
 {
     bgtree_header_t hdr;
-    if (get_status().rcv_hdr == 0)
+    if (bgtree_channel_get_status (self).rcv_hdr == 0)
 	return false;
 
     // XXX: fix stack alignment
     static fpu_reg_t fp0;
     store_fr0(&fp0);
 
-    hdr = get_header();
-    rcv_payload_block(lnkhdr);
+    hdr = bgtree_channel_get_header (self);
+    bgtree_channel_rcv_payload_block (self, lnkhdr);
     for (int i = 0; i < 15; i++)
-	rcv_payload_block((char*)payload + i * 16);
+	bgtree_channel_rcv_payload_block (self, (char*)payload + i * 16);
     load_fr0(&fp0);
     return true;
 }
 
-bool bgtree_t::channel_t::init(int channel, paddr_t pbase, size_t size)
+bool bgtree_channel_init (bgtree_channel_t *self, int channel, paddr_t pbase, size_t size)
 {
-    base_phys = pbase;
-    base = setup_console_mapping(base_phys, 12);
+    self->base_phys = pbase;
+    self->base = setup_console_mapping(self->base_phys, 12);
     return true;
 }
 
 
-bool bgtree_t::init(fdt_t *fdt)
+bool bgtree_init (bgtree_t *self, fdt_t *fdt)
 {
     fdt_property_t *prop;
 
-    fdt_node_t *node = fdt->find_subtree("/plb/tree");
+    fdt_node_t *node = fdt_find_subtree (fdt, "/plb/tree");
     if (!node)
 	return false;
 
-    if (! (prop = fdt->find_property_node(node, "dcr-reg")) )
+    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-reg")) )
 	return false;
-    dcr_base = prop->get_word(0);
+    self->dcr_base = fdt_property_get_word (prop, 0);
 
-    if (! (prop = fdt->find_property_node(node, "nodeid")) )
+    if (! (prop = fdt_find_property_node_in (fdt, node, "nodeid")) )
 	return false;
-    node_id = prop->get_word(0);
+    self->node_id = fdt_property_get_word (prop, 0);
 
-    if (! (prop = fdt->find_property_node(node, "reg")) )
+    if (! (prop = fdt_find_property_node_in (fdt, node, "reg")) )
 	return false;
 
     for (int chnidx = 0; chnidx < 2; chnidx++)
-	channel[chnidx].init(chnidx, prop->get_u64(chnidx * 3), 
-			     prop->get_word(chnidx * 3 + 2));
+	bgtree_channel_init (&self->channel[chnidx], chnidx,
+			     fdt_property_get_u64 (prop, chnidx * 3),
+			     fdt_property_get_word (prop, chnidx * 3 + 2));
 
     /* disable send and receive IRQs */
-    ppc_set_dcrx(dcr_base + 0x45, 0);
-    ppc_set_dcrx(dcr_base + 0x49, 0);
+    ppc_set_dcrx(self->dcr_base + 0x45, 0);
+    ppc_set_dcrx(self->dcr_base + 0x49, 0);
 
     /* clear anything that may be pending */
-    ppc_get_dcrx(dcr_base + 0x44);
-    ppc_get_dcrx(dcr_base + 0x48);
+    ppc_get_dcrx(self->dcr_base + 0x44);
+    ppc_get_dcrx(self->dcr_base + 0x48);
 
     return true;
 }
 
 #define BUF_SIZE		240
 
-class tree_console_t {
-private:
+struct tree_console_t {
     // console buffers...
     char out_buf[BUF_SIZE] __attribute__((aligned(16)));
     char in_buf[BUF_SIZE] __attribute__((aligned(16)));
@@ -597,91 +598,96 @@ private:
     word_t channel;
     bgtree_t *tree;
     spinlock_t lock;
+};
+typedef struct tree_console_t tree_console_t;
 
-public:
-    bool init(fdt_t *fdt);
-    void flush_outbuf();
-    void poll();
-    void inject(except_regs_t *frame);
+static tree_console_t tree_console;
 
-    void putc(char c)
-	{ 
-	    lock.lock();
-	    out_buf[out_len++] = c;
-	    if (out_len >= BUF_SIZE || c == '\n')
-		flush_outbuf();
-	    lock.unlock();
-	}
+bool tree_console_init (tree_console_t *self, fdt_t *fdt);
+void tree_console_flush_outbuf (tree_console_t *self);
+void tree_console_poll (tree_console_t *self);
+void tree_console_inject (tree_console_t *self, except_regs_t *frame);
 
-    char getc(bool block)
-	{
-	    char c = 0;
-	    lock.lock();
+INLINE void tree_console_putc (tree_console_t *self, char c)
+{
+    spinlock_lock (&self->lock);
+    self->out_buf[self->out_len++] = c;
+    if (self->out_len >= BUF_SIZE || c == '\n')
+	tree_console_flush_outbuf (self);
+    spinlock_unlock (&self->lock);
+}
 
-            getc_blocked = true;
-	    do {
-		flush_outbuf(); // make sure the other end sees all output...
-		poll();
-	    } while (block && in_len == 0);
-            getc_blocked = false;
+INLINE char tree_console_getc (tree_console_t *self, bool block)
+{
+    char c = 0;
 
-	    if (in_len)
-	    {
-		c = in_buf[in_head];
-		in_head = (in_head + 1) % BUF_SIZE;
-		in_len--;
-	    }
-	    lock.unlock();
-	    return c;
-	}
+    spinlock_lock (&self->lock);
 
-    void enqueue_char(char c)
-	{ 
-	    if (in_len >= BUF_SIZE)
-		return; // just drop
-	    in_buf[(in_head + in_len) % BUF_SIZE] = c;
-	    in_len++;
-	}
+    getc_blocked = true;
+    do {
+	tree_console_flush_outbuf (self); // make sure the other end sees all output...
+	tree_console_poll (self);
+    } while (block && self->in_len == 0);
+    getc_blocked = false;
 
-    void enqueue_packet(bglink_hdr_t *lnkhdr, char *buf)
-	{
-	    if (lnkhdr->lnk_proto != proto_id ||
-		lnkhdr->dst_key != rcv_id ||
-		lnkhdr->src_key == tree->node_id)
-		return;
+    if (self->in_len)
+    {
+	c = self->in_buf[self->in_head];
+	self->in_head = (self->in_head + 1) % BUF_SIZE;
+	self->in_len--;
+    }
+    spinlock_unlock (&self->lock);
+    return c;
+}
 
-	    int len = min(lnkhdr->optional - 240 * lnkhdr->this_pkt, 240);
-	    for (int i = 0; i < len; i++)
-		enqueue_char(buf[i]);
-	}
+INLINE void tree_console_enqueue_char (tree_console_t *self, char c)
+{
+    if (self->in_len >= BUF_SIZE)
+	return; // just drop
+    self->in_buf[(self->in_head + self->in_len) % BUF_SIZE] = c;
+    self->in_len++;
+}
 
-    bool check_breakin()
-	{
-            bool ret = false;
+INLINE void tree_console_enqueue_packet (tree_console_t *self, bglink_hdr_t *lnkhdr, char *buf)
+{
+    int len, i;
+
+    if (lnkhdr->lnk_proto != self->proto_id ||
+	lnkhdr->dst_key != self->rcv_id ||
+	lnkhdr->src_key == self->tree->node_id)
+	return;
+
+    len = min (lnkhdr->optional - 240 * lnkhdr->this_pkt, 240);
+    for (i = 0; i < len; i++)
+	tree_console_enqueue_char (self, buf[i]);
+}
+
+INLINE bool tree_console_check_breakin (tree_console_t *self)
+{
+    bool ret = false;
 #if defined(CONFIG_KDB_BREAKIN_ESCAPE)
-	    lock.lock();
-	    poll();
-	    ret = in_len != 0 && in_buf[in_head] == 0x1b;
-	    lock.unlock();
+    spinlock_lock (&self->lock);
+    tree_console_poll (self);
+    ret = self->in_len != 0 && self->in_buf[self->in_head] == 0x1b;
+    spinlock_unlock (&self->lock);
 #endif
-            return ret;
-	}
-} tree_console;
+    return ret;
+}
 
 
-NOINLINE void tree_console_t::poll()
+NOINLINE void tree_console_poll (tree_console_t *self)
 {
     static char buf[240] __attribute__((aligned(16)));
     static bglink_hdr_t lnkhdr __attribute__((aligned(16)));
 
-    while (tree->channel[channel].poll(&lnkhdr, buf))
-	enqueue_packet(&lnkhdr, buf);
+    while (bgtree_channel_poll (&self->tree->channel[self->channel], &lnkhdr, buf))
+	tree_console_enqueue_packet (self, &lnkhdr, buf);
 
-    while (tree->channel[channel == 0 ? 1 : 0].poll(&lnkhdr, buf)) 
-    { /* deplete the other channel */ }
+    while (bgtree_channel_poll (&self->tree->channel[self->channel == 0 ? 1 : 0], &lnkhdr, buf)) 
+    { /* deplete the other self->channel */ }
 }
 
-NOINLINE void tree_console_t::inject(except_regs_t *frame)
+NOINLINE void tree_console_inject (tree_console_t *self, except_regs_t *frame)
 {
     static char buf[256] __attribute__((aligned(16)));
     char *c = buf;
@@ -707,83 +713,87 @@ NOINLINE void tree_console_t::inject(except_regs_t *frame)
 	: [offset] "b" (16)
 	);
 
-    enqueue_packet(reinterpret_cast<bglink_hdr_t*>(buf), &buf[16]);
+    tree_console_enqueue_packet (self, (bglink_hdr_t*)(buf), &buf[16]);
 }
 
-NOINLINE void tree_console_t::flush_outbuf()
+NOINLINE void tree_console_flush_outbuf (tree_console_t *self)
 {
     static bglink_hdr_t lnkhdr __attribute__((aligned(16)));
 
-    if (!out_len)
+    if (!self->out_len)
 	return;
 
-    tree->init_link_hdr(&lnkhdr);
+    bgtree_init_link_hdr (self->tree, &lnkhdr);
 
-    lnkhdr.dst_key = send_id;
+    lnkhdr.dst_key = self->send_id;
     lnkhdr.this_pkt = 0;
     lnkhdr.total_pkt = 1;
-    lnkhdr.lnk_proto = proto_id;
-    lnkhdr.optional = out_len;
+    lnkhdr.lnk_proto = self->proto_id;
+    lnkhdr.optional = self->out_len;
 	
     bgtree_header_t hdr;
-    if (dest_node == -1)
-	hdr.set_broadcast(route);
+    /* set_broadcast's tag and both irq arguments defaulted. */
+    if (self->dest_node == -1)
+	bgtree_header_set_broadcast (&hdr, self->route, 0, false);
     else
-	hdr.set_p2p(route, dest_node);
+	bgtree_header_set_p2p (&hdr, self->route, self->dest_node, false);
 
-    tree->channel[channel].send(hdr, lnkhdr, out_buf);
+    bgtree_channel_send (&self->tree->channel[self->channel], hdr, &lnkhdr, self->out_buf);
 
-    memset(out_buf, 0, BUF_SIZE);
-    out_len = 0;
+    memset(self->out_buf, 0, BUF_SIZE);
+    self->out_len = 0;
 }
 
-int atoi(char* &string)
+/* string was a char*& -- atoi advances the caller's pointer past the digits. */
+int atoi(char **string)
 {
     int val = 0;
-    while (*string >= '0' && *string <= '9')
+    while (**string >= '0' && **string <= '9')
     {
-	val = val * 10 + (*string - '0');
-	string++;
+	val = val * 10 + (**string - '0');
+	(*string)++;
     }
     return val;
 }
 
-NOINLINE bool tree_console_t::init(fdt_t *fdt)
+NOINLINE bool tree_console_init (tree_console_t *self, fdt_t *fdt)
 {
     fdt_property_t *prop;
 
-    fdt_node_t *tty = fdt->find_subtree("/plb/tty");
+    fdt_node_t *tty = fdt_find_subtree (fdt, "/plb/tty");
     if (!tty)
 	return false;
 
     /* figure the configuration of the tty first so that we can map
-     * the correct tree channel */
-    if (! (prop = fdt->find_property_node(tty, "tree-route")) )
+     * the correct self->tree self->channel */
+    if (! (prop = fdt_find_property_node_in (fdt, tty, "self->tree-self->route")) )
 	return false;
-    route = prop->get_word(0);
+    self->route = fdt_property_get_word (prop, 0);
 
-    if (! (prop = fdt->find_property_node(tty, "link-protocol")) )
+    if (! (prop = fdt_find_property_node_in (fdt, tty, "link-protocol")) )
 	return false;
-    proto_id = prop->get_word(0);
+    self->proto_id = fdt_property_get_word (prop, 0);
     
-    if (! (prop = fdt->find_property_node(tty, "tree-channel")) )
+    if (! (prop = fdt_find_property_node_in (fdt, tty, "self->tree-self->channel")) )
 	return false;
-    channel = prop->get_word(0);
+    self->channel = fdt_property_get_word (prop, 0);
 
-    send_id = rcv_id = 2;
-    dest_node = 0;
+    self->send_id = self->rcv_id = 2;
+    self->dest_node = 0;
 
-    fdt_node_t *l4node = fdt->find_subtree("/l4");
-    if ( l4node && (prop = fdt->find_property_node(l4node, "dbgcon")) )
+    fdt_node_t *l4node = fdt_find_subtree (fdt, "/l4");
+    if ( l4node && (prop = fdt_find_property_node_in (fdt, l4node, "dbgcon")) )
     {
 	/* format: sndid,rcvid,dest */
-	char *string = prop->get_string();
-	send_id = atoi(string);
-	rcv_id = atoi(++string);
-	dest_node = atoi(++string);
+	char *string = fdt_property_get_string (prop);
+	self->send_id = atoi(&string);
+	++string;
+	self->rcv_id = atoi(&string);
+	++string;
+	self->dest_node = atoi(&string);
     }
 
-    tree = bgtree_t::get_device(fdt, 0);
+    self->tree = bgtree_get_device (fdt, 0);
 
 #warning hard coded console
     return true;
@@ -793,8 +803,8 @@ void init_bgtree()
 {
     static bool initialized = false;
     if (!initialized) {
-	bgtree_t::tree.init(get_dtree());
-	tree_console.init(get_dtree());
+	bgtree_init (&bgtree_tree, get_dtree());
+	tree_console_init (&tree_console, get_dtree());
 	initialized = true;
     }
 }
@@ -802,14 +812,14 @@ void init_bgtree()
 void putc_bgtree(char c)
 {
 #if defined(CONFIG_KDB_BREAKIN)
-    tree_console.poll(); /* first empty the fifos */
+    tree_console_poll (&tree_console); /* first empty the fifos */
 #endif
-    tree_console.putc(c);
+    tree_console_putc (&tree_console, c);
 }
 
 char getc_bgtree(bool block)
 {
-    return tree_console.getc(block);
+    return tree_console_getc (&tree_console, block);
 }
 #endif
 
@@ -817,7 +827,7 @@ char getc_bgtree(bool block)
 void kdb_inject(except_regs_t* frame)
 {
 #if defined(CONFIG_KDB_CONS_BGP_TREE)
-    tree_console.inject(frame);
+    tree_console_inject (&tree_console, frame);
 #endif
 }
 
@@ -826,7 +836,7 @@ void kdb_inject(except_regs_t* frame)
 void kdebug_check_breakin (void)
 {
 #if defined(CONFIG_KDB_CONS_BGP_TREE)
-    if (tree_console.check_breakin())
+    if (tree_console_check_breakin (&tree_console))
 	enter_kdebug("breakin");
 #endif
 

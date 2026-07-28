@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/platform/ppc44x/, io.cc)
+SOURCES += $(addprefix kdb/platform/ppc44x/, io.c)
 
 
 
