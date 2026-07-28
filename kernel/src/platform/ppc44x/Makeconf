@@ -33,7 +33,7 @@
 SOURCES += $(addprefix src/platform/ppc44x/, startup.S init.c fdt.c)
 
 ifeq ("$(CONFIG_SUBPLAT_440_BGP)","y")
-SOURCES += $(addprefix src/platform/ppc44x/,bic.cc)
+SOURCES += $(addprefix src/platform/ppc44x/,bic.c)
 endif
 
 ifeq ("$(CONFIG_SUBPLAT_440_EBONY)","y")

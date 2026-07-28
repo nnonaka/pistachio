@@ -45,12 +45,12 @@ intctrl_t intctrl;
 
 DECLARE_TRACEPOINT(SMP_IPI);
 
-int bgic_t::get_pending_irq(word_t cpu)
+int bgic_get_pending_irq (bgic_t *self, word_t cpu)
 {
     int group = -1, irq = -1;
     word_t hierarchy, mask = 0;
     
-    hierarchy = core_non_crit[cpu];
+    hierarchy = self->core_non_crit[cpu];
     sync();
 
     // handle spurious interrupts...
@@ -62,7 +62,7 @@ int bgic_t::get_pending_irq(word_t cpu)
     if (EXPECT_FALSE(group >= BGP_MAX_GROUPS))
 	goto out;
     
-    mask = groups[group].noncrit_mask[cpu];
+    mask = self->groups[group].noncrit_mask[cpu];
     sync();
 
     if (mask == 0)
@@ -74,11 +74,11 @@ int bgic_t::get_pending_irq(word_t cpu)
     return irq;
 }
 
-void bgic_t::dump()
+void bgic_dump (bgic_t *self)
 {
     for (int i = 0; i < BGP_MAX_GROUPS; i++)
     {
-	bgic_group_t *g = &groups[i];
+	bgic_group_t *g = &self->groups[i];
 	printf("%02x: [%p] S:%08x: T:[%08x %08x %08x %08x] M:[%08x %08x %08x %08x]\n",
 	       i, g, g->status,
 	       g->target_irq[0], g->target_irq[1], g->target_irq[2], g->target_irq[3],
@@ -86,65 +86,71 @@ void bgic_t::dump()
     }
 }
 
-void SECTION (".init") intctrl_t::init_arch()
+void SECTION (".init") intctrl_init_arch (void)
 {
+    intctrl_t *self = get_interrupt_ctrl();
+
     fdt_t *fdt = get_dtree();
 
-    fdt_header_t *hdr = fdt->find_subtree("/interrupt-controller");
+    fdt_header_t *hdr = fdt_find_subtree (fdt, "/interrupt-controller");
     if (!hdr)
 	panic("Couldn't find interrupt controller in FDT\n");
 
-    fdt_property_t *prop = fdt->find_property_node(hdr, "compatible");
+    fdt_property_t *prop = fdt_find_property_node_in (fdt, hdr, "compatible");
 
-    if (!prop || strcmp(prop->get_string(), "ibm,bgic") != 0)
+    if (!prop || strcmp(fdt_property_get_string (prop), "ibm,bgic") != 0)
 	panic("BGIC: Couldn't find compatible node in FDT\n");
 
-    prop = fdt->find_property_node(hdr, "reg");
-    if (!prop || prop->get_len() != 3 * sizeof(u32_t))
+    prop = fdt_find_property_node_in (fdt, hdr, "reg");
+    if (!prop || fdt_property_get_len (prop) != 3 * sizeof(u32_t))
 	panic("BGIC: Couldn't find valid 'reg' node in FDT (%p, %d)\n", 
-	      prop, prop->get_len());
+	      prop, fdt_property_get_len (prop));
 
-    phys_addr = prop->get_u64(0);
-    mem_size = prop->get_word(2);
+    self->phys_addr = fdt_property_get_u64 (prop, 0);
+    self->mem_size = fdt_property_get_word (prop, 2);
 
-    prop = fdt->find_property_node(hdr, "interrupts");
-    if (!prop || prop->get_len() != sizeof(u32_t))
+    prop = fdt_find_property_node_in (fdt, hdr, "interrupts");
+    if (!prop || fdt_property_get_len (prop) != sizeof(u32_t))
 	panic("BGIC: Couldn't find valid 'interrupts' node in FDT\n");
     
-    num_irqs = prop->get_word(0);
-    if (num_irqs > BGP_MAX_IRQS)
-	panic("BGIC: reported number IRQs of %d exceeds specification\n", num_irqs);
+    self->num_irqs = fdt_property_get_word (prop, 0);
+    if (self->num_irqs > BGP_MAX_IRQS)
+	panic("BGIC: reported number IRQs of %d exceeds specification\n", self->num_irqs);
 
     TRACE_INIT("BGIC: %x:%x, %d interrupts\n", 
-	       (word_t)(phys_addr >> 32), (word_t)phys_addr, num_irqs);
+	       (word_t)(self->phys_addr >> 32), (word_t)self->phys_addr, self->num_irqs);
 
     // needs to be provided by glue
-    this->map();
+    intctrl_map ();
 
-    if (!ctrl)
+    if (!self->ctrl)
 	panic("BGIC: mapping IRQ controller failed\n");
 
-    TRACE_INIT("BGIC: remapped at %p\n", ctrl);
+    TRACE_INIT("BGIC: remapped at %p\n", self->ctrl);
 
-    ctrl->mask_and_clear_all();
+    bgic_mask_and_clear_all (self->ctrl);
 
     // route all IRQs to CPU0
-    memset(routing, 0, sizeof(routing));
+    memset(self->routing, 0, sizeof(self->routing));
 }
 
-void SECTION(".init") intctrl_t::init_cpu(int cpu)
+void SECTION(".init") intctrl_init_cpu (int cpu)
 {
+    intctrl_t *self = get_interrupt_ctrl();
+
     ASSERT(cpu < 4);
 
     /* map IPIs */
-    set_irq_routing(get_ipi_irq(cpu, 0), cpu);
-    enable(get_ipi_irq(cpu, 0));
+    intctrl_set_irq_routing (self, intctrl_get_ipi_irq (cpu, 0), cpu);
+    intctrl_enable (intctrl_get_ipi_irq (cpu, 0));
 }
 
-void intctrl_t::handle_irq(word_t cpu)
+void intctrl_handle_irq (word_t cpu)
 {
-    int irq = ctrl->get_pending_irq(cpu);
-    if (irq < 0 || irq > (int)get_number_irqs())
+    intctrl_t *self = get_interrupt_ctrl();
+
+    int irq = bgic_get_pending_irq (self->ctrl, cpu);
+    if (irq < 0 || irq > (int)intctrl_get_number_irqs ())
     {
         printf("spurious interrupt\n");
         return;
@@ -153,23 +159,25 @@ void intctrl_t::handle_irq(word_t cpu)
 #ifdef CONFIG_SMP
     if (irq < 32)
     {
-        ctrl->ack_irq(irq);
+        bgic_ack_irq (self->ctrl, irq);
         handle_smp_ipi(irq);
         return;
     }
 #endif
 
-    mask(irq);
-    ::handle_interrupt( irq );
+    intctrl_mask (irq);
+    handle_interrupt( irq );
 }
 
-void intctrl_t::map()
+void intctrl_map (void)
 {
-    ctrl = (bgic_t*)get_kernel_space()->
-	map_device(phys_addr, mem_size, true, cache_inhibited);
+    intctrl_t *self = get_interrupt_ctrl();
+
+    self->ctrl = (bgic_t*) space_map_device (get_kernel_space(), self->phys_addr,
+					     self->mem_size, true, cache_inhibited);
 }
 
-void intctrl_t::start_new_cpu(word_t cpu)
+void intctrl_start_new_cpu (word_t cpu)
 {
     ASSERT(cpu < 4);
     
@@ -177,8 +185,10 @@ void intctrl_t::start_new_cpu(word_t cpu)
     secondary_release_reloc = cpu;
 }
 
-void intctrl_t::send_ipi(word_t cpu)
+void intctrl_send_ipi (word_t cpu)
 {
-    TRACEPOINT(SMP_IPI, "irq %d cpu %d\n", get_ipi_irq(cpu, 0), cpu);
-    ctrl->raise_irq(get_ipi_irq(cpu, 0));
+    intctrl_t *self = get_interrupt_ctrl();
+
+    TRACEPOINT(SMP_IPI, "irq %d cpu %d\n", intctrl_get_ipi_irq (cpu, 0), cpu);
+    bgic_raise_irq (self->ctrl, intctrl_get_ipi_irq (cpu, 0));
 }
