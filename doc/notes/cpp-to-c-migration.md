@@ -5183,3 +5183,76 @@ not be counted as working until then.
                      x86-x64-p4-cm (compatibility mode, glue/v4-x86/utcb.h)
 
 Gate: 0 errors, 709 symbols with identical bodies. powerpc: 66 objects, links.
+
+
+## §121 — Bisecting the NEW_MDB hang: it maps twice, then stops
+
+Not a fix — a localisation, recorded so the next attempt starts from the
+answer rather than from "it hangs".
+
+### What it is not
+
+  - **Not an infinite loop.** The monitor shows `RIP=ffffffffc060b07d`,
+    `HLT=1`, inside `sched_idle`. The CPU is halted waiting for an interrupt.
+  - **Not a failure to initialise the database.** All four `MDB_INIT_FUNCTION`
+    entries are linked into the set (`_start_mdb_funcs`.. `_end_mdb_funcs`
+    spans four 16-byte entries: `mdb_buflist_init` at priorities 0 and 2,
+    `init_mdb_mem_sizes` at 1, `init_mdb_mem` at 3), and `init_mdb()` is called
+    from `glue/v4-x86/init.c:493`.
+  - **Not an early crash.** With `CONFIG_VERBOSE_INIT` switched on, the kernel
+    prints its whole init sequence through "Creating sigma0", "Creating root
+    server" and "Idle thread started on CPU 0".
+
+### What it is
+
+The scheduler's ready queue is **empty**. Read straight out of memory at
+`scheduler` (0xffffffffc0a00000):
+
+    wakeup_list    = 0
+    max_prio       = 0xffff        /* s16_t -1: nothing runnable */
+    timeslice_tcb  = 0xffffffffc0a01000   /* the idle TCB */
+    prio_queue[0..2] = 0
+
+So both root servers exist and neither is runnable — they are blocked, and the
+kernel correctly idles.
+
+Instrumenting `mdb_tree_map` shows why that is interesting:
+
+    XX mdb_tree_map objsize=12 addr=0000000001000000
+    XX mdb_tree_map objsize=12 addr=0000000001012000
+
+**The new mapping database works — twice.** Two 4 KB mappings are created for
+roottask (which loads at 0x1000000), and then nothing further. Roottask needs
+far more pages than two, so the third fault never resolves: roottask stays
+blocked on its pager, sigma0 stays blocked, and the system idles.
+
+### Where that points
+
+Two successful maps followed by silence is the signature of the **mapping-tree
+growth path**, not of init and not of the `linear_ptab_walker.c` blocks
+recovered in §120 — those are demonstrably exercised, since the two maps happen
+through them.
+
+In `mdb_tree_map`, the first mapping under sigma0's node inserts directly; a
+second, smaller object forces the creation of a sub-table with path
+compression; a third has to find and reuse that table. That third step —
+`mdb_table_alloc` / `mdb_table_set_table` / the `match_prefix` walk — is the
+first code that has never executed, and it is the 400-line block §111 flagged
+as the part where a transcription error would be silent.
+
+### For whoever picks this up
+
+The cheap next probe is a `printf` in each arm of `mdb_tree_map`'s `for (;;)`
+— the `objsize == table objsize` insert, the recurse-into-subtable branch, the
+new-table branch and the intermediate-table branch — booted against
+`x86-x64-p4-newmdb` with `CONFIG_VERBOSE_INIT` on. That says in one run which
+arm is taken on the third fault and whether it returns.
+
+Worth keeping in mind: **there is still no evidence this ever worked.** The
+configuration has not built since `f3d2a88`, the option is `default NEW_MDB
+from n` and marked experimental, and §111's parameter-order finding
+(`mdb_t::map`'s declaration and definition disagreed, silently, in C++) is the
+kind of thing that suggests the feature was never finished rather than that the
+migration broke it.
+
+Instrumentation reverted; tree clean.
