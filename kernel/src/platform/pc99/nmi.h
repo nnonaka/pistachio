@@ -36,33 +36,6 @@
 #include INC_ARCH(ioport.h)	/* for in_u8/out_u8	*/
 #include INC_PLAT(rtc.h)	/* for rtc_t		*/
 
-#if defined(__cplusplus)
-class nmi_t {
-public:
-    static void mask() 
-	{
-	    /* disable NMI with read from rtc port < 0x80 */
-	    rtc_t<0x70>().read(0);
-
-	    /* clear and disable IOCHK and PCI SERR# */
-	    out_u8(0x61, (in_u8(0x61) & 0x03) | 0x0c);
-	};
-    static void unmask()
-	{
-	    /* clear and disable IOCHK and PCI SERR# */
-	    out_u8(0x61, (in_u8(0x61) & 0x03) | 0x0c);
-
-	    /* waste some time */
-            x86_wait_cycles(10000000);
-
-	    /* enable IOCHK and PCI SERR# */
-	    out_u8(0x61, in_u8(0x61) & 0x03);
-
-	    /* enable NMI with read from rtc port < 0x80 */
-	    rtc_t<0x70>().read(0);
-	};
-};
-#else /* !__cplusplus */
 
 /* C forms of nmi_t::mask/unmask.  rtc_t<0x70>::read(reg) is inlined here as
    the two port accesses it performs (select register, then read 0x71). */
@@ -96,6 +69,5 @@ INLINE void nmi_unmask (void)
     rtc_read_0x70 (0);
 }
 
-#endif /* __cplusplus */
 
 #endif /* !__PLATFORM__PC99__NMI_H__ */

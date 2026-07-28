@@ -50,36 +50,6 @@
  * - out_u8, in_u8
  */
 
-#if defined(__cplusplus)
-template <u16_t base> class rtc_t {
-public:
-
-    /**
-     *	Read RTC register
-     *	@param reg	register to read
-     *
-     *	@returns the content of RTC register REG.
-     */
-    static u8_t read(const u8_t reg) {
-	/* select register */
-	out_u8(base, reg);
-	/* read value */
-	return in_u8(base+1);
-    };
-    
-    /**
-     *	Write RTC register
-     *	@param reg	register to write
-     *	@param val	value to be written
-     *
-     *	Sets the content of RTC register REG to VAL.
-     */
-    static void write(const u8_t reg, const u8_t val) {
-	out_u8(base, reg);
-	out_u8(base+1, val);
-    };
-};
-#endif /* __cplusplus */
 
 /**
  * Waits for a 1 second tick of the realtime clock.
