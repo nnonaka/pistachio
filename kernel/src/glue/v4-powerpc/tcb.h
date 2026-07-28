@@ -150,7 +150,9 @@ INLINE word_t tcb_append_ctrlxfer_item (tcb_t *self, msg_tag_t tag, word_t offse
 	/* tcb_flags_add and TCB_FLAG_* come later in api/v4/tcb.h. */
 	self->flags.maskvalue |= (1UL << 2);   /* TCB_FLAG_KERNEL_CTRLXFER_MSG */
 	item = ctrlxfer_kernel_fault_item (fault);
-	tcb_set_mr (self, offset++, item.raw);
+	/* tcb_set_mr is declared later in api/v4/tcb.h; reach the UTCB
+	   directly, as the other accessors in this header do. */
+	self->utcb->mr[offset++] = item.raw;
 	return 1;
     }
     return 0;

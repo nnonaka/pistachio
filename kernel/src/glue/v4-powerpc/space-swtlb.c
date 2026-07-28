@@ -208,7 +208,7 @@ NOINLINE bool space_handle_tlb_miss (space_t *self, addr_t lookup_vaddr, addr_t 
     TRACE_TLB("handle_tlb_miss %p, %p, %s\n", 
 	      lookup_vaddr, install_vaddr, user ? "user" : "kernel");
 
-    if (! lookup_mapping (lookup_vaddr, &pg, &pgsize))
+    if (! space_lookup_mapping (self, lookup_vaddr, &pg, &pgsize, 0))
         return false;
 
     size_t  size  = page_shift (pgsize);
@@ -297,7 +297,7 @@ addr_t space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool 
 
 asid_t *space_get_asid (space_t *self)
 {
-    return get_asid(get_current_cpu());
+    return space_get_asid_cpu (self, get_current_cpu());
 }
 
 void space_allocate_asid (space_t *self)

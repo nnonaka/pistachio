@@ -97,10 +97,10 @@ void tcb_resources_dump (thread_resources_t *self, tcb_t * tcb)
 void tcb_resources_save (thread_resources_t *self, tcb_t *tcb)
 {
     if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))
-	flush_copy_area(tcb);
+	tcb_resources_flush_copy_area (self, tcb);
 #ifdef CONFIG_X_PPC_SOFTHVM
     if (resource_bits_have_resource (&tcb->resource_bits, SOFTHVM)) {
-	disable_hvm_mode( tcb );
+	tcb_resources_disable_hvm_mode (self, tcb);
         thread_resources_last_hvm_tcb = tcb;
     }
 #endif
@@ -109,10 +109,10 @@ void tcb_resources_save (thread_resources_t *self, tcb_t *tcb)
 void tcb_resources_load (thread_resources_t *self, tcb_t *tcb)
 {
     if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))
-	enable_copy_area( tcb );
+	tcb_resources_enable_copy_area (self, tcb);
 #ifdef CONFIG_X_PPC_SOFTHVM
     if (resource_bits_have_resource (&tcb->resource_bits, SOFTHVM)) {
-	enable_hvm_mode( tcb );
+	tcb_resources_enable_hvm_mode (self, tcb);
         space_t *space = tcb_get_space (tcb);
         if (thread_resources_last_hvm_tcb && space != tcb_get_space (thread_resources_last_hvm_tcb))
         {

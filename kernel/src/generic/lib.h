@@ -37,4 +37,10 @@ void * memcpy (void * dst, const void * src, unsigned int len);
 void * memset (void * dst, unsigned int c, unsigned int len);
 END_DECLS
 
+/* min() is called from glue/v4-powerpc/softhvm.c and kdb/platform/ppc44x/io.c
+   but was defined nowhere in the tree.  In C++ those calls did not resolve
+   either; in C they became implicit declarations, which compile and then fail
+   at link. */
+INLINE int min (int a, int b) { return a < b ? a : b; }
+
 #endif /* !__GENERIC__LIB_H__ */

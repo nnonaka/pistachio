@@ -68,7 +68,7 @@ int bgic_get_pending_irq (bgic_t *self, word_t cpu)
     if (mask == 0)
 	goto out;
     
-    irq = group_to_irq(group) + count_leading_zeros(mask);
+    irq = bgic_group_to_irq(group) + count_leading_zeros(mask);
 
  out:
     return irq;

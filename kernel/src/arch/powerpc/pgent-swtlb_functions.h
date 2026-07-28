@@ -107,9 +107,9 @@ INLINE addr_t  pgent_vaddr (pgent_t *self, space_t * s, word_t pgsize, mapnode_t
 
 INLINE word_t  pgent_rights (pgent_t *self, space_t * s, word_t pgsize)
 { 
-    return ((is_readable(s, pgsize) ? (1<<2) : 0) | 
-	    (is_writable(s, pgsize) ? (1<<1) : 0) |
-	    (is_executable(s, pgsize) ? (1<<0) : 0));
+    return ((pgent_is_readable (self, s, pgsize) ? (1<<2) : 0) |
+	    (pgent_is_writable (self, s, pgsize) ? (1<<1) : 0) |
+	    (pgent_is_executable (self, s, pgsize) ? (1<<0) : 0));
 }
 
 INLINE word_t  pgent_attributes (pgent_t *self, space_t * s, word_t pgsize)

@@ -134,6 +134,13 @@ word_t    space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpa
    variant spelled out separately. */
 void      space_flush_tlb (space_t *self, space_t *curspace);
 void      space_flush_tlb_range (space_t *self, space_t *curspace, addr_t start, addr_t end);
+#ifdef CONFIG_X_PPC_SOFTHVM
+/* start/end defaulted to the whole address space. */
+void      space_flush_tlb_hvm (space_t *self, space_t *curspace, word_t start, word_t end);
+bool      space_handle_hvm_tlb_miss (space_t *self, struct ppc_softhvm_t *vm,
+				     struct ppc_hvm_tlb_t *tlbentry, word_t gvaddr,
+				     paddr_t *gpaddr);
+#endif
 void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t log2size);
 paddr_t   space_sigma0_translate (addr_t addr, word_t size);
 word_t    space_sigma0_attributes (pgent_t *pg, paddr_t addr, word_t size);
@@ -148,6 +155,14 @@ void      space_release_kernel_mapping (space_t *self, addr_t vaddr, paddr_t pad
 void      space_add_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t size, bool writable, bool kernel, word_t attrib);
 void      space_flush_mapping (space_t *self, addr_t vaddr, word_t size, pgent_t *pgent);
 space_t * space_allocate_space (void);
+
+/* The _c bridges the shared C code calls; glue/v4-x86/space.h declares the same
+   pair.  get_current_space/get_kernel_space are the powerpc spellings. */
+space_t * get_current_space (void);
+space_t * get_current_space_c (void);
+space_t * get_kernel_space_c (void);
+bool      space_is_sigma0 (space_t *self);
+bool      space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size);
 void      space_free_space (space_t *space);
 #ifdef CONFIG_PPC_MMU_TLB
 addr_t    space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool kernel, word_t attrib);

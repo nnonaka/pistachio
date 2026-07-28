@@ -253,7 +253,7 @@ word_t arch_ktcb_set_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask,
 { return arch_ktcb_powerpc_ctrlxfer_fpu (&src->arch, addr_to_tcb(self)); }
 
 word_t arch_ktcb_get_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
-{ return powerpc_ctrlxfer_fpu(dst); }
+{ return arch_ktcb_powerpc_ctrlxfer_fpu (self, dst); }
 
 
 #ifdef CONFIG_X_PPC_SOFTHVM

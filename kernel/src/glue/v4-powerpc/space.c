@@ -31,6 +31,7 @@
  *                
  ********************************************************************/
 
+#include INC_API(fpage.h)	/* fpage_is_addr_in_fpage */
 #include <debug.h>
 #include <kmemory.h>
 #include <generic/lib.h>
@@ -284,7 +285,7 @@ utcb_t *space_allocate_utcb (space_t *self, tcb_t *tcb)
 	    WARNING( "out of memory!\n" );
 	    return NULL;
 	}
-	add_mapping( utcb, (paddr_t)virt_to_phys(page), size_4k, true, false );
+	space_add_mapping (self, utcb, (paddr_t)virt_to_phys(page), size_4k, true, false, cache_standard);
     }
 
     return (utcb_t *)addr_offset( page, (word_t)utcb & ~POWERPC_PAGE_MASK );
@@ -300,7 +301,7 @@ void space_map_sigma0 (space_t *self, addr_t addr)
 	     || (addr >= get_kip()->reserved_mem1.high)) 
 	    );
 
-    add_mapping( addr, (paddr_t)addr, size_4k, true, false );
+    space_add_mapping (self, addr, (paddr_t)addr, size_4k, true, false, cache_standard);
 }
 
 word_t space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)

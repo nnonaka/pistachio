@@ -30,6 +30,7 @@
  * $Id$
  *                
  ********************************************************************/
+#include <lib.h>		/* min() */
 #include <debug.h>
 #include <linear_ptab.h>
 #include <kdb/tracepoints.h>
@@ -48,6 +49,14 @@
 #define MAX_INSTR_EMULATE	10
 
 extern ppc_swtlb_t swtlb; /* defined in space-swtlb.cc */
+
+
+/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
+   included here; declare the two entry points this file calls. */
+BEGIN_DECLS
+struct scheduler_t * get_current_scheduler (void);
+void scheduler_handle_timer_interrupt (struct scheduler_t *self);
+END_DECLS
 
 DECLARE_TRACEPOINT(PPC_HVM_EXCEPT_PROG);
 DECLARE_TRACEPOINT(PPC_HVM_EXCEPT_DECR);

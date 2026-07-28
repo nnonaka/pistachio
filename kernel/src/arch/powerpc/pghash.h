@@ -207,7 +207,7 @@ INLINE void ppc_translation_create (ppc_translation_t *self, word_t virt, word_t
 {
     self->raw.word0 = self->raw.word1 = 0;
     self->x.vsid = vsid;
-    self->x.api = virt_to_api( virt );
+    self->x.api = ppc_translation_virt_to_api ( virt );
     self->x.rpn = phys >> POWERPC_PAGE_BITS;
     self->x.r = 1;
     self->x.c = 1;
@@ -221,7 +221,7 @@ INLINE void ppc_translation_create_from_entry (ppc_translation_t *self, word_t v
     self->raw.word0 = 0;
     self->raw.word1 = entry;
     self->x.vsid = vsid;
-    self->x.api = virt_to_api( virt );
+    self->x.api = ppc_translation_virt_to_api ( virt );
     self->x.v = 1;
 }
 
@@ -276,7 +276,7 @@ INLINE ppc_translation_t * ppc_htab_locate_pte (ppc_htab_t *self,  word_t virt, 
     // Go directly to the pte in the pteg, based on the pteg_slot stored
     // in the pgent.
     ppc_translation_t *pte;
-    pte = get_pteg(hash);
+    pte = ppc_htab_get_pteg (self, hash);
     pte = &pte[ slot ];
 
     // Verify that the pte matches the search criteria.

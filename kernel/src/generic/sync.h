@@ -48,6 +48,14 @@ struct spinlock_t {
 };
 typedef struct spinlock_t spinlock_t;
 
+/* Without SMP there is nothing to serialise against, so the operations are
+   no-ops -- but they must exist.  The C++ version declared none at all, which
+   meant any unconditional lock()/unlock() call (platform/ppc44x/bic.h has
+   several) simply did not compile on a uniprocessor build, in either language. */
+INLINE void spinlock_init (spinlock_t *self, word_t val) { }
+INLINE void spinlock_lock (spinlock_t *self) { }
+INLINE void spinlock_unlock (spinlock_t *self) { }
+INLINE bool spinlock_is_locked (spinlock_t *self) { return false; }
 
 #else /* CONFIG_SMP */
 /* 

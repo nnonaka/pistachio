@@ -47,6 +47,6 @@ void handle_smp_ipi( int vector )
 void smp_xcpu_trigger( cpuid_t cpu )
 {
 //    get_interrupt_ctrl()->send_ipi0( get_current_cpu(), 1 << cpu );
-    get_interrupt_ctrl()->send_ipi(cpu);
+    intctrl_send_ipi (cpu);
 }
 #endif

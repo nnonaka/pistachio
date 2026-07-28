@@ -282,7 +282,7 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
                 {
                     if ((num-1) % 4 == 0) printf("\n\t");
                     while ((mask & 1) == 0) { mask >>= 1; reg++; } 
-                    printf("%s: %p ", ctrlxfer_item_get_hwregname (id, reg), tcb_get_mr (tcb, offset + i + num));
+                    printf("%s: %p ", ctrlxfer_get_hwregname (id, reg), tcb_get_mr (tcb, offset + i + num));
                     mask >>= 1; reg++; num++;
                 }
                 i += num;
