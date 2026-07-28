@@ -35,16 +35,16 @@
 
 #include INC_ARCH(string.h)
 
-class fdt_reserve_entry_t
+struct fdt_reserve_entry_t
 {
-public:
     u64_t address;
     u64_t size;
 };
+typedef struct fdt_reserve_entry_t fdt_reserve_entry_t;
 
-class fdt_t;
-class fdt_header_t;
-class fdt_property_t;
+struct fdt_t;         typedef struct fdt_t fdt_t;
+struct fdt_header_t;  typedef struct fdt_header_t fdt_header_t;
+struct fdt_property_t;typedef struct fdt_property_t fdt_property_t;
 
 enum {
     fdt_begin_node = 1,
@@ -52,58 +52,31 @@ enum {
     fdt_property_node = 3,
 };
 
-class fdt_node_t
+struct fdt_node_t
 {
-public:
     u32_t tag;
-
-    bool is_begin_node()
-	{ return tag == fdt_begin_node; }
-    bool is_end_node()
-	{ return tag == fdt_end_node; }
-    bool is_property_node()
-	{ return tag == fdt_property_node; }
 };
+typedef struct fdt_node_t fdt_node_t;
 
-class fdt_header_t : public fdt_node_t
+INLINE bool fdt_node_is_begin_node (fdt_node_t *self)	 { return self->tag == fdt_begin_node; }
+INLINE bool fdt_node_is_end_node (fdt_node_t *self)	 { return self->tag == fdt_end_node; }
+INLINE bool fdt_node_is_property_node (fdt_node_t *self){ return self->tag == fdt_property_node; }
+
+/* fdt_header_t and fdt_property_t derived from fdt_node_t; in C the base is
+   the first member, which is layout-identical and keeps the casts valid. */
+struct fdt_header_t
 {
-public:
+    fdt_node_t base;
     char name[0];
-
-    int get_size()
-	{ return sizeof(fdt_header_t) + (strlen(name) + 4) & ~3; }
 };
 
-class fdt_t
+/* NB: `sizeof + (strlen + 4) & ~3' -- + binds tighter than &, so this masks
+   the whole sum.  Preserved verbatim from the C++ original. */
+INLINE int fdt_header_get_size (fdt_header_t *self)
+{ return sizeof(fdt_header_t) + (strlen(self->name) + 4) & ~3; }
+
+struct fdt_t
 {
-public:
-    bool is_valid()
-	{ return magic == 0xd00dfeed; }
-    word_t get_size()
-	{ return size; }
-
-    fdt_node_t *get_root_node()
-	{ return (fdt_node_t*)((word_t)this + offset_dt_struct); }
-
-    template <typename T> fdt_node_t *get_next_node(T *p)
-	{ return (fdt_node_t*)((word_t)p + p->get_size()); }
-
-    fdt_property_t *find_property_node(fdt_node_t *node, char *name);
-    fdt_header_t *find_subtree_node(fdt_node_t *node, char *name);
-
-    fdt_header_t *find_first_subtree_node(fdt_node_t *node)
-	{ return next_subtree_node(node, false); }
-    fdt_header_t *find_next_subtree_node(fdt_header_t *curr)
-	{ return next_subtree_node(curr, true); }
-
-    fdt_property_t *find_property_node(char *path);
-    fdt_header_t *find_subtree(char *path);
-
-    void dump();
-private:
-    fdt_header_t *next_subtree_node(fdt_node_t *node, bool cont);
-
-public:
     u32_t magic;
     u32_t size;
     u32_t offset_dt_struct;	/* offset to structure */
@@ -116,28 +89,49 @@ public:
     u32_t dt_struct_size;
 };
 
-class fdt_property_t : public fdt_node_t
+struct fdt_property_t
 {
-public:
-    int get_size()
-	{ return sizeof(fdt_property_t) + (len - 1 + 4) & ~3; }
-
-    char *get_name(fdt_t *fdt)
-	{ return ((char*)fdt) + fdt->offset_dt_strings + offset_name; }
-
-    u32_t get_len()
-	{ return len; }
-    word_t get_word(int index)
-	{ return data[index]; }
-    u64_t get_u64(int index)
-	{ return ((u64_t)data[index]) << 32 | ((u64_t)data[index + 1]); }
-    char *get_string()
-	{ return (char*)data; }
-
+    fdt_node_t base;
     u32_t len;
     u32_t offset_name;
     u32_t data[0];
 };
+
+INLINE int fdt_property_get_size (fdt_property_t *self)
+{ return sizeof(fdt_property_t) + (self->len - 1 + 4) & ~3; }
+
+INLINE char * fdt_property_get_name (fdt_property_t *self, fdt_t *fdt)
+{ return ((char*)fdt) + fdt->offset_dt_strings + self->offset_name; }
+
+INLINE u32_t  fdt_property_get_len (fdt_property_t *self)	{ return self->len; }
+INLINE word_t fdt_property_get_word (fdt_property_t *self, int index) { return self->data[index]; }
+INLINE u64_t  fdt_property_get_u64 (fdt_property_t *self, int index)
+{ return ((u64_t)self->data[index]) << 32 | ((u64_t)self->data[index + 1]); }
+INLINE char * fdt_property_get_string (fdt_property_t *self)	{ return (char*)self->data; }
+
+INLINE bool   fdt_is_valid (fdt_t *self)	{ return self->magic == 0xd00dfeed; }
+INLINE word_t fdt_get_size (fdt_t *self)	{ return self->size; }
+
+INLINE fdt_node_t * fdt_get_root_node (fdt_t *self)
+{ return (fdt_node_t*)((word_t)self + self->offset_dt_struct); }
+
+/* was the template get_next_node<T>(T*), instantiated on the two node kinds. */
+INLINE fdt_node_t * fdt_next_after_header (fdt_header_t *p)
+{ return (fdt_node_t*)((word_t)p + fdt_header_get_size (p)); }
+INLINE fdt_node_t * fdt_next_after_property (fdt_property_t *p)
+{ return (fdt_node_t*)((word_t)p + fdt_property_get_size (p)); }
+
+fdt_property_t * fdt_find_property_node_in (fdt_t *self, fdt_node_t *node, char *name);
+fdt_header_t *   fdt_find_subtree_node (fdt_t *self, fdt_node_t *node, char *name);
+fdt_header_t *   fdt_next_subtree_node (fdt_t *self, fdt_node_t *node, bool cont);
+fdt_property_t * fdt_find_property_node (fdt_t *self, char *path);
+fdt_header_t *   fdt_find_subtree (fdt_t *self, char *path);
+void             fdt_dump (fdt_t *self);
+
+INLINE fdt_header_t * fdt_find_first_subtree_node (fdt_t *self, fdt_node_t *node)
+{ return fdt_next_subtree_node (self, node, false); }
+INLINE fdt_header_t * fdt_find_next_subtree_node (fdt_t *self, fdt_header_t *curr)
+{ return fdt_next_subtree_node (self, &curr->base, true); }
 
 typedef fdt_t dtree_t;
 dtree_t *get_dtree();

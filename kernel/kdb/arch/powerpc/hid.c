@@ -41,7 +41,7 @@ CMD( cmd_ppc750_hid0, cg )
 {
     ppc750_hid0_t hid0;
 
-    hid0.read();
+    ppc750_hid0_read (&hid0);
 
     printf( "emcp: %d\n", hid0.x.emcp );
     printf( "dbp : %d\n", hid0.x.dbp  );

@@ -43,7 +43,7 @@ DECLARE_CMD( cmd_multi_word, perf, 's', "multiword", "Multi-word store/load" );
 
 CMD( cmd_perf, cg )
 {
-    return perf.interact( cg, "perf" );
+    return cmd_group_interact (&perf, cg, "perf");
 }
 
 CMD( cmd_addr_switch, cg )

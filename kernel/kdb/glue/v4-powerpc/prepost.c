@@ -50,10 +50,10 @@ static bool user_kdb_enter = true;
 bool kdb_pre (void)
 { 
     bool enter_kdb = false;
-    kdb_lock.lock();
+    spinlock_lock (&kdb_lock);
 
     tcb_t *current = get_current_tcb();
-    debug_param_t *param = (debug_param_t *)kdb_param;
+    debug_param_t *param = (debug_param_t *)kdb.kdb_param;
 
     if( EXCEPT_ID(TRACE) == param->exception )
     {
@@ -78,7 +78,7 @@ bool kdb_pre (void)
 	    if( EXPECT_FALSE(space == NULL) )
 		space = get_kernel_space();
 
-	    instr = space->get_from_user( (addr_t)(param->frame->srr0_ip + 4) );
+	    instr = space_get_from_user (space, (addr_t)(param->frame->srr0_ip + 4));
 	    if( DEBUG_IS_MAGIC(instr) )
 		debug_msg = (char *)(param->frame->srr0_ip + 8);
 	    else
@@ -98,7 +98,7 @@ bool kdb_pre (void)
 	else if( user_io && (L4_TRAP_KGETC == param->frame->r0) )
 	{
 	    // User request to get a character, while blocking.
-	    param->frame->r3 = (word_t)getc();
+	    param->frame->r3 = (word_t)getc(true);
 	    param->frame->srr0_ip += 4;
 	}
 #ifdef CONFIG_SUBPLAT_440_BGP
@@ -195,13 +195,13 @@ bool kdb_pre (void)
 	printf( "\n" );
     }
     else
-	kdb_lock.unlock();
+	spinlock_unlock (&kdb_lock);
 
     return enter_kdb; 
 }
 
 void kdb_post (void)
 { 
-    kdb_lock.unlock();
+    spinlock_unlock (&kdb_lock);
 }
 

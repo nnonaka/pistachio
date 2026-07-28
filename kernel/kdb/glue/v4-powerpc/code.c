@@ -44,7 +44,7 @@ DECLARE_CMD( cmd_tid_to_tcb, code, 't', "tid2tcb", "TID to TCB" );
 
 CMD( cmd_code, cg )
 {
-    return code.interact( cg, "code" );
+    return cmd_group_interact (&code, cg, "code");
 }
 
 CMD( cmd_tid_to_tcb, cg )
@@ -53,8 +53,8 @@ CMD( cmd_tid_to_tcb, cg )
     tcb_t *tcb;
     word_t loc = 0;
 
-    tid.set_global_id( 5, 1 );
-    tcb = tcb_t::get_tcb( tid );
+    threadid_set_global_id (&tid, 5, 1);
+    tcb = tcb_get_tcb (tid);
 
 #ifdef CONFIG_DYNAMIC_TCBS
     asm volatile (
@@ -62,12 +62,12 @@ CMD( cmd_tid_to_tcb, cg )
 	    :
 	      "=r" (loc)
 	    :
-	      "r" (tid.get_raw()), "i" (L4_GLOBAL_VERSION_BITS), "i" (KTCB_BITS)
+	      "r" (threadid_get_raw (&tid)), "i" (L4_GLOBAL_VERSION_BITS), "i" (KTCB_BITS)
 	    );
     loc += KTCB_AREA_START;
 #endif
 
-    printf( "tid: %x, location: %x, tcb: %x\n", tid.get_raw(), loc, tcb );
+    printf( "tid: %x, location: %x, tcb: %x\n", threadid_get_raw (&tid), loc, tcb );
 
     return CMD_NOQUIT;
 }

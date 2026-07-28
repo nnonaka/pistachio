@@ -43,11 +43,9 @@
 
 #if !defined(ASSEMBLY)
 
-class ppc750_mmcr0_t 
-{
-public:
-    enum ppc750_perf_event_t {
-    	nop = 0,
+/* was nested in ppc750_mmcr0_t */
+enum ppc750_perf_event_t {
+	nop = 0,
 	cycle_cnt = 1,
 	instr_complete_cnt = 2,
 	instr_dispatch_cnt = 4,
@@ -56,7 +54,11 @@ public:
 	ea_cnt = 8,
 	l1_threshold_miss_cnt = 10,
 	br_unresolved_cnt = 11,
-    };
+};
+typedef enum ppc750_perf_event_t ppc750_perf_event_t;
+
+struct ppc750_mmcr0_t
+{
 
     union {
 	word_t raw;
@@ -84,6 +86,7 @@ public:
 	} x;
     };
 };
+typedef struct ppc750_mmcr0_t ppc750_mmcr0_t;
 
 INLINE void ppc_set_mmcr0( word_t val )
 {
@@ -97,9 +100,8 @@ INLINE word_t ppc_get_mmcr0( void )
     return ret;
 }
 
-class ppc750_mmcr1_t
+struct ppc750_mmcr1_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -109,6 +111,7 @@ public:
 	} x;
     };
 };
+typedef struct ppc750_mmcr1_t ppc750_mmcr1_t;
 
 INLINE void ppc_set_mmcr1( word_t val )
 {
@@ -122,9 +125,8 @@ INLINE word_t ppc_get_mmcr1( void )
     return ret;
 }
 
-class ppc750_pmc_t
+struct ppc750_pmc_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -133,6 +135,7 @@ public:
 	} x;
     };
 };
+typedef struct ppc750_pmc_t ppc750_pmc_t;
 
 INLINE void ppc_set_pmc1( word_t val )
 {
@@ -212,13 +215,8 @@ INLINE u32_t ppc_get_hid0( void )
     return ret;
 }
 
-class ppc750_hid0_t
+struct ppc750_hid0_t
 {
-public:
-    void read() { this->raw = ppc_get_hid0(); }
-    void write() { ppc_set_hid0( this->raw ); }
-
-public:
     union {
 	u32_t raw;
 	struct {
@@ -255,11 +253,15 @@ public:
 	} x;
     };
 };
+typedef struct ppc750_hid0_t ppc750_hid0_t;
+
+INLINE void ppc750_hid0_read (ppc750_hid0_t *self)  { self->raw = ppc_get_hid0(); }
+INLINE void ppc750_hid0_write (ppc750_hid0_t *self) { ppc_set_hid0( self->raw ); }
 
 INLINE void ppc750_configure( void )
 {
     ppc750_hid0_t hid0;
-    hid0.read();
+    ppc750_hid0_read (&hid0);
 
     hid0.x.nhr = 1;     /* Detect a soft reset. */
     hid0.x.doze = 1;    /* Doze when we set MSR[POW]. */
@@ -273,7 +275,7 @@ INLINE void ppc750_configure( void )
     hid0.x.bht = 1;     /* Enable branch history table. */
     hid0.x.noopti = 0;  /* Enable data cache touch instructions. */
 
-    hid0.write();
+    ppc750_hid0_write (&hid0);
 }
 
 #endif	/* ASSEMBLY */
