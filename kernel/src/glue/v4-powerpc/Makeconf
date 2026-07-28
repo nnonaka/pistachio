@@ -46,7 +46,7 @@ endif
 SOURCES += $(addprefix src/generic/, linear_ptab_walker.c mapping_alloc.c)
 
 ifeq ("$(CONFIG_NEW_MDB)","y")
-SOURCES+=	src/generic/mdb.cc \
+SOURCES+=	src/generic/mdb.c \
 		src/generic/mdb_mem.cc
 else
 SOURCES+=	src/generic/mapping.c

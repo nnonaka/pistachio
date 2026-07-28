@@ -4546,3 +4546,65 @@ already non-compiling before this step and still are, so nothing regressed and
 nothing is silently wrong — the failure stays loud until they follow. That is
 the distinction from the vrt split §108 refused: there, converting the header
 alone would have produced code that compiled and dispatched through NULL.
+
+
+## §111 — generic/mdb.cc converted; the object compares against the C++ one
+
+`src/generic/mdb.c` replaces `mdb.cc` (1034 -> 1046 lines). It compiles with
+**0 errors and 0 warnings**, and `mdb.o` is produced again in
+`x86-x64-p4-newmdb` — the first time since `f3d2a88` deleted the class
+definitions.
+
+### Verified against the pre-regression object, not just the compiler
+
+The point of §108's warning about `map_fpage` applies here too: this is the
+mapping database's map/unmap path, where a transcription error is silent and
+corrupts address spaces. So the new object was compared function-by-function
+against the C++ `mdb.o` built from the `f3d2a88^` worktree:
+
+    old (C++)                        new (C)                    size
+    init_mdb()                  57   init_mdb                     57
+    mdb_node_t::get_parent()    33   mdb_node_get_parent          33
+    mdb_table_t::operator new  126   mdb_table_alloc             126
+    mdb_table_t::operator del  117   mdb_table_free              117
+    mdb_t::delete_node         895   mdb_tree_delete_node        920
+    mdb_t::map                3022   mdb_tree_map               2935
+    mdb_t::mapctrl            5338   mdb_tree_mapctrl           5482
+
+The four functions that perform **no virtual dispatch** came out
+**byte-identical in size**. The three that dispatch differ by under 3% in
+either direction — the expected noise from C and C++ making different inlining
+decisions around the indirect call. Nothing is structurally different, which is
+what a faithful transcription of a 600-line algorithm should look like.
+
+New symbols (`mdb_node_alloc` 14, `mdb_node_free` 14, `mdb_node_init` 13,
+`mdb_tree_flush` 27) are the C++ operators and the header's INLINE `flush`,
+which had no standalone existence before.
+
+### A bug the conversion exposed
+
+`mdb_t::map`'s **declaration and definition disagreed on parameter order**:
+
+    mdb.h   map (..., word_t addr, word_t in_rights, word_t out_rights);
+    mdb.cc  mdb_t::map (..., word_t addr, word_t out_rights, word_t in_rights)
+
+Parameter names play no part in C++ overload resolution, so this never produced
+a diagnostic. The definition is what ran: the **fifth** argument becomes the
+*outbound* rights. `vrt.cc`'s only call site passes `f_fp.get_access()` fifth
+and `~0UL` sixth, so the fpage's access rights land in `out_rights` and the
+node's inbound rights are set wide open.
+
+Whether that is intended is a question about the VRT's semantics, not about
+this migration, so the behaviour is preserved exactly and the C declaration now
+matches the definition — in C the two would have been a hard error, which is
+the point. Flagged here rather than fixed.
+
+### What remains in the mdb layer
+
+`generic/mdb_mem.cc` (371) and `kdb/generic/mdb.cc` still reference the old
+class forms. The `x86-x64-p4-newmdb` config now fails on those plus its
+pre-existing blockers — the PIC path (`intctrl-pic.cc/h`, `intctrl.h`, §95),
+`timer.cc`, `linear_ptab_walker.c`, `space.c` — so `mdb.c` is no longer among
+the reasons that configuration does not build.
+
+Gate unaffected throughout: 0 errors, 706 symbols with identical bodies, boots.

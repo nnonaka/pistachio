@@ -196,8 +196,12 @@ struct mdb_t {
  * headers are in scope together.
  */
 BEGIN_DECLS
+/* NB: parameter order is (out_rights, in_rights).  The C++ declaration said
+   (in_rights, out_rights) while its definition said the opposite; names do not
+   affect C++ overload resolution, so the mismatch was silent and the
+   definition's order is what ran.  Preserved -- see notes §111. */
 mdb_node_t * mdb_tree_map (mdb_t *self, mdb_node_t *f_node, void *obj, word_t objsize,
-			   word_t addr, word_t in_rights, word_t out_rights);
+			   word_t addr, word_t out_rights, word_t in_rights);
 word_t mdb_tree_mapctrl (mdb_t *self, mdb_node_t *node, mdb_range_t range,
 			 mdb_ctrl_t ctrl, word_t rights, word_t attrib);
 word_t mdb_tree_flush (mdb_t *self, mdb_node_t *node);
