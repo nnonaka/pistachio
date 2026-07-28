@@ -4785,3 +4785,77 @@ honest measures, and the failing set is now exactly the io layer plus the
 pre-existing PIC path.
 
 Gate unaffected: 0 errors, 709 symbols with identical bodies.
+
+
+## §115 — The io layer: a third instance of the same regression, found before starting
+
+Began the io layer (`io_fpage.h`, `io_space.h/.cc`, `mdb_io.h/.cc`, 948 lines)
+and stopped at the dependency survey, because it is not 948 lines.
+
+`io_space.cc` drives the IO permission bitmap entirely through `space_t`:
+
+    space->get_io_bitmap()      space->install_io_bitmap(true)
+    space->sync_io_bitmap()     space->get_io_space() / set_io_space()
+
+**Six of those seven members are declared and defined nowhere in the tree.**
+`get_io_bitmap` survives only on `x86_tss_t`, which is a different class.
+
+### Where they went — the same two passes, again
+
+    312b160  "collapse the __cplusplus guards in the glue/v4-x86 headers"
+             glue/v4-x86/space.h   -439 lines, +0
+
+deleted the declarations:
+
+    -    addr_t install_io_bitmap(bool create);
+    -    void free_io_bitmap(void);
+    -    bool sync_io_bitmap();
+    -    addr_t get_io_bitmap(cpuid_t cpu = current_cpu);
+    -    void set_io_space(io_space_t *n) { data.io_space = n; n->set_space(this); }
+    -    io_space_t *get_io_space(void) { return data.io_space; }
+    -void init_io_space();
+
+and
+
+    49fab2d  "glue/v4-x86/space.cc -> C: flip the last wrapper-host"
+
+dropped the ~200 lines that defined `install_io_bitmap`, `free_io_bitmap` and
+`sync_io_bitmap`, because they sit inside `#if defined(CONFIG_X86_IO_FLEXPAGES)`
+and the gate config does not set it.
+
+This is the **third** occurrence of one mistake:
+
+    §99   api/v4/thread.cc      CONFIG_STATIC_TCBS, CONFIG_X_CTRLXFER_MSG blocks
+    §109  generic/mdb.h         the entire class definitions, no C form existed
+    §115  glue/v4-x86/space.h   the io-bitmap and io-space members
+          glue/v4-x86/space.cc  their definitions
+
+Every one has the same shape: **content reachable only under a config the gate
+does not set, removed by a pass that verified itself against the gate.** The
+binary comparison, the symbol diff and the boot test are all blind by
+construction to code that the configuration never compiles. §110 said this once;
+it deserves saying as a rule:
+
+> Before deleting from a header or a file, list its config-guarded regions and
+> ask which configurations compile them. If none of those configurations builds,
+> the deletion cannot be verified — only reviewed by reading.
+
+### Actual scope of the io layer
+
+    io_fpage.h          183   arch_fpage_t: self-contained, mechanical
+    io_space.h           70   two C++ leftovers, the rest is C already
+    io_space.cc         314
+    mdb_io.h             75   mirrors mdb_mem.h exactly
+    mdb_io.cc           306   the 16 ops, mostly empty bodies
+    ------------------------
+                        948
+    + glue/v4-x86/space.h      declarations to restore
+    + glue/v4-x86/space.c      ~200 lines to restore and convert
+    + arch/x86/tss.h           x86_tss_t::get_io_bitmap has no C form yet
+
+Restoring `space.cc`'s three functions is not transcription from the file in
+front of me — it is recovery from `49fab2d^` followed by conversion, exactly as
+§110/§111 did for mdb. That is the work, and it should be done deliberately
+rather than tacked onto the end of a long session.
+
+Nothing was changed for this section.
