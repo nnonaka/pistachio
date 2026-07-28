@@ -97,7 +97,8 @@ inline word_t ppc_tlbre(word_t index, const word_t field)
     return value;
 }
 
-inline word_t ppc_tlbsx(word_t vaddr, word_t &index)
+/* index was a word_t& out-parameter. */
+INLINE word_t ppc_tlbsx(word_t vaddr, word_t *index)
 {
     word_t found;
     asm volatile ("tlbsx. %[index],0,%[vaddr]\n"

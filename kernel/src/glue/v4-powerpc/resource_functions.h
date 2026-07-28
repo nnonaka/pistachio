@@ -70,7 +70,7 @@ INLINE void tcb_resources_enable_copy_area (thread_resources_t *self, tcb_t *src
 
     threadid_t partner_tid = tcb_get_partner (src);
     tcb_t *partner = tcb_get_tcb (partner_tid);
-    ppc_segment_t partner_seg = space_get_segment_id (tcb_get_space (partner));
+    ppc_segment_t partner_seg = space_get_segment_id (partner->space);
 
     // Change the copy area segment register to point into the target space.
 #warning VU: copy area code is inorrect for tunnelled PFs
@@ -85,7 +85,9 @@ INLINE void tcb_resources_flush_copy_area (thread_resources_t *self, tcb_t *tcb)
 INLINE void tcb_resources_enable_copy_area (thread_resources_t *self, tcb_t *src) { }
 INLINE void tcb_resources_flush_copy_area (thread_resources_t *self, tcb_t *tcb)
 {
-    space_t *space = tcb_get_space (tcb);
+    /* tcb_get_space is defined in api/v4/tcb.h after this header is
+       reached, so use the member directly. */
+    space_t *space = tcb->space;
     space_flush_tlb (space, space, (addr_t)COPY_AREA_START, (addr_t)COPY_AREA_END);
 }
 #endif

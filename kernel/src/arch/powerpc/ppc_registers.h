@@ -229,8 +229,8 @@ INLINE void ppc_set_tbu( word_t val )
 
 INLINE u64_t ppc_get_timebase()
 {
-    return (static_cast<u64_t>(ppc_get_tbu()) << 32 | 
-	    static_cast<u64_t>(ppc_get_tbl()));
+    return ((u64_t) ppc_get_tbu() << 32 |
+	    (u64_t) ppc_get_tbl());
 }
 
 INLINE word_t ppc_get_dabr( void )

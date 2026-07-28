@@ -96,9 +96,11 @@ struct space_t
 	};
     };
 
-    static word_t pinned_mapping;
 };
 typedef struct space_t space_t;
+
+/* was the static member space_t::pinned_mapping */
+extern word_t space_pinned_mapping;
 
 BEGIN_DECLS
 /* Declarations only; the definitions live in space.c / space-swtlb.c.  The
@@ -154,7 +156,7 @@ INLINE addr_t space_sign_extend (addr_t addr)			{ return addr; }
 INLINE bool   space_does_tlbflush_pay (word_t log2size)		{ return log2size != POWERPC_PAGE_BITS; }
 INLINE void   space_begin_update (void)				{ }
 INLINE void   space_end_update (void)				{ }
-INLINE word_t space_readmem_phys (paddr_t paddr)		{ return *phys_to_virt((word_t*)paddr); }
+INLINE word_t space_readmem_phys (paddr_t paddr)		{ return *(word_t *) phys_to_virt((void *)(word_t)paddr); }
 
 INLINE space_t * space_vsid_to_space (word_t vsid)
 {
@@ -189,7 +191,11 @@ INLINE pgent_t * space_get_pdir (space_t *self)
 
 INLINE pgent_t * space_pgent (space_t *self, word_t num, word_t cpu)
 {
-    return pgent_next (space_get_pdir (self), self, size_4m, num);
+    /* Was get_pdir()->next(this, size_4m, num).  pgent_next lives in
+       pgent-swtlb_functions.h, which includes this header, so it is not
+       declared yet at this point -- and for a page directory it is just
+       pointer arithmetic, which is what pgent_next does. */
+    return space_get_pdir (self) + num;
 }
 
 INLINE bool space_is_kernel_paged_area (addr_t addr)

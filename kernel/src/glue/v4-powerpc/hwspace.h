@@ -35,14 +35,16 @@
 
 #include INC_GLUE(offsets.h)
 
-template<typename T> INLINE T virt_to_phys( T x )
+/* Was a template on T; every instantiation passes a pointer or a word, so the
+   C form takes void* and callers cast the result as they already did. */
+INLINE void * virt_to_phys( void * x )
 {
-    return (T) ((u32_t)x - KERNEL_OFFSET);
+    return (void *) ((u32_t)x - KERNEL_OFFSET);
 }
 
-template<typename T> INLINE T phys_to_virt( T x )
+INLINE void * phys_to_virt( void * x )
 {
-    return (T) ((u32_t)x + KERNEL_OFFSET);
+    return (void *) ((u32_t)x + KERNEL_OFFSET);
 }
 
 #endif	/* __GLUE__V4_POWERPC__HWSPACE_H__ */
