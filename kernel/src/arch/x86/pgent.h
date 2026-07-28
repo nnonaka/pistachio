@@ -69,6 +69,10 @@ word_t    pgent_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize,
 void      pgent_reset_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize);
 void      pgent_update_reference_bits (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
 void      pgent_revoke_rights  (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+/* Entries used by the new mapping database (generic/mdb_mem.c). */
+word_t    pgent_rights         (pgent_t *self, struct space_t *s, word_t pgsize);
+void      pgent_set_rights     (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx);
+void      pgent_set_attributes (pgent_t *self, struct space_t *s, word_t pgsize, word_t attrib);
 void      pgent_flush          (pgent_t *self, struct space_t *s, word_t pgsize, bool kernel, addr_t vaddr);
 /* Entries used by the AMD64 SMP page-table sync (glue/v4-x86/x64/space.c). */
 word_t    pgent_idx            (pgent_t *self);

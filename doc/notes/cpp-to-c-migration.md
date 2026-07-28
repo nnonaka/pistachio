@@ -4608,3 +4608,66 @@ pre-existing blockers — the PIC path (`intctrl-pic.cc/h`, `intctrl.h`, §95),
 the reasons that configuration does not build.
 
 Gate unaffected throughout: 0 errors, 706 symbols with identical bodies, boots.
+
+
+## §112 — generic/mdb_mem.cc converted; the memory database's ops table
+
+`src/generic/mdb_mem.c` (371 -> 428 lines) builds clean — `mdb_mem.o`, 10864
+bytes, 0 errors, 0 warnings. With §111's `mdb.c` this completes the mapping
+database proper; `x86-x64-p4-newmdb` is down from 189 errors to 100, and
+neither mdb file is among the causes any more.
+
+The 17 `mdb_mem_t` overrides become file-static `mm_*` functions and a single
+`const mdb_ops_t mdb_mem_ops` initialiser, with `mdb_t mdb_mem = { &mdb_mem_ops };`.
+Because `mdb_mem_t` derived from `mdb_t` and added no data, the instance is an
+`mdb_t` outright — the derived type does not survive as a struct at all.
+
+### Three pgent operations had no C form yet
+
+`mdb_mem` is the only caller of `pgent_t::rights`, `set_rights` and
+`set_attributes`, so the x86 C wrapper set in `arch/x86/pgent.h` — written when
+`linear_ptab_walker.c` and `mapping.c` were converted — had never needed them.
+Added to `glue/v4-x86/space.c` beside the existing ones, transcribed from
+`4b5e3a0a^`.
+
+`set_rights` carries an original oddity, kept verbatim:
+
+    if ((rwx & 1) && (raw | X86_PAGE_NX))
+
+`|` where `&` reads as intended, so the test reduces to `(rwx & 1)`. The effect
+is the wanted one — when execute is requested, clear NX — so the typo is
+harmless, and correcting it would be a behaviour change dressed as a
+transcription. Left as found and recorded here.
+
+### Four things the C compiler objected to that C++ had not
+
+  - `(space_t *) (misc.space << 8)` — the same false `-Wint-to-pointer-cast` as
+    §110, from GCC judging the declared bitfield width rather than the promoted
+    type. Explicit `(word_t)`.
+  - `pgent_vaddr (..., node)` — the C++ passed an `mdb_node_t *` where the
+    signature said `mapnode_t *`, which works because `arch/x86/pgent.h:29` is
+    `#define mapnode_t mdb_node_t`. My defensive `(struct mapnode_t *)` cast
+    was what actually broke it; removing it was the fix.
+  - `mdb_add_size` has no header declaration; the C++ declared it inside the
+    function body, and C allows exactly the same thing.
+  - **`size_max` does not exist in C.** It is a member of the `X86_PGSIZES`
+    enum-list macro, which only ever instantiated the C++ `pgsize_e` enum. The
+    arch-neutral spelling is `PGENT_SIZE_MAX`, already used by
+    `kdb/generic/linear_ptab_dump.c` and defined for both x86 and powerpc.
+
+### Cost to the gate, stated plainly
+
+The gate config gains **three symbols** — `pgent_rights`, `pgent_set_rights`,
+`pgent_set_attributes` — which it does not call, since it does not build
+`mdb_mem.c`. Its other 706 symbols are byte-identical apart from
+`__ctors_GLOBAL__` and one relocated address in `tcb_create_startup_stack`
+shifted by the new code. It boots to userland. The alternative was a
+`CONFIG_NEW_MDB` guard around three general-purpose page-table accessors, which
+seemed worse than ~50 bytes of unreferenced code in one configuration.
+
+### What is left in this stack
+
+`kdb/generic/mdb.cc` is the last mdb file. Beyond it the newmdb config's
+remaining blockers are all pre-existing and unrelated: the PIC path
+(`8259.h`, `intctrl-pic.cc/h`, `intctrl.h`, `pc99/intctrl.c` — §95's seven-config
+blocker), `timer.cc`, `linear_ptab_walker.c`, `space.c` and `types.h`.

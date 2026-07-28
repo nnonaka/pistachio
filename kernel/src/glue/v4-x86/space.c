@@ -843,6 +843,43 @@ void pgent_set_entry (pgent_t *self, struct space_t *s, word_t pgsize, paddr_t p
 void pgent_set_linknode (pgent_t *self, struct space_t *s, word_t pgsize, struct mapnode_t *map, addr_t vaddr)
 { (void) s; *pgent_linknode_ptr (self, pgsize) = (word_t) map ^ (word_t) vaddr; }
 
+/* was pgent_t::rights */
+word_t pgent_rights (pgent_t *self, struct space_t *s, word_t pgsize)
+{
+    (void) s; (void) pgsize;
+    return ((1<<2) |
+	    (x86_pgent_is_writable (&self->pgent) ? (1<<1) : 0) |
+	    (x86_pgent_is_executable (&self->pgent) ? (1<<0) : 0));
+}
+
+/* was pgent_t::set_rights.  The NX branch's `(raw | X86_PAGE_NX)' is the
+   original's -- `|' where `&' reads as intended.  It makes the test reduce to
+   (rwx & 1), which is the wanted behaviour anyway, so this is transcribed as
+   written rather than silently corrected; see notes §112. */
+void pgent_set_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
+{
+    bool mod = false;
+
+    if ((rwx & 2) && ! (self->raw & X86_PAGE_WRITABLE))
+    { self->raw |= X86_PAGE_WRITABLE; mod = true; }
+    else if (! (rwx & 2) && (self->raw & X86_PAGE_WRITABLE))
+    { self->raw &= ~X86_PAGE_WRITABLE; mod = true; }
+#if defined(CONFIG_X86_NX)
+    if ((rwx & 1) && (self->raw | X86_PAGE_NX))
+    { self->raw &= ~X86_PAGE_NX; mod = true; }
+    else if (! (rwx & 1) && ! (self->raw & X86_PAGE_NX))
+    { self->raw |= X86_PAGE_NX; mod = true; }
+#endif
+    if (mod) pgent_sync (self, s, pgsize);
+}
+
+/* was pgent_t::set_attributes */
+void pgent_set_attributes (pgent_t *self, struct space_t *s, word_t pgsize, word_t attrib)
+{
+    x86_pgent_set_pat (&self->pgent, attrib, pgsize);
+    pgent_sync (self, s, pgsize);
+}
+
 void pgent_update_rights (pgent_t *self, struct space_t *s, word_t pgsize, word_t rwx)
 {
     if (rwx & 2) self->raw |= X86_PAGE_WRITABLE;
