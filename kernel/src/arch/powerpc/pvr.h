@@ -36,32 +36,25 @@
 
 #ifndef ASSEMBLY
 
-class powerpc_version_t
+/* Was a class; the ppc_pvr_e enum was protected and is file-scope in C. */
+enum ppc_pvr_e {
+    pvr_psim	= 0,
+    pvr_601	= 1,
+    pvr_603	= 3,
+    pvr_604	= 4,
+    pvr_603e	= 6,
+    pvr_750	= 8,
+    pvr_750FX	= 0x7000,
+    pvr_604e	= 9,
+    pvr_604ev	= 10,
+    pvr_7400	= 12,
+    pvr_7410	= 0x800C,
+    pvr_7450	= 0x8000,
+    pvr_7455	= 0x8001,
+};
+
+struct powerpc_version_t
 {
-protected:
-    enum ppc_pvr_e {
-	pvr_psim	= 0,
-	pvr_601		= 1,
-	pvr_603		= 3,
-	pvr_604		= 4,
-	pvr_603e	= 6,
-	pvr_750		= 8,
-	pvr_750FX	= 0x7000,
-	pvr_604e	= 9,
-	pvr_604ev	= 10,
-	pvr_7400	= 12,
-	pvr_7410	= 0x800C,
-	pvr_7450	= 0x8000,
-	pvr_7455	= 0x8001,
-    };
-
-public:
-    static powerpc_version_t read() __attribute__ ((const));
-
-    bool is_psim() { return x.version == powerpc_version_t::pvr_psim; }
-    bool is_750()  { return x.version == powerpc_version_t::pvr_750; }
-
-protected:
     union
     {
 	struct {
@@ -73,14 +66,21 @@ protected:
 	u32_t raw;
     };
 };
+typedef struct powerpc_version_t powerpc_version_t;
 
-
-INLINE powerpc_version_t powerpc_version_t::read()
+INLINE powerpc_version_t powerpc_version_read (void) __attribute__ ((const));
+INLINE powerpc_version_t powerpc_version_read (void)
 {
     powerpc_version_t pvr;
     asm ("mfpvr %0" : "=r" (pvr.raw) );
     return pvr;
 }
+
+INLINE bool powerpc_version_is_psim (powerpc_version_t self)
+{ return self.x.version == pvr_psim; }
+INLINE bool powerpc_version_is_750 (powerpc_version_t self)
+{ return self.x.version == pvr_750; }
+
 
 #endif	/* ASSEMBLY */
 

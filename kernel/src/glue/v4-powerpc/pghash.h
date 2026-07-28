@@ -36,26 +36,26 @@
 
 #include INC_ARCH(pghash.h)
 
-class space_t;
-class pgent_t;
+struct space_t; typedef struct space_t space_t;
+struct pgent_t; typedef struct pgent_t pgent_t;
 
-class pghash_t
+struct pghash_t
 {
-protected:
     ppc_htab_t htab;
-
-    bool try_location( word_t phys_start, word_t size );
-    bool finish_init( word_t phys_start, word_t size );
-
-public:
-    ppc_htab_t *get_htab() { return &this->htab; }
-
-    bool init( word_t tot_phys_mem );
-
-    void update_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent );
-    void insert_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent );
-    void flush_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent );
 };
+typedef struct pghash_t pghash_t;
+
+INLINE ppc_htab_t *pghash_get_htab (pghash_t *self) { return &self->htab; }
+
+/* were protected */
+bool pghash_try_location (pghash_t *self, word_t phys_start, word_t size);
+bool pghash_finish_init (pghash_t *self, word_t phys_start, word_t size);
+
+bool pghash_init (pghash_t *self, word_t tot_phys_mem);
+
+void pghash_update_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent);
+void pghash_insert_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent);
+void pghash_flush_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent);
 
 INLINE pghash_t *get_pghash()
 {

@@ -44,9 +44,8 @@
 
 #include <generic/memregion.h>
 
-class ppc_sdr1_t
+struct ppc_sdr1_t
 {
-public:
     union {
 	struct {
     	    word_t htaborg : 16;
@@ -56,12 +55,12 @@ public:
 	u32_t raw;
     };
 
-    void create( word_t base, word_t mask );
 };
+typedef struct ppc_sdr1_t ppc_sdr1_t;
 
-class ppc_segment_t 
+
+struct ppc_segment_t
 {
-public:
     union {
 	struct {
 	    word_t t : 1;		/* t = 0 selects this format */
@@ -74,10 +73,10 @@ public:
 	u32_t raw;
     };
 };
+typedef struct ppc_segment_t ppc_segment_t;
 
-class ppc_translation_t
+struct ppc_translation_t
 {
-public:
     union {
 	struct {
 	    word_t v : 1;		/* v = 1 entry is valid */
@@ -99,14 +98,13 @@ public:
 	} raw;
     };
 
-    void create( word_t virt, word_t phys, word_t vsid, word_t wimg, word_t pp);
-    void create( word_t virt, word_t entry, word_t vsid );
-
-    static word_t virt_to_api( word_t virt )
-	{ return (virt >> 22) & 0x3f; }
-    static word_t api_to_virt( word_t api )
-	{ return api << 22; }
 };
+typedef struct ppc_translation_t ppc_translation_t;
+
+/* create was overloaded on arity; the five-argument form keeps the plain name. */
+
+INLINE word_t ppc_translation_virt_to_api (word_t virt) { return (virt >> 22) & 0x3f; }
+INLINE word_t ppc_translation_api_to_virt (word_t api)  { return api << 22; }
 
 #define HTAB_HASH_MASK	((1 << 19) - 1)
 #define HTAB_PAGE_MASK	((1 << 16) - 1)
@@ -116,51 +114,46 @@ public:
 #define HTAB_REVERSE_MASK	0x000003ff	// The 10-bits of an EA in 
 						// the hash value.
 
-class ppc_htab_t
+struct ppc_htab_t
 {
-public:
-    void init( word_t phys_base, word_t virt_start, word_t size );
-    void bat_map( void );
-    void activate( ppc_segment_t segment_val );
-
-    ppc_translation_t * locate_pte( word_t virt, word_t vsid, word_t slot, 
-	    word_t is_second_hash );
-    ppc_translation_t * find_insertion( word_t virt, word_t vsid, word_t *slot, 
-	    word_t *is_second_hash );
-
-    word_t primary_hash( word_t virt, word_t vsid );
-    word_t secondary_hash( word_t hash );
-    word_t reverse_hash( ppc_translation_t *pghash_pte );
-
-    ppc_translation_t * get_pteg( word_t hash )
-	{ return (ppc_translation_t *)((word_t)this->base | ((hash & this->hash_mask) << 6)); }
-
-    word_t optimal_size( word_t tot_phys_mem )
-	{ 
-	    word_t size = tot_phys_mem / MB(8) * KB(64);
-	    if( size < min_size() )
-		size = min_size();
-	    else {
-		// Choose a size such that only a single bit is set.
-		int bits = 0;
-		while( size > 1 ) {
-		    bits++;
-		    size = size >> 1;
-		}
-		size = size << bits;
-	    }
-	    return size;
-	}
-
-    word_t min_size() { return BAT_SMALL_PAGE_SIZE; }
-
-private:
     ppc_translation_t * base;
     word_t phys_base;
     word_t size;
     word_t hash_mask;
     word_t htab_mask;
 };
+typedef struct ppc_htab_t ppc_htab_t;
+
+void ppc_htab_init (ppc_htab_t *self, word_t phys_base, word_t virt_start, word_t size);
+void ppc_htab_bat_map (ppc_htab_t *self);
+void ppc_htab_activate (ppc_htab_t *self, ppc_segment_t segment_val);
+
+ppc_translation_t * ppc_htab_find_insertion (ppc_htab_t *self, word_t virt, word_t vsid,
+					     word_t *slot, word_t *is_second_hash);
+
+
+INLINE ppc_translation_t * ppc_htab_get_pteg (ppc_htab_t *self, word_t hash)
+{ return (ppc_translation_t *)((word_t)self->base | ((hash & self->hash_mask) << 6)); }
+
+INLINE word_t ppc_htab_min_size (void) { return BAT_SMALL_PAGE_SIZE; }
+
+INLINE word_t ppc_htab_optimal_size (word_t tot_phys_mem)
+{
+    word_t size = tot_phys_mem / MB(8) * KB(64);
+
+    if( size < ppc_htab_min_size() )
+	size = ppc_htab_min_size();
+    else {
+	// Choose a size such that only a single bit is set.
+	int bits = 0;
+	while( size > 1 ) {
+	    bits++;
+	    size = size >> 1;
+	}
+	size = size << bits;
+    }
+    return size;
+}
 
 /****************************************************************************
  *
@@ -204,40 +197,40 @@ INLINE word_t ppc_get_sr( word_t which )
     return val;
 }
 
-INLINE void ppc_sdr1_t::create( word_t base, word_t mask )
+INLINE void ppc_sdr1_create (ppc_sdr1_t *self, word_t base, word_t mask)
 {
-    this->x.htaborg = base >> POWERPC_HTABORG_SHIFT;
-    this->x.htabmask = mask;
+    self->x.htaborg = base >> POWERPC_HTABORG_SHIFT;
+    self->x.htabmask = mask;
 }
 
-INLINE void ppc_translation_t::create( word_t virt, word_t phys, word_t vsid, word_t wimg, word_t pp )
+INLINE void ppc_translation_create (ppc_translation_t *self, word_t virt, word_t phys, word_t vsid, word_t wimg, word_t pp)
 {
-    this->raw.word0 = this->raw.word1 = 0;
-    this->x.vsid = vsid;
-    this->x.api = virt_to_api( virt );
-    this->x.rpn = phys >> POWERPC_PAGE_BITS;
-    this->x.r = 1;
-    this->x.c = 1;
-    this->x.wimg = wimg;
-    this->x.pp = pp;
-    this->x.v = 1;
+    self->raw.word0 = self->raw.word1 = 0;
+    self->x.vsid = vsid;
+    self->x.api = virt_to_api( virt );
+    self->x.rpn = phys >> POWERPC_PAGE_BITS;
+    self->x.r = 1;
+    self->x.c = 1;
+    self->x.wimg = wimg;
+    self->x.pp = pp;
+    self->x.v = 1;
 }
 
-INLINE void ppc_translation_t::create( word_t virt, word_t entry, word_t vsid )
+INLINE void ppc_translation_create_from_entry (ppc_translation_t *self, word_t virt, word_t entry, word_t vsid)
 {
-    this->raw.word0 = 0;
-    this->raw.word1 = entry;
-    this->x.vsid = vsid;
-    this->x.api = virt_to_api( virt );
-    this->x.v = 1;
+    self->raw.word0 = 0;
+    self->raw.word1 = entry;
+    self->x.vsid = vsid;
+    self->x.api = virt_to_api( virt );
+    self->x.v = 1;
 }
 
-INLINE word_t ppc_htab_t::primary_hash( word_t virt, word_t vsid )
+INLINE word_t  ppc_htab_primary_hash (ppc_htab_t *self,  word_t virt, word_t vsid )
 {
     return (vsid & HTAB_HASH_MASK) ^ ((virt >> POWERPC_PAGE_BITS) & HTAB_PAGE_MASK);
 }
 
-INLINE word_t ppc_htab_t::secondary_hash( word_t hash )
+INLINE word_t  ppc_htab_secondary_hash (ppc_htab_t *self,  word_t hash )
 {
     // TODO: see the PPC eqv instruction; it can compute the complete
     // secondary hash in one instruction.
@@ -249,7 +242,7 @@ INLINE word_t ppc_htab_t::secondary_hash( word_t hash )
  * @param pghash_pte The location of the pte, in the page hash.
  * #return The virtual address which the pte maps.
  */
-INLINE word_t ppc_htab_t::reverse_hash( ppc_translation_t *pghash_pte )
+INLINE word_t  ppc_htab_reverse_hash (ppc_htab_t *self,  ppc_translation_t *pghash_pte )
 {
     // We bit manipulate with the whole pteg, but we are only interested 
     // in the portion related to the hash, bits 15-6.
@@ -265,20 +258,20 @@ INLINE word_t ppc_htab_t::reverse_hash( ppc_translation_t *pghash_pte )
     // Convert to a page index.
     virt = virt << POWERPC_PAGE_BITS;
     // Add in the abbreviated page index.
-    virt |= ppc_translation_t::api_to_virt( pghash_pte->x.api );
+    virt |= ppc_translation_api_to_virt( pghash_pte->x.api );
     // Add in the four msb of the virtual address, which are the four
     // lsb of the VSID.
     virt |= (pghash_pte->x.vsid & 0xf) << 28;
     return virt;
 }
 
-INLINE ppc_translation_t * ppc_htab_t::locate_pte( word_t virt, word_t vsid, 
+INLINE ppc_translation_t * ppc_htab_locate_pte (ppc_htab_t *self,  word_t virt, word_t vsid, 
 	word_t slot, word_t is_second_hash )
 {
     // Create the hash.
-    word_t hash = this->primary_hash( virt, vsid );
+    word_t hash = ppc_htab_primary_hash (self, virt, vsid);
     if( is_second_hash )
-	hash = this->secondary_hash( hash );
+	hash = ppc_htab_secondary_hash (self, hash);
 
     // Go directly to the pte in the pteg, based on the pteg_slot stored
     // in the pgent.
@@ -287,7 +280,7 @@ INLINE ppc_translation_t * ppc_htab_t::locate_pte( word_t virt, word_t vsid,
     pte = &pte[ slot ];
 
     // Verify that the pte matches the search criteria.
-    word_t api = ppc_translation_t::virt_to_api( virt );
+    word_t api = ppc_translation_virt_to_api( virt );
     if( (pte->x.v == 1) && (pte->x.vsid == vsid) && (pte->x.api == api) )
 	return pte;
     return NULL;

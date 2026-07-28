@@ -112,15 +112,15 @@ dtree_t *get_dtree()
     if (!dtree)
     {
         kernel_interface_page_t *kip = get_kip();
-        for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ ) 
+        for( word_t i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ ) 
         {
-            memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
+            memdesc_t *mdesc = memory_info_get_memdesc (&kip->memory_info, i);
             
-            if( (mdesc->type() == memdesc_t::boot_specific) && 
-                (mdesc->subtype() == 0xf) )
+            if( (memdesc_type (mdesc) == MEMDESC_BOOT_SPECIFIC) && 
+                (memdesc_subtype (mdesc) == 0xf) )
             {
-                dtree = (dtree_t*) mdesc->low();
-                dtree_size = mdesc->size();
+                dtree = (dtree_t*) memdesc_low (mdesc);
+                dtree_size = memdesc_size (mdesc);
                 break;
             }
         }
@@ -134,10 +134,10 @@ SECTION(SEC_INIT) void dtree_remap( kernel_interface_page_t *kip )
     dtree_t *dtreemapping;
     paddr_t pdtree = (paddr_t) dtree;
     //TRACEF("dtree %p %d\n", dtree, dtree_size);
-    addr_t page = get_kernel_space()->map_device( pdtree, dtree_size, true, cache_standard );
+    addr_t page = space_map_device (get_kernel_space(),  pdtree, dtree_size, true, cache_standard );
     dtreemapping = (dtree_t*)addr_offset(page, pdtree & (KERNEL_PAGE_SIZE - 1));
 
-    if (!dtreemapping->is_valid())
+    if (!fdt_is_valid (dtreemapping))
 	panic("Invalid device tree (%p)--can't continue\n");
 
     TRACE_INIT("Remapping device tree from %p to %p (sz=%x, magic=%x)\n", (word_t) pdtree, 
@@ -170,14 +170,14 @@ SECTION(SEC_INIT) addr_t kip_get_phys_mem( kernel_interface_page_t *kip )
 {
     addr_t max = 0;
 
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ ) 
+    for( word_t i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ ) 
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	if( (mdesc->type() == memdesc_t::conventional)
-		&& !mdesc->is_virtual()
-		&& (mdesc->high() > max) )
+	memdesc_t *mdesc = memory_info_get_memdesc (&kip->memory_info, i);
+	if( (memdesc_type (mdesc) == MEMDESC_CONVENTIONAL)
+		&& !memdesc_is_virtual (mdesc)
+		&& (memdesc_high (mdesc) > max) )
 	{
-	    max = mdesc->high();
+	    max = memdesc_high (mdesc);
 	}
     }
 
@@ -187,24 +187,24 @@ SECTION(SEC_INIT) addr_t kip_get_phys_mem( kernel_interface_page_t *kip )
 SECTION(SEC_INIT) static void kip_mem_init( kernel_interface_page_t *kip, word_t bootmem_phys_high )
 {
     // Define the user's virtual address space.
-    kip->memory_info.insert( memdesc_t::conventional, true,
+    memory_info_insert (&kip->memory_info, MEMDESC_CONVENTIONAL, 0, true,
 	    (addr_t)0, (addr_t)KERNEL_OFFSET );
     // Since the system calls are exposed to the users, define
     // a region of the uppger 1gig as accessible to the user.
-    kip->memory_info.insert( memdesc_t::shared, true,
+    memory_info_insert (&kip->memory_info, MEMDESC_SHARED, 0, true,
 	    memcfg_syscall_start(), memcfg_syscall_end() );
 
     // Define the area reserved for the exception vectors.
-    kip->memory_info.insert( memdesc_t::reserved, false, 
+    memory_info_insert (&kip->memory_info, MEMDESC_RESERVED, 0, false, 
 	    (addr_t)0, (addr_t)PHYS_START_AVAIL );
 
     // Define the area reserved for kernel code.
-    kip->memory_info.insert( memdesc_t::reserved, false,
+    memory_info_insert (&kip->memory_info, MEMDESC_RESERVED, 0, false,
 	    virt_to_phys(memcfg_start_code()), 
 	    virt_to_phys(memcfg_end_code()) );
 
     // Define the area reserved for kernel data.
-    kip->memory_info.insert( memdesc_t::reserved, false,
+    memory_info_insert (&kip->memory_info, MEMDESC_RESERVED, 0, false,
 	    virt_to_phys(memcfg_start_data()), 
 	    (addr_t)bootmem_phys_high );
 }
@@ -357,13 +357,13 @@ SECTION(SEC_INIT) static word_t init_bootmem()
 
 static SECTION(SEC_INIT) void perfmon_init( void )
 {
-    if( powerpc_version_t::read().is_750() )
+    if( powerpc_version_is_750 (powerpc_version_read()) )
     {
 	ppc750_mmcr0_t mmcr0;
 
 	mmcr0.raw = 0;
-	mmcr0.x.pmc1select = ppc750_mmcr0_t::cycle_cnt;
-	mmcr0.x.pmc2select = ppc750_mmcr0_t::instr_complete_cnt;
+	mmcr0.x.pmc1select = cycle_cnt;
+	mmcr0.x.pmc2select = instr_complete_cnt;
 	ppc_set_mmcr0( mmcr0.raw );
 
 	ppc_set_pmc1( 0 );
@@ -376,10 +376,13 @@ static SECTION(SEC_INIT) void perfmon_init( void )
 static SECTION(SEC_INIT) void timer_start( void )
 {
 #ifdef CONFIG_PPC_BOOKE
-    ppc_tcr_t tcr;
+    /* ppc_tcr_t's constructor zeroed raw; without it this would program TCR
+       from uninitialised stack.  See PPC_TCR_INIT in arch/powerpc/ppc_registers.h. */
+    ppc_tcr_t tcr = PPC_TCR_INIT;
+
     tcr.auto_reload = 1;
     tcr.dec_irq_enable = 1;
-    tcr.write();
+    ppc_tcr_write (&tcr);
     ppc_set_decar( decrementer_interval );
 #endif
 
@@ -398,7 +401,7 @@ static SECTION(SEC_INIT) void cpu_init( cpuid_t cpu )
 #endif
     install_exception_handlers(cpu);
 
-    get_kernel_space()->init_cpu_mappings(cpu);
+    space_init_cpu_mappings (get_kernel_space(), cpu);
 
     call_cpu_ctors();
 
@@ -421,7 +424,7 @@ static SECTION(SEC_INIT) void cpu_init( cpuid_t cpu )
     ON_CONFIG_SMP(printf("Unsynchronized time base for CPU %d\n", cpu));
 #endif
 
-    if( powerpc_version_t::read().is_750() )
+    if( powerpc_version_is_750 (powerpc_version_read()) )
 	ppc750_configure();
     perfmon_init();
     set_fp_lazy_tcb( NULL );
@@ -441,7 +444,7 @@ SECTION(SEC_INIT) static void finish_cpu_init( void )
     // Enable recoverable exceptions (for this cpu).
     ppc_set_msr( MSR_KERNEL );
 
-    //get_interrupt_ctrl()->map();
+    //intctrl_map ();
     kip_cpu_init( get_kip() );
 
     // Wait for kernel initialization to quiesce, and then enter the idle
@@ -455,7 +458,7 @@ SECTION(SEC_INIT) static void finish_cpu_init( void )
 }
 
 void dump_tlb();
-extern "C" void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
+EXTERN_C void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
 {
 #ifdef CONFIG_PPC_MMU_SEGMENTS
     /* NOTE: do not perform i/o until the page hash is activated!
@@ -478,9 +481,9 @@ extern "C" void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
     setup_kernel_mappings();
 #endif
 
-    get_current_scheduler()->init( false );
-    get_idle_tcb()->notify( finish_cpu_init );
-    get_current_scheduler()->start( cpu );
+    scheduler_init (get_current_scheduler(),  false );
+    tcb_notify (get_idle_tcb(),  finish_cpu_init );
+    scheduler_start (get_current_scheduler(),  cpu );
 
     /* not reached */
     while( 1 );
@@ -515,8 +518,8 @@ SECTION(SEC_INIT) static void start_all_cpus( void )
 	cpu_start_lock.lock();	// Unlocked by the target cpu in startup_cpu
 	printf("CPU0: starting CPU %d\n", cpu);
 	cpu_start_id = cpu;	// cpu_start_id must be protected by the lock.
-	get_interrupt_ctrl()->start_new_cpu( cpu );
-        cpu_t::add_cpu(cpu);
+	intctrl_start_new_cpu ( cpu );
+        cpu_add_cpu(cpu);
     }
     cpu_start_lock.lock();	// Wait for last cpu to init.
 }
@@ -537,11 +540,11 @@ SECTION(SEC_INIT) static void finish_api_init( void )
     kip_cpu_init( get_kip() );
     kip_sc_init( get_kip() );
 
-    get_interrupt_ctrl()->init_arch();
+    intctrl_init_arch ();
 
     cpu_count = get_cpu_count();
     TRACE_INIT( "Detected %d processors\n", cpu_count );
-    cpu_t::add_cpu(0);
+    cpu_add_cpu(0);
 
 #if defined(CONFIG_SMP)
     reclaim_cpu_kmem();
@@ -551,10 +554,10 @@ SECTION(SEC_INIT) static void finish_api_init( void )
     timer_start();
 
     install_extern_int_handler();
-    get_interrupt_ctrl()->init_cpu(0);
+    intctrl_init_cpu (0);
 #if defined(CONFIG_SMP)
     for( cpuid_t cpu = 1; cpu < cpu_count; cpu++ )
-	get_interrupt_ctrl()->init_cpu( cpu );
+	intctrl_init_cpu ( cpu );
 
     // Initialization is finished.  Let the waiting cpu's enter their idle
     // threads.
@@ -641,7 +644,7 @@ static SECTION(SEC_INIT) void install_exception_handlers( cpuid_t cpu )
  *                  The kernel's C entry point.
  *
  ****************************************************************************/
-extern "C" void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t r5 )
+EXTERN_C void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t r5 )
 {
     init_console();
 
@@ -668,10 +671,10 @@ extern "C" void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t 
     kip_mem_init( get_kip(), bootmem_phys_high );
     
     TRACE_INIT("Initializing kernel space\n");
-    space_t::init_kernel_space();
+    space_init_kernel_space();
 
     TRACE_INIT("Initializing TCBs\n");
-    tcb_t::init_tcbs();
+    tcb_init_tcbs();
 
     TRACE_INIT("Initializing boot CPU\n");
     cpu_init( 0 );
@@ -698,11 +701,11 @@ extern "C" void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t 
 
     /* Initialize the idle tcb, and push notify frames for starting
      * the idle thread. */
-    get_current_scheduler()->init( true );
+    scheduler_init (get_current_scheduler(),  true );
 
     /* Push a notify frame for the second stage of initialization, which
      * executes in the context of the idle thread.  This must execute
      * before the scheduler's notify frames. */
-    get_idle_tcb()->notify( finish_api_init );
-    get_current_scheduler()->start( 0 ); /* Does not return. */
+    tcb_notify (get_idle_tcb(),  finish_api_init );
+    scheduler_start (get_current_scheduler(),  0 ); /* Does not return. */
 }
