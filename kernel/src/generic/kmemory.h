@@ -38,12 +38,15 @@
 #include <kdb/linker_set.h>
 #include <debug.h>
 
-class kmem_group_t
+/* was `class kmem_group_t' with both members public -- a plain struct.  It sits
+   under CONFIG_KMEM_TRACE, which the gate config does not set, so the collapse
+   pass never compiled it.  Notes §123. */
+struct kmem_group_t
 {
-public:
     word_t		mem;
     const char *	name;
 };
+typedef struct kmem_group_t kmem_group_t;
 
 extern linker_set_t __kmem_groups;
 

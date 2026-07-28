@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2007, 2009,  Karlsruhe University
  *                
- * File path:     kdb/generic/sprintf.cc
+ * File path:     kdb/generic/sprintf.c
  * Description:   disassembler support code
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -244,7 +244,7 @@ static int SECTION(SEC_KDEBUG) do_sprintf(char** obuf, const char* format_p, va_
     return n;
 }
 
-extern "C" int SECTION(SEC_KDEBUG) sprintf(char* obuf, const char* format, ...)
+int SECTION(SEC_KDEBUG) sprintf(char* obuf, const char* format, ...)
 {
     va_list args;
 
@@ -257,7 +257,7 @@ extern "C" int SECTION(SEC_KDEBUG) sprintf(char* obuf, const char* format, ...)
     return printed;
 };
 
-extern "C" int SECTION(SEC_KDEBUG) fprintf(char* f, const char* format, ...)
+int SECTION(SEC_KDEBUG) fprintf(char* f, const char* format, ...)
 {
     va_list args;
     int i;

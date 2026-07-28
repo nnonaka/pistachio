@@ -35,31 +35,33 @@
 #include <kdb/input.h>
 #include INC_ARCH(trapgate.h)
 
-extern "C" int disas(addr_t pc);
+BEGIN_DECLS
+int disas (addr_t pc);
+END_DECLS
 
 DECLARE_CMD(cmd_disas, root, 'U', "disas", "disassemble");
 
 CMD(cmd_disas, cg)
 {
-    debug_param_t * param = (debug_param_t*)kdb.kdb_param;
-    x86_exceptionframe_t* f = param->frame;
-
+    debug_param_t * param = (debug_param_t *) kdb.kdb_param;
+    x86_exceptionframe_t * f = param->frame;
     char c;
     u64_t pc;
+
+    (void) cg;
 restart:
-    if ((pc = get_hex("IP", f->rip)) == ABORT_MAGIC)
+    if ((pc = get_hex ("IP", f->__base.regs[X86_EXC_IPREG], NULL)) == ABORT_MAGIC)
 	return CMD_NOQUIT;
 
     printf("Key strokes: [space]=next instruction, u=new IP, q=quit\n");
     do {
 	printf("%x: ", pc);
-	pc += disas((addr_t) pc);
+	pc += disas ((addr_t) pc);
 	printf("\n");
-	c = get_choice(NULL, " /u/q", ' ');
+	c = get_choice (NULL, " /u/q", ' ');
     } while ((c != 'q') && (c != 'u'));
     if (c == 'u')
 	goto restart;
 
     return CMD_NOQUIT;
 }
-

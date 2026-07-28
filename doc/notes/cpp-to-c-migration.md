@@ -5305,3 +5305,62 @@ definition disagreed on parameter order, silently, so the fifth argument is the
 *outbound* rights and `vrt.c`'s only call site leaves inbound rights wide open.
 Whether that is intended is a question about the feature's design, and it is
 unanswered.
+
+
+## §123 — fullkdb: builds. It does not boot, and that is not the conversion.
+
+`x86-x64-p4-fullkdb` **compiles and links** (1460200 bytes). Ten of eleven x64
+configs now build. It **triple-faults at boot**, before a single character of
+output, and the investigation below did not find the cause.
+
+### The four C++ leftovers
+
+All four sat behind `CONFIG_KMEM_TRACE` or the full-kdb options, which the gate
+does not set — the seventh appearance of the pattern, and the first one to
+block `tcb_layout.h` generation since §103, so it took the whole build down.
+
+  - `generic/kmemory.h` — `class kmem_group_t` with both members public, under
+    `#if defined(CONFIG_KMEM_TRACE)`. A plain struct.
+  - `kdb/arch/x86/x64/disas.cc` (65 lines) — `extern "C"` on `disas`, and
+    `f->rip`, which is `f->__base.regs[X86_EXC_IPREG]` in the C frame. Also
+    picked up the two arguments `get_hex` has always required.
+  - `kdb/generic/sprintf.cc` (272 lines) — two `extern "C"` markers and nothing
+    else; the body was already C.
+  - `kdb/generic/kmemory.c` — `__kmem_groups.reset()` / `.next()`, C++ methods
+    on the linker set. `linker_set_reset` / `linker_set_next` already existed.
+
+### The boot failure
+
+qemu **exits** rather than hangs, which with `-no-reboot` means a triple fault,
+not the idle-and-wait of §121. It happens before the `CONFIG_VERBOSE_INIT`
+banner, so within the first moments of kernel entry.
+
+Ruled out by bisecting the config:
+
+  - **`CONFIG_KMEM_TRACE` off — still faults.** So the `kmem_group_t`
+    conversion above is not the cause.
+  - **`CONFIG_IPC_FASTPATH` off — still faults.**
+
+Not ruled out: `CONFIG_TRACEBUFFER`, `CONFIG_TRACEPOINTS`, `CONFIG_KDB_BREAKIN`,
+`CONFIG_TBUF_PERFMON`, `CONFIG_DEBUG_SYMBOLS` — the remaining options that
+distinguish this config from the booting `x86-x64-p4`.
+
+Kickstart's segment report is healthy and matches `x86-x64-p4`'s shape (a larger
+`.text`, 0x600000-0x636500 against 0x600000-0x617500, everything else at the
+same addresses), so this is not a load or layout failure.
+
+As with §122, there is no evidence this configuration ever ran: it has not
+compiled in this tree, so the fault may be as old as the options themselves.
+The next probe is to keep bisecting the five remaining options, cheapest first
+(`DEBUG_SYMBOLS`, then `TBUF_PERFMON`, `KDB_BREAKIN`, `TRACEPOINTS`,
+`TRACEBUFFER`).
+
+### x64 status
+
+    build and boot (7)    p4-smp  p4  p3  k8  p4-nokdb  p4-fp  p4-statictcbs
+    build, do not boot (3) p4-fullkdb (triple fault)
+                           p4-newmdb  p4-iofp   (idle, §121-§122)
+    do not build (1)      p4-cm  -- compatibility mode, glue/v4-x86/utcb.h (§95)
+
+Gate: 0 errors, 709 symbols with identical bodies. The other six building
+configs rebuild unchanged.

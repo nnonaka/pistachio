@@ -120,9 +120,10 @@ CMD (cmd_kmem_stats, cg)
 #if defined(CONFIG_KMEM_TRACE)
 
     printf ("\nKernel memory distribution:\n");
-    __kmem_groups.reset ();
     kmem_group_t * group;
-    while ((group = (kmem_group_t *) __kmem_groups.next ()) != NULL)
+
+    linker_set_reset (&__kmem_groups);
+    while ((group = (kmem_group_t *) linker_set_next (&__kmem_groups)) != NULL)
     {
 	printf ("  %16s %6d %cB\n",
 		group->name,

@@ -34,7 +34,7 @@ SOURCES+=	kdb/generic/linear_ptab_dump.c
 
 
 ifeq ("$(CONFIG_KDB_DISAS)","y")
-SOURCES+=	kdb/arch/x86/x64/disas.cc kdb/arch/x86/x64/amd64-dis.c kdb/generic/sprintf.cc
+SOURCES+=	kdb/arch/x86/x64/disas.c kdb/arch/x86/x64/amd64-dis.c kdb/generic/sprintf.c
 endif
 
 ifeq ("$(CONFIG_NEW_MDB)","y")
