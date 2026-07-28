@@ -44,6 +44,21 @@ secondary_release_reloc = secondary_release + kernel_offset;
 
 ENTRY(_start)
 
+MEMORY
+{
+	/*  The kernel is linked at its virtual address, but .einit is linked
+	 *  at its *physical* one: it holds _start, the init stack and
+	 *  init_paging, which run before the kernel's virtual mapping is in
+	 *  place.  Two address spaces in one link, so .einit gets a region of
+	 *  its own -- otherwise placing it below the current location counter
+	 *  is "dot moved backwards", which ld warns about once per sizing
+	 *  pass.  The region is only there to give .einit a separate location
+	 *  counter; its address still comes from the expression on the section
+	 *  itself, and the resulting image is byte-for-byte the same.
+	 */
+	phys : ORIGIN = 0, LENGTH = KERNEL_OFFSET
+}
+
 PHDRS
 {
 	/*  List program headers in the order that matches their section
@@ -160,7 +175,7 @@ SECTIONS
 
 	.einit (. - KERNEL_OFFSET) : {
 		*(.einit)
-	} : einit
+	} > phys : einit
 
 	/* Per-cpu data area for the kernel.
 	 */

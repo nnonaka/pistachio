@@ -3770,3 +3770,68 @@ during the x86 conversion and was false for the only port that sets the option.
   - x86 gate: 0 errors, 0 implicit declarations; 705 symbols before and after,
     identical bodies except the four above, each an ABI improvement traced to
     the newly visible prototypes; boots to userland and kdb responds.
+
+
+## §100 — The `.einit` linker warnings: two address spaces in one link
+
+Six copies of
+
+    ld: warning: dot moved backwards before `.einit'
+
+on every powerpc link. The layout was correct; the script just had no way to say
+what it meant.
+
+`src/platform/ppc44x/linker.lds` links the kernel at its virtual address
+(`text_vaddr`, KERNEL_OFFSET = 0xC0000000), but `.einit` at its **physical**
+one, via `.einit (. - KERNEL_OFFSET)`. That is deliberate: `.einit` holds
+`_start`, the init stack (`startup.S`) and `init_paging`
+(`glue/v4-powerpc/space-swtlb.c`) — code that runs before the kernel's virtual
+mapping exists. The section is emitted after `.bss`, so the location counter is
+up at 0xC00D4000 and the section address resolves to 0x000D4000. ld sees the
+counter jump backwards by 3 GB and warns, once per sizing pass.
+
+The fix is to stop pretending there is one location counter. `.einit` belongs to
+a different address space, so it gets a region of its own:
+
+    MEMORY { phys : ORIGIN = 0, LENGTH = KERNEL_OFFSET }
+    ...
+    .einit (. - KERNEL_OFFSET) : { *(.einit) } > phys : einit
+
+The region exists only to give `.einit` a separate location counter; the address
+still comes from the expression on the section. Nothing about the image changes.
+
+### What was tried first, and why it failed
+
+The obvious move — turn the implicit backwards jump into an explicit one —
+
+    _saved_dot = .;  . = _end_data_phys;  .einit . : { ... }  . = _saved_dot;
+
+still produced all six warnings. ld's check is on the location counter
+decreasing at all, not on *how* the section address was expressed. Worth knowing
+before spending time rephrasing the address arithmetic: no expression written
+against a single counter can avoid this. A second counter is the only fix.
+
+### Verifying a change to a port that cannot be booted
+
+powerpc links but has never been run here, so "it still links" is not evidence.
+The check used instead was a relink harness (`scratchpad/ppclink.sh`) that
+re-runs the exact `ld` command against the **already-built object files**, so the
+linker script is the only variable. Object order is taken verbatim from the real
+link line — it determines section content order, and a `sort -u`'d list does not
+reproduce the build (that mistake cost one confusing byte-27 mismatch).
+
+The harness reproduced the build byte-for-byte, and old script vs new script over
+the same objects produced **identical binaries**. A full clean rebuild then
+differed in exactly 3 bytes, all inside `.kip` at 0x5016A: the build timestamp
+string ("17:04:03" -> "17:14:42"), the same nondeterminism §96 noted. Section
+and program headers compare identically.
+
+That is the right shape of evidence for a port you cannot execute: hold
+everything but the one file constant, and require bit-equality rather than
+absence of complaints.
+
+### Still open
+
+`except.o: missing .note.GNU-stack section implies executable stack` remains —
+a hand-written `.S` with no `.note.GNU-stack`, unrelated to `.einit`, and not
+touched here.
