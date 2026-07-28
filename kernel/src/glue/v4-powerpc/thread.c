@@ -78,19 +78,19 @@ __attribute__ ((noreturn)) static void notify_trampoline()
     while( 1 );
 }
 
-void tcb_t::notify( void (*func)(word_t, word_t), word_t arg1, word_t arg2 )
+void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t arg1, word_t arg2)
 {
     /*  Create the stack frame seen by the notify trampoline.
      *  An old thread switch record will precede this info if the tcb
      *  is already a live thread.
      */
     notify_frame_t *notify_frame = (notify_frame_t *)
-	addr_offset( this->stack,  -sizeof(notify_frame_t) );
-    this->stack = (word_t *)notify_frame;
+	addr_offset( self->stack,  -sizeof(notify_frame_t) );
+    self->stack = (word_t *)notify_frame;
 
     tswitch_frame_t *tswitch_frame = (tswitch_frame_t *)
-	addr_offset( this->stack, -sizeof(tswitch_frame_t) );
-    this->stack = (word_t *)tswitch_frame;
+	addr_offset( self->stack, -sizeof(tswitch_frame_t) );
+    self->stack = (word_t *)tswitch_frame;
 
     notify_frame->func = func;
     notify_frame->arg1 = arg1;
@@ -110,13 +110,14 @@ __attribute__ ((noreturn)) static void enter_user_thread( tcb_t *tcb,
     func();
 
     /* make sure all the resources are initialized */
-    if( tcb->resource_bits)
-	tcb->resources.load( tcb );
+    if( resource_bits_have_resources (&tcb->resource_bits) )
+	tcb_resources_load (&tcb->resources, tcb);
 
     syscall_regs_t *regs = get_user_syscall_regs(tcb);
     word_t user_ip = regs->srr0_ip;
     word_t user_sp = regs->r1_stack;
-    word_t user_utcb = tcb->get_local_id().get_raw();
+    threadid_t local_id = tcb_get_local_id (tcb);
+    word_t user_utcb = threadid_get_raw (&local_id);
     word_t msr = regs->srr1_flags;
 
     TRACE_THREAD( "tcb %p ip %p, sp %p, utcb %p, msr %08x\n", 
@@ -136,11 +137,11 @@ __attribute__ ((noreturn)) static void enter_user_thread( tcb_t *tcb,
     while(1);
 }
 
-void tcb_t::create_startup_stack( void (*func)() )
+void tcb_create_startup_stack (tcb_t *self, void (*func)(void))
 {
     /* Allocate the space for the user exception frame. */
-    syscall_regs_t *regs = get_user_syscall_regs(this);
-    this->stack = (word_t *)regs;
+    syscall_regs_t *regs = get_user_syscall_regs(self);
+    self->stack = (word_t *)regs;
 
     /* Put sentinels in some of the user exception frame. */
     regs->r1_stack = 0x12345678;
@@ -154,87 +155,90 @@ void tcb_t::create_startup_stack( void (*func)() )
 
     /* Init the user's local ID, so that an exchange registers
      * on an inactive thread will succeed. */
-    ASSERT( this->utcb );
+    ASSERT( self->utcb );
 #if (ABI_LOCAL_ID != 2)
 # error "Expected register R2 to store the user's local ID."
 #endif
-    regs->r2_local_id = this->get_local_id().get_raw();
+    {
+	threadid_t local_id = tcb_get_local_id (self);
+	regs->r2_local_id = threadid_get_raw (&local_id);
+    }
 
 #ifdef CONFIG_X_PPC_SOFTHVM
-    if (get_space()->hvm_mode)
+    if (tcb_get_space(self)->hvm_mode)
     {
 	//TRACEF("initializing HVM mode for %x...\n", get_global_id().get_raw());
 	regs->srr1_flags = MSR_SOFTHVM;
-	this->get_arch()->init_hvm(this);
-	this->pdir_cache = 0;
+	arch_ktcb_init_hvm (&self->arch, self);
+	self->pdir_cache = 0;
     }
 #endif
 
     /* Create the thread switch context record for starting this
      * kernel thread. */
-    this->notify( (void (*)(word_t,word_t))enter_user_thread, 
-	    (word_t)this, (word_t)func );
+    tcb_notify_word2 (self, (void (*)(word_t,word_t))enter_user_thread,
+		      (word_t)self, (word_t)func);
 }
 
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
 
-word_t arch_ktcb_t::get_powerpc_frameregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)
+word_t arch_ktcb_get_powerpc_frameregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
 {
     /* transfer from frame to dst */
-    const word_t *hwreg = ctrlxfer_item_t::hwregs[id];
-    except_regs_t *frame = get_user_except_regs(addr_to_tcb(this));
+    const word_t *hwreg = ctrlxfer_hwregs[id];
+    except_regs_t *frame = get_user_except_regs(addr_to_tcb(self));
 
     word_t num = 0;
     
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (f%06d/%06d/%8s->m%06d): %08x", 
-                                reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg), 
+                                reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg), 
                                 dst_mr, ((word_t*)frame)[hwreg[reg]]);
-        dst->set_mr(dst_mr++, ((word_t*)frame)[hwreg[reg]]);
+        tcb_set_mr (dst, (*dst_mr)++, ((word_t*)frame)[hwreg[reg]]);
     }
     return num;
 }
 
-word_t arch_ktcb_t::set_powerpc_frameregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr)
+word_t arch_ktcb_set_powerpc_frameregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
 {
     /* transfer from src to frame */
-    const word_t *hwreg = ctrlxfer_item_t::hwregs[id];
-    except_regs_t *frame = get_user_except_regs(addr_to_tcb(this));
+    const word_t *hwreg = ctrlxfer_hwregs[id];
+    except_regs_t *frame = get_user_except_regs(addr_to_tcb(self));
     word_t num = 0;
     
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (m%06d->f%06d/%06d/%8s): %08x", 
-                                src_mr, reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg),
-                                src->get_mr(src_mr));
+                                src_mr, reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg),
+                                tcb_get_mr (src, *src_mr));
         
-        ((word_t*)frame)[hwreg[reg]] = src->get_mr(src_mr++);
+        ((word_t*)frame)[hwreg[reg]] = tcb_get_mr (src, (*src_mr)++);
     }
     return num;
 }
 
-INLINE word_t arch_ktcb_t::powerpc_ctrlxfer_fpu(tcb_t *dst)
+word_t arch_ktcb_powerpc_ctrlxfer_fpu (arch_ktcb_t *self, tcb_t *dst)
 {
     /* FPU has special handling--transfer always happens
      * from/to floating point regs */
     tcb_t *fp_tcb = get_fp_lazy_tcb();
-    tcb_t *src = (tcb_t *) addr_to_tcb (this);
+    tcb_t *src = (tcb_t *) addr_to_tcb (self);
     
     /* XXX: this only works on the same CPU */
-    if (src->get_cpu() == dst->get_cpu())
+    if (tcb_get_cpu (src) == tcb_get_cpu (dst))
     {
         /* spill if neither source nor dest */
         if (fp_tcb != src && fp_tcb != dst && fp_tcb)
-            fp_tcb->resources.spill_fpu(fp_tcb);
+            tcb_resources_spill_fpu (&fp_tcb->resources, fp_tcb);
         
         /* if it wasn't the source then load into FPU */
         if (fp_tcb != src)
-            src->resources.restore_fpu(src);
+            tcb_resources_restore_fpu (&src->resources, src);
         
         /* swing ownership to dst */
-        src->resources.reown_fpu(src, dst);
+        tcb_resources_reown_fpu (&src->resources, src, dst);
     }
     else
     {
@@ -245,69 +249,69 @@ INLINE word_t arch_ktcb_t::powerpc_ctrlxfer_fpu(tcb_t *dst)
 }
 
 
-word_t arch_ktcb_t::set_powerpc_fpuregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr)
-{ return src->arch.powerpc_ctrlxfer_fpu(addr_to_tcb(this)); }
+word_t arch_ktcb_set_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
+{ return arch_ktcb_powerpc_ctrlxfer_fpu (&src->arch, addr_to_tcb(self)); }
 
-word_t arch_ktcb_t::get_powerpc_fpuregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)
+word_t arch_ktcb_get_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
 { return powerpc_ctrlxfer_fpu(dst); }
 
 
 #ifdef CONFIG_X_PPC_SOFTHVM
-word_t arch_ktcb_t::get_powerpc_vmregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)
+word_t arch_ktcb_get_powerpc_vmregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
 {
     /* transfer from frame to dst */
-    const word_t * const hwreg = ctrlxfer_item_t::hwregs[id];
+    const word_t * const hwreg = ctrlxfer_hwregs[id];
     word_t num = 0;
     
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (f%06d/%06d/%8s->m%06d): %08x", 
-                                reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg), 
-                                dst_mr, ((word_t*)vm)[hwreg[reg]]);
-        dst->set_mr(dst_mr++, ((word_t*)vm)[hwreg[reg]]);
+                                reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg), 
+                                dst_mr, ((word_t*)self->vm)[hwreg[reg]]);
+        tcb_set_mr (dst, (*dst_mr)++, ((word_t*)self->vm)[hwreg[reg]]);
     }
     return num;
 
 }
 
-word_t arch_ktcb_t::set_powerpc_vmregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr)
+word_t arch_ktcb_set_powerpc_vmregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
 {
     /* transfer from src to frame */
-    const word_t * const hwreg = ctrlxfer_item_t::hwregs[id];
+    const word_t * const hwreg = ctrlxfer_hwregs[id];
     word_t num = 0;
     
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (m%06d->f%06d/%06d/%8s): %08x", 
-                                src_mr, reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg),
-                                src->get_mr(src_mr));
-        ((word_t*)vm)[hwreg[reg]] = src->get_mr(src_mr++);
+                                src_mr, reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg),
+                                tcb_get_mr (src, *src_mr));
+        ((word_t*)self->vm)[hwreg[reg]] = tcb_get_mr (src, (*src_mr)++);
     }
     return num;
 
 }
 
-word_t arch_ktcb_t::get_powerpc_tlbregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)
+word_t arch_ktcb_get_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
 {
     /* transfer from frame to dst */
     word_t num = 0;
 
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
-        word_t hwreg = (id - ctrlxfer_item_t::id_tlb0) * 4 + reg / 4;
-        word_t val = vm->tlb[hwreg].ctrlxfer_get(reg % 4);
+        word_t hwreg = (id - id_tlb0) * 4 + reg / 4;
+        word_t val = self->vm->tlb[hwreg].ctrlxfer_get(reg % 4);
         
         TRACE_CTRLXFER_DETAILS( "\t (f%06d/%06d/%8s->m%06d): %08x", 
-                                reg, hwreg, ctrlxfer_item_t::get_hwregname(id, reg), 
+                                reg, hwreg, ctrlxfer_get_hwregname(id, reg), 
                                 dst_mr, val);
         
-        dst->set_mr(dst_mr++, val);
+        tcb_set_mr (dst, (*dst_mr)++, val);
     }
     return num;
 
 }
 
-word_t arch_ktcb_t::set_powerpc_tlbregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr)
+word_t arch_ktcb_set_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
 {
     /* transfer from src to frame */
     word_t num = 0;
@@ -315,12 +319,12 @@ word_t arch_ktcb_t::set_powerpc_tlbregs(word_t id, word_t mask, tcb_t *src, word
     
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
-        word_t hwreg = (id - ctrlxfer_item_t::id_tlb0) * 4 + reg / 4;
-        vm->tlb[hwreg].ctrlxfer_set(reg % 4, src->get_mr(src_mr++));
+        word_t hwreg = (id - id_tlb0) * 4 + reg / 4;
+        self->vm->tlb[hwreg].ctrlxfer_set(reg % 4, tcb_get_mr (src, (*src_mr)++));
         
         TRACE_CTRLXFER_DETAILS( "\t (m%06d->f%06d/%06d/%8s): %08x", 
-                                src_mr, reg, hwreg, ctrlxfer_item_t::get_hwregname(id, reg),
-                                src->get_mr(src_mr));
+                                src_mr, reg, hwreg, ctrlxfer_get_hwregname(id, reg),
+                                tcb_get_mr (src, *src_mr));
         
     }
     return num;
@@ -329,73 +333,73 @@ word_t arch_ktcb_t::set_powerpc_tlbregs(word_t id, word_t mask, tcb_t *src, word
 #endif
 
 
-get_ctrlxfer_regs_t arch_ktcb_t::get_ctrlxfer_regs[ctrlxfer_item_t::id_max] = 
+get_ctrlxfer_regs_t get_ctrlxfer_regs[id_max] = 
 { 
-  /* gpregs0 */	  &arch_ktcb_t::get_powerpc_frameregs,
-  /* gpregs1 */	  &arch_ktcb_t::get_powerpc_frameregs,
-  /* gpregsx */	  &arch_ktcb_t::get_powerpc_frameregs,
-  /* fpuregs */   &arch_ktcb_t::get_powerpc_fpuregs,                 
+  /* gpregs0 */	  &arch_ktcb_get_powerpc_frameregs,
+  /* gpregs1 */	  &arch_ktcb_get_powerpc_frameregs,
+  /* gpregsx */	  &arch_ktcb_get_powerpc_frameregs,
+  /* fpuregs */   &arch_ktcb_get_powerpc_fpuregs,                 
 #ifdef CONFIG_X_PPC_SOFTHVM             
-  /* mmu */ 	  &arch_ktcb_t::get_powerpc_vmregs,
-  /* except */	  &arch_ktcb_t::get_powerpc_vmregs,
-  /* ivor */	  &arch_ktcb_t::get_powerpc_vmregs,
-  /* timer */  	  &arch_ktcb_t::get_powerpc_vmregs,
-  /* config */	  &arch_ktcb_t::get_powerpc_vmregs,
-  /* debug */	  &arch_ktcb_t::get_powerpc_vmregs, 
-  /* icache */    &arch_ktcb_t::get_powerpc_vmregs, 
-  /* dcache */	  &arch_ktcb_t::get_powerpc_vmregs, 
-  /* shadow_tlb */&arch_ktcb_t::get_powerpc_vmregs,            
-  /* tlb0 */      &arch_ktcb_t::get_powerpc_tlbregs,	                
-  /* tlb1 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb2 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb3 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb4 */	  &arch_ktcb_t::get_powerpc_tlbregs,              
-  /* tlb5 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb6 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb7 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb8 */	  &arch_ktcb_t::get_powerpc_tlbregs,              
-  /* tlb9 */      &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb10 */     &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb11 */     &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb12 */	  &arch_ktcb_t::get_powerpc_tlbregs,              
-  /* tlb13 */     &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb14 */     &arch_ktcb_t::get_powerpc_tlbregs,                
-  /* tlb15 */     &arch_ktcb_t::get_powerpc_tlbregs,                
+  /* mmu */ 	  &arch_ktcb_get_powerpc_vmregs,
+  /* except */	  &arch_ktcb_get_powerpc_vmregs,
+  /* ivor */	  &arch_ktcb_get_powerpc_vmregs,
+  /* timer */  	  &arch_ktcb_get_powerpc_vmregs,
+  /* config */	  &arch_ktcb_get_powerpc_vmregs,
+  /* debug */	  &arch_ktcb_get_powerpc_vmregs, 
+  /* icache */    &arch_ktcb_get_powerpc_vmregs, 
+  /* dcache */	  &arch_ktcb_get_powerpc_vmregs, 
+  /* shadow_tlb */&arch_ktcb_get_powerpc_vmregs,            
+  /* tlb0 */      &arch_ktcb_get_powerpc_tlbregs,	                
+  /* tlb1 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb2 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb3 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb4 */	  &arch_ktcb_get_powerpc_tlbregs,              
+  /* tlb5 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb6 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb7 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb8 */	  &arch_ktcb_get_powerpc_tlbregs,              
+  /* tlb9 */      &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb10 */     &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb11 */     &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb12 */	  &arch_ktcb_get_powerpc_tlbregs,              
+  /* tlb13 */     &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb14 */     &arch_ktcb_get_powerpc_tlbregs,                
+  /* tlb15 */     &arch_ktcb_get_powerpc_tlbregs,                
 #endif
 };    
 
-set_ctrlxfer_regs_t arch_ktcb_t::set_ctrlxfer_regs[ctrlxfer_item_t::id_max] = 
+set_ctrlxfer_regs_t set_ctrlxfer_regs[id_max] = 
 { 
-  /* gpregs0 */	  &arch_ktcb_t::set_powerpc_frameregs,
-  /* gpregs1 */	  &arch_ktcb_t::set_powerpc_frameregs,
-  /* gpregsx */	  &arch_ktcb_t::set_powerpc_frameregs,
-  /* fpuregs */   &arch_ktcb_t::set_powerpc_fpuregs,                 
+  /* gpregs0 */	  &arch_ktcb_set_powerpc_frameregs,
+  /* gpregs1 */	  &arch_ktcb_set_powerpc_frameregs,
+  /* gpregsx */	  &arch_ktcb_set_powerpc_frameregs,
+  /* fpuregs */   &arch_ktcb_set_powerpc_fpuregs,                 
 #ifdef CONFIG_X_PPC_SOFTHVM             
-  /* mmu */ 	  &arch_ktcb_t::set_powerpc_vmregs,
-  /* except */	  &arch_ktcb_t::set_powerpc_vmregs,
-  /* ivor */	  &arch_ktcb_t::set_powerpc_vmregs,
-  /* timer */  	  &arch_ktcb_t::set_powerpc_vmregs,
-  /* config */	  &arch_ktcb_t::set_powerpc_vmregs,
-  /* debug */	  &arch_ktcb_t::set_powerpc_vmregs, 
-  /* icache */    &arch_ktcb_t::set_powerpc_vmregs, 
-  /* dcache */	  &arch_ktcb_t::set_powerpc_vmregs, 
-  /* shadow_tlb */&arch_ktcb_t::set_powerpc_vmregs,            
-  /* tlb0 */      &arch_ktcb_t::set_powerpc_tlbregs,	                
-  /* tlb1 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb2 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb3 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb4 */	  &arch_ktcb_t::set_powerpc_tlbregs,              
-  /* tlb5 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb6 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb7 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb8 */	  &arch_ktcb_t::set_powerpc_tlbregs,              
-  /* tlb9 */      &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb10 */     &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb11 */     &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb12 */	  &arch_ktcb_t::set_powerpc_tlbregs,              
-  /* tlb13 */     &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb14 */     &arch_ktcb_t::set_powerpc_tlbregs,                
-  /* tlb15 */     &arch_ktcb_t::set_powerpc_tlbregs,                
+  /* mmu */ 	  &arch_ktcb_set_powerpc_vmregs,
+  /* except */	  &arch_ktcb_set_powerpc_vmregs,
+  /* ivor */	  &arch_ktcb_set_powerpc_vmregs,
+  /* timer */  	  &arch_ktcb_set_powerpc_vmregs,
+  /* config */	  &arch_ktcb_set_powerpc_vmregs,
+  /* debug */	  &arch_ktcb_set_powerpc_vmregs, 
+  /* icache */    &arch_ktcb_set_powerpc_vmregs, 
+  /* dcache */	  &arch_ktcb_set_powerpc_vmregs, 
+  /* shadow_tlb */&arch_ktcb_set_powerpc_vmregs,            
+  /* tlb0 */      &arch_ktcb_set_powerpc_tlbregs,	                
+  /* tlb1 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb2 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb3 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb4 */	  &arch_ktcb_set_powerpc_tlbregs,              
+  /* tlb5 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb6 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb7 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb8 */	  &arch_ktcb_set_powerpc_tlbregs,              
+  /* tlb9 */      &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb10 */     &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb11 */     &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb12 */	  &arch_ktcb_set_powerpc_tlbregs,              
+  /* tlb13 */     &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb14 */     &arch_ktcb_set_powerpc_tlbregs,                
+  /* tlb15 */     &arch_ktcb_set_powerpc_tlbregs,                
 #endif
 };    
 

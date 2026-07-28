@@ -51,9 +51,12 @@
 /* implementation specific functions */
 #if defined(CONFIG_X_CTRLXFER_MSG)
 #include INC_GLUE(ipc.h)
-class arch_ktcb_t;
-typedef word_t (arch_ktcb_t::*get_ctrlxfer_regs_t)(word_t id, word_t mask, tcb_t *dst_utcb, word_t &dst_mr);
-typedef word_t (arch_ktcb_t::*set_ctrlxfer_regs_t)(word_t id, word_t mask, tcb_t *src_utcb, word_t &src_mr);
+struct arch_ktcb_t; typedef struct arch_ktcb_t arch_ktcb_t;
+/* Were pointers-to-member of arch_ktcb_t; in C they are plain function
+   pointers taking the receiver first, and the word_t& out-parameter is a
+   pointer. */
+typedef word_t (*get_ctrlxfer_regs_t)(struct arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst_utcb, word_t *dst_mr);
+typedef word_t (*set_ctrlxfer_regs_t)(struct arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src_utcb, word_t *src_mr);
 #endif
 
 /* implementation specific functions */
@@ -150,7 +153,8 @@ struct tcb_t
     space_t *		space;
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-    ctrlxfer_mask_t	fault_ctrlxfer[4+arch_ktcb_t::fault_max];
+    /* ARCH_KTCB_FAULT_MAX comes from INC_GLUE(ktcb.h), included above. */
+    ctrlxfer_mask_t	fault_ctrlxfer[4+ARCH_KTCB_FAULT_MAX];
 #endif
 
     bitmask_word_t	flags;

@@ -115,7 +115,7 @@ static const word_t hwreg_shadow_tlb[] = {
 };
 #endif
 
-const word_t* const ctrlxfer_item_t::hwregs[] = {
+const word_t* const ctrlxfer_hwregs[] = {
     frame_gprs0, frame_gprs1, frame_gprx, NULL, 
 #ifdef CONFIG_X_PPC_SOFTHVM
     hwreg_mmu, hwreg_except, hwreg_ivor, 
@@ -128,7 +128,7 @@ const word_t* const ctrlxfer_item_t::hwregs[] = {
 #endif
 };
 
-const word_t ctrlxfer_item_t::num_hwregs[] = {
+const word_t ctrlxfer_num_hwregs[] = {
     sizeof(frame_gprs0) / sizeof(word_t),
     sizeof(frame_gprs1) / sizeof(word_t),
     sizeof(frame_gprx) / sizeof(word_t),

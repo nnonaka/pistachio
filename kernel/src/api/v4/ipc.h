@@ -193,50 +193,50 @@ END_DECLS
 #define IPC_NUM_SAVED_MRS	4
 #define IPC_CTRLXFER_STDFAULTS	4
 
-class ctrlxfer_item_t : public arch_ctrlxfer_item_t
-{ 
-
-public:
-    /* members */
+/* Was a class deriving from arch_ctrlxfer_item_t purely to inherit its id_e
+   enum; that enum is file-scope in C, so the struct stands alone.  regs was
+   wrapped in an anonymous union holding a single flexible array -- which C
+   rejects in a union -- so it is simply the trailing flexible member. */
+struct ctrlxfer_item_t
+{
     msg_item_t item;
-    union
-    {
-	word_t regs[];
-    };
+    word_t     regs[];
+};
+typedef struct ctrlxfer_item_t ctrlxfer_item_t;
 
-    static msg_item_t kernel_fault_item(word_t fault)
-	{
-	    msg_item_t item;
-	    item.raw = 0;
-	    item.continued = 0;
-	    item.type = 6;
-	    item.mask = 0x3ff;	
-	    item.id = fault; // we operate with 0-based fault IDs
-	    return item;
-	}
+extern const word_t ctrlxfer_num_hwregs[id_max];
+extern const word_t * const ctrlxfer_hwregs[id_max];
 
-    static msg_item_t fault_item(id_e id)
-	{
-	    msg_item_t item;
-	    item.raw = 0;
-	    item.continued = 0;
-	    item.type = 6;
-	    item.mask = (1 << num_hwregs[id]) - 1;	
-	    item.id = id;
-	    return item;	
-	}
+INLINE msg_item_t ctrlxfer_kernel_fault_item (word_t fault)
+{
+    msg_item_t item;
+    item.raw = 0;
+    item.continued = 0;
+    item.type = 6;
+    item.mask = 0x3ff;
+    item.id = fault;	/* we operate with 0-based fault IDs */
+    return item;
+}
 
-    static const void mask_hwregs(const word_t  id, word_t &val)
-	{ val &= (1UL << num_hwregs[id])-1; }
+INLINE msg_item_t ctrlxfer_fault_item (word_t id)
+{
+    msg_item_t item;
+    item.raw = 0;
+    item.continued = 0;
+    item.type = 6;
+    item.mask = (1 << ctrlxfer_num_hwregs[id]) - 1;
+    item.id = id;
+    return item;
+}
+
+/* The val out-parameter was a word_t& reference. */
+INLINE void ctrlxfer_mask_hwregs (const word_t id, word_t *val)
+{ *val &= (1UL << ctrlxfer_num_hwregs[id]) - 1; }
 
 #if defined(CONFIG_DEBUG)
-    static const char* get_idname(const word_t id);
-    static const char* get_hwregname(const word_t id, const word_t reg);
+const char * ctrlxfer_get_idname (const word_t id);
+const char * ctrlxfer_get_hwregname (const word_t id, const word_t reg);
 #endif
-
-    static const word_t num_hwregs[id_max];
-    static const word_t * const hwregs[id_max];
-};
 
 #endif
 

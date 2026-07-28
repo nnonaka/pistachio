@@ -35,7 +35,11 @@ SOURCES += $(addprefix src/api/v4/, exregs.c ipc.c ipcx.c kernelinterface.c thre
 SOURCES += $(addprefix src/api/v4/sched-$(SCHED)/, schedule.c)
 
 ifeq ("$(CONFIG_X_CTRLXFER_MSG)","y")
-SOURCES+=	src/glue/$(API)-$(ARCH)/ipc.cc
+# powerpc's glue ipc is C; x86's is still .cc.  Pick whichever exists so the
+# rule stays correct while the architectures convert at different times.
+SOURCES+=	$(if $(wildcard $(SRCDIR)/src/glue/$(API)-$(ARCH)/ipc.c),\
+			src/glue/$(API)-$(ARCH)/ipc.c,\
+			src/glue/$(API)-$(ARCH)/ipc.cc)
 endif
 
 VERSIONFILE=$(BUILDDIR)/.version
