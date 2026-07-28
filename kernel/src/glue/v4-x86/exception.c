@@ -184,14 +184,14 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     case 0xe4:  /* in  %al,      port imm8  (byte)  */
     case 0xe6:  /* out %al,      port imm8  (byte)  */
     {
-	if (!readmem (space, addr_offset(instr, 1), &i[1]))
+	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
 	    return false;
 	return handle_io_pagefault(current, i[1], 0, instr);
     }
     case 0xe5:  /* in  %eax, port imm8  (dword) */
     case 0xe7:  /* out %eax, port imm8  (dword) */
     {
-	if (!readmem (space, addr_offset(instr, 1), &i[1]))
+	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
 	    return false;
 	return handle_io_pagefault(current, i[1], 2, instr);
     }
@@ -207,7 +207,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
     case 0x66:
     {
-	if (!readmem (space, addr_offset(instr, 1), &i[1]))
+	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
 	    return false;
 	/* operand size override prefix */
 	switch (i[1])
@@ -215,7 +215,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0xe5:  /* in  %ax, port imm8  (word) */
 	case 0xe7:  /* out %ax, port imm8  (word) */
 	{
-	    if (!readmem (space, addr_offset(instr, 2), &i[2]))
+	    if (!readmem_u8 (space, addr_offset(instr, 2), &i[2]))
                 return false;
 	    return handle_io_pagefault(current, i[2], 1, instr);
 	}
@@ -229,21 +229,21 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     case 0xf3:
     {
 	/* rep instruction */
-	if (!readmem (space, addr_offset(instr, 1), &i[1]))
+	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
 	    return false;
         switch (i[1])
 	{
         case 0xe4:  /* in  %al,  port imm8  (byte)  */
         case 0xe6:  /* out %al,  port imm8  (byte)  */
         {
-	    if (!readmem (space, addr_offset(instr, 2), &i[2]))
+	    if (!readmem_u8 (space, addr_offset(instr, 2), &i[2]))
 		return false;
 	    return handle_io_pagefault(current, i[2], 0, instr);
         }
         case 0xe5:  /* in  %eax, port imm8  (dword) */
         case 0xe7:  /* out %eax, port imm8  (dword) */
         {
-	    if (!readmem (space, addr_offset(instr, 2), &i[2]))
+	    if (!readmem_u8 (space, addr_offset(instr, 2), &i[2]))
 		return false;
 	    return handle_io_pagefault(current, i[2], 2, instr);
         }
@@ -260,14 +260,14 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
         case 0x66:
 	{
             /* operand size override prefix */
-	    if (!readmem (space, addr_offset(instr, 2), &i[2]))
+	    if (!readmem_u8 (space, addr_offset(instr, 2), &i[2]))
 		return false;
             switch (i[2])
             {
             case 0xe5:  /* in  %ax, port imm8  (word) */
             case 0xe7:  /* out %ax, port imm8  (word) */
             {
-		if (!readmem (space, addr_offset(instr, 3), &i[3]))
+		if (!readmem_u8 (space, addr_offset(instr, 3), &i[3]))
 		    return false;
 		return handle_io_pagefault(current, i[3], 1, instr);
             }

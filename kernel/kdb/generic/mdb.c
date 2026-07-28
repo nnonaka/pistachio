@@ -45,12 +45,18 @@
 
 DECLARE_CMD_GROUP (mdb);
 
-/* were kdb_t::dump_table / dump_resource_table / dump_resource_map */
-static void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth);
+/*
+ * were kdb_t::dump_table / dump_resource_table / dump_resource_map.  They were
+ * class statics, which have external linkage -- kdb/platform/pc99/io.c calls
+ * dump_table and dump_resource_map for the IO space -- so only
+ * dump_resource_table, which nothing outside this file uses, is file-static.
+ * Notes §120.
+ */
+void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth);
 static void dump_resource_table (mdb_t *mdb, mdb_table_t *table, word_t addr,
 				 word_t depth);
-static void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
-			       word_t depth);
+void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
+			word_t depth);
 
 
 /**
@@ -133,7 +139,7 @@ static const char * sz_suf (word_t sz)
  * @param t		table to dump
  * @param depth		current recursion depth
  */
-static void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth)
+void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth)
 {
     word_t paddr;
     mdb_tableent_t *te;
@@ -234,8 +240,8 @@ static void dump_resource_table (mdb_t *mdb, mdb_table_t *table, word_t addr,
  * @param addr		physical address
  * @param depth		current recursion depth
  */
-static void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
-			       word_t depth)
+void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
+			word_t depth)
 {
     word_t start_depth = mdb_node_get_depth (node);
 

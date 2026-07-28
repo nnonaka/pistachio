@@ -54,6 +54,18 @@ DECLARE_TRACEPOINT (MDB_MAP);
 DECLARE_TRACEPOINT (MDB_UNMAP);
 #endif
 
+/*
+ * arch/x86/pgent.h aliases mapnode_t to mdb_node_t for its own declarations and
+ * undefines it again at the end, because generic/mapping.h defines a real
+ * struct mapnode_t for the *old* mapping database and the two must not collide.
+ * Files that define those pgent functions, or hold the type in locals, have to
+ * re-establish the alias for themselves -- which is what the C++
+ * linear_ptab_walker.cc did.  Notes §120.
+ */
+#if defined(CONFIG_NEW_MDB)
+#define mapnode_t mdb_node_t
+#endif
+
 DECLARE_KMEM_GROUP (kmem_pgtab);
 
 word_t hw_pgshifts[] = HW_PGSHIFTS;
@@ -318,7 +330,16 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 		 (pgent_is_subtree (tpg, t_space, t_size) ||
 		  (space_is_sigma0 (self) ?
 		   (pgent_address (tpg, t_space, t_size) != (paddr_t) f_addr) :
-		   (pgent_address (tpg, t_space, t_size) != pgent_address (fpg, self, f_size)))))
+		   (pgent_address (tpg, t_space, t_size) != pgent_address (fpg, self, f_size)))
+#if defined(CONFIG_NEW_MDB)
+		  ||
+		  (mdb_node_get_parent (pgent_mapnode (tpg, t_space, t_size,
+						       addr_mask (t_addr, ~page_mask (t_size))))
+		   !=
+		   pgent_mapnode (fpg, self, f_size,
+				  addr_mask (f_addr, ~page_mask (f_size))))
+#endif
+		     ))
 	{
 	    /*
 	     * We are doing overmapping.  Need to remove existing
@@ -362,7 +383,11 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 			 t_space, tpg, omap, vaddr, dbg_pgsize (page_size (t_size)),
 			 dbg_szname (page_size (t_size)), pgent_address (tpg, t_space, t_size));
 
+#if defined(CONFIG_NEW_MDB)
+		    mdb_tree_flush (&mdb_mem, omap);
+#else
 		    mdb_flush_c (omap, tpg, t_size, vaddr, pgsize, &rcv_fp, true);
+#endif
 		}
 
 		if (t_size < f_size)
@@ -495,9 +520,17 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 			dbg_pgsize (page_size(t_size)), dbg_szname (page_size(t_size)),
 			addr_offset (f_addr, offset + f_off));
 
+#if defined(CONFIG_NEW_MDB)
+		newmap = mdb_tree_map (&mdb_mem, sigma0_memnode, tpg,
+				       page_shift (t_size),
+				       (word_t) f_addr + offset + f_off,
+				       fpage_get_rwx (&snd_fp), ~0UL);
+		mdb_node_set_misc (newmap, mdb_mem_misc (t_space, t_size));
+#else
 		newmap = mdb_map_c (sigma0_mapnode, fpg, PGENT_SIZE_MAX+1,
 				    addr_offset (f_addr, offset + f_off),
 				    tpg, t_size, t_space, grant);
+#endif
 
 		{
 		    paddr_t paddr = space_sigma0_translate (addr_offset(f_addr, offset + f_off), f_size);
@@ -520,9 +553,20 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 			    tpg, t_addr, dbg_pgsize (page_size(t_size)), dbg_szname (page_size(t_size)),
 			    (addr_t) addr_offset (pgent_address (fpg, self, f_size),  offset + f_off));
 
+#if defined(CONFIG_NEW_MDB)
+		{
+		    mdb_node_t *smap = grant ? mdb_node_get_parent (map) : map;
+		    newmap = mdb_tree_map (&mdb_mem, smap, tpg, page_shift (t_size),
+					   (word_t) pgent_address (fpg, self, f_size) +
+					   offset + f_off,
+					   fpage_get_rwx (&snd_fp), ~0UL);
+		    mdb_node_set_misc (newmap, mdb_mem_misc (t_space, t_size));
+		}
+#else
 		newmap = mdb_map_c (map, fpg, f_size,
 				    addr_offset (f_addr, offset + f_off),
 				    tpg, t_size, t_space, grant);
+#endif
 
 		pgent_set_entry
 		    (tpg, t_space, t_size,
@@ -577,6 +621,14 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 	}
 
     Next_sender_entry:
+
+#if defined(CONFIG_NEW_MDB)
+	if (grant && map != NULL)
+	{
+	    mdb_tree_flush (&mdb_mem, map);
+	    map = NULL;
+	}
+#endif
 
 	f_addr = addr_offset (f_addr, page_size (f_size));
 	f_off = 0;
@@ -743,8 +795,15 @@ fpage_t space_mapctrl (space_t * self, fpage_t fpage, mdb_ctrl_t ctrl,
 			dbg_pgsize (page_size(pgsize)), dbg_szname (page_size(pgsize)),
 			pgent_address (pg, self, size));
 
+#if defined(CONFIG_NEW_MDB)
+	    rwx |= mdb_tree_mapctrl (&mdb_mem, map,
+				     mdb_range_make (fpage_get_base (&fpage),
+						     fpage_get_size_log2 (&fpage)),
+				     ctrl, fpage_get_rwx (&fpage), attribute);
+#else
 	    rwx |= mdb_flush_c (map, pg, size, vaddr, pgsize,
 				&fpage, ctrl.mapctrl_self);
+#endif
 	}
 	else if (unmap_all)
 	{

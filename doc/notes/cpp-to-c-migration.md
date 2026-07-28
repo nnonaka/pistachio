@@ -5110,3 +5110,76 @@ Gate: 0 errors, 709 symbols with identical bodies.
     x86-x64-p4-cm       99  -- compatibility mode, glue/v4-x86/utcb.h (§95)
     x86-x64-p4-iofp          mapnode_t identity conflict (§113)
     x86-x64-p4-newmdb        same
+
+
+## §120 — mapnode_t, and the NEW_MDB configs: nine build, seven boot
+
+`x86-x64-p4-newmdb` (254176) and `x86-x64-p4-iofp` (311368) now **compile and
+link**. Nine of eleven x64 configs build. **Seven of them boot** — these two do
+not, and that is stated plainly below rather than counted as success.
+
+### What "the mapnode_t conflict" actually was
+
+Three separate things, only the last of which was a name conflict.
+
+**1. `linear_ptab_walker.c` had lost its new-MDB path.** The C++ file carried
+**15** `CONFIG_NEW_MDB` conditionals; the C had **2**. Seven
+`#if defined(CONFIG_NEW_MDB)` blocks — 28 lines — were dropped in conversion,
+including the sigma0 map, the ordinary map, the overmap parent test, the
+grant-time flush and the whole mapctrl call. Recovered from the C++ and
+converted (`mdb_mem.map` -> `mdb_tree_map (&mdb_mem, ...)`, `->set_misc` ->
+`mdb_node_set_misc`, `mdb_t::range_t (...)` -> `mdb_range_make (...)`).
+
+**2. The alias was scoped so that no consumer could use it.**
+`arch/x86/pgent.h` does `#define mapnode_t mdb_node_t` for its own
+declarations and `#undef`s it at the end of the header. So `pgent_mapnode` was
+*declared* returning `struct mdb_node_t *` and *defined* in
+`glue/v4-x86/space.c` returning `struct mapnode_t *` — the same source spelling
+resolving two ways.
+
+Removing the `#undef` is the obvious fix and is wrong: `generic/mapping.h`
+defines a real `struct mapnode_t` for the **old** database, and the leaked
+alias turns that into a second definition of `mdb_node_t`. The header is right
+to scope it. What was missing is that the two files which *define* those pgent
+functions, or hold the type in locals, must re-establish the alias for
+themselves — which is exactly what the C++ `linear_ptab_walker.cc` did with its
+own file-local `#define`. Both now do.
+
+**3. Two kdb dump functions lost external linkage.** `kdb_t::dump_table` and
+`kdb_t::dump_resource_map` were *class* statics, which have external linkage;
+converting them to file-`static` broke `kdb/platform/pc99/io.c`, which calls
+both for the IO space. Only `dump_resource_table` is genuinely file-local.
+
+Plus a sixth instance of the config-gated pattern: nine `readmem (space, ...)`
+calls in `glue/v4-x86/exception.c`, left from the `readmem<T>` template, inside
+`#if defined(CONFIG_X86_IO_FLEXPAGES)`. They are `readmem_u8` — the buffer is
+`u8_t i[4]`.
+
+### The two that build but do not boot
+
+Both hang immediately after `Launching kernel ...` with no output. The
+experiment is clean: `x86-x64-p4-newmdb`'s config differs from the **booting**
+`x86-x64-p4` in `CONFIG_NEW_MDB` **and nothing else**. So the fault is in the
+new mapping database path, not in the PIC, timer or uniprocessor work.
+
+Checked and eliminated: `init_mdb()` is called from `glue/v4-x86/init.c:493`,
+and the linker set is populated — `_start_mdb_funcs`..`_end_mdb_funcs` spans
+four entries, with `mdb_buflist_init`, `init_mdb_mem_sizes` and `init_mdb_mem`
+all present in the image. The MDB init functions do run.
+
+Whether the hang is something in the §111/§112/§120 conversions or a
+pre-existing fault in a feature that has not been runnable since `f3d2a88` (and
+is `default NEW_MDB from n`, marked experimental) is **not established**. There
+is no C++ baseline to compare against: the configuration did not build then
+either. It needs a debugger or a bisect against a much older tree, and it should
+not be counted as working until then.
+
+### Where the x64 configs stand
+
+    build and boot   x86-x64-p4-smp  x86-x64-p4  x86-x64-p3  x86-x64-k8
+                     x86-x64-p4-nokdb  x86-x64-p4-fp  x86-x64-p4-statictcbs
+    build, hang      x86-x64-p4-newmdb  x86-x64-p4-iofp
+    do not build     x86-x64-p4-fullkdb (7 errors)
+                     x86-x64-p4-cm (compatibility mode, glue/v4-x86/utcb.h)
+
+Gate: 0 errors, 709 symbols with identical bodies. powerpc: 66 objects, links.

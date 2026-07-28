@@ -794,6 +794,18 @@ bool space_has_cpu_top_pdir (space_t *self, cpuid_t cpu)
 END_DECLS
 
 
+/*
+ * arch/x86/pgent.h aliases mapnode_t to mdb_node_t for its own declarations and
+ * undefines it again at the end, because generic/mapping.h defines a real
+ * struct mapnode_t for the *old* mapping database and the two must not collide.
+ * Files that define those pgent functions, or hold the type in locals, have to
+ * re-establish the alias for themselves -- which is what the C++
+ * linear_ptab_walker.cc did.  Notes §120.
+ */
+#if defined(CONFIG_NEW_MDB)
+#define mapnode_t mdb_node_t
+#endif
+
 /* C forms of the pgent_t methods (declared in arch/x86/pgent.h), driving the
    page tables from generic/linear_ptab_walker.c.  Translated from the C++
    methods: delegate to the x86_pgent_t bitfield C forms + pgent_sync (F2/§62).
