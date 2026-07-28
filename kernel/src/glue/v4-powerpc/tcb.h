@@ -82,13 +82,13 @@ INLINE addr_t get_kthread_ip( tcb_t *tcb )
 INLINE syscall_regs_t *get_user_syscall_regs( tcb_t *tcb )
 {
     return (syscall_regs_t *)
-	(word_t(tcb->get_stack_top()) - sizeof(syscall_regs_t));
+	((word_t) tcb_get_stack_top(tcb) - sizeof(syscall_regs_t));
 }
 
 INLINE except_regs_t *get_user_except_regs( tcb_t *tcb )
 {
     return (except_regs_t *)
-	(word_t(tcb->get_stack_top()) - sizeof(except_regs_t));
+	((word_t) tcb_get_stack_top(tcb) - sizeof(except_regs_t));
 }
 
 /********************************************************************** 
@@ -97,45 +97,45 @@ INLINE except_regs_t *get_user_except_regs( tcb_t *tcb )
  *
  **********************************************************************/
 
-INLINE void tcb_t::set_utcb_location( word_t utcb_location )
+INLINE void tcb_set_utcb_location (tcb_t *self, word_t utcb_location)
 {
     utcb_t *dummy = (utcb_t *)NULL;
-    myself_local.set_raw( utcb_location + (word_t)dummy->mr );
+    threadid_set_raw (&self->myself_local, utcb_location + (word_t)dummy->mr);
 }
 
-INLINE word_t tcb_t::get_utcb_location()
+INLINE word_t tcb_get_utcb_location (tcb_t *self)
 {
     utcb_t *dummy = (utcb_t *)NULL;
-    return myself_local.get_raw() - (word_t)dummy->mr;
+    return threadid_get_raw (&self->myself_local) - (word_t)dummy->mr;
 }
 
-INLINE void tcb_t::set_cpu( cpuid_t cpu )
+INLINE void tcb_set_cpu (tcb_t *self, cpuid_t cpu)
 {
-    this->cpu = cpu;
-    get_utcb()->processor_no = cpu;
+    self->cpu = cpu;
+    tcb_get_utcb(self)->processor_no = cpu;
 #if defined(CONFIG_PPC_MMU_TLB)
-    if (get_space() != get_kernel_space())
-	this->pdir_cache = (word_t)space->get_asid(cpu);
+    if (tcb_get_space(self) != get_kernel_space())
+	self->pdir_cache = (word_t) space_get_asid_cpu (self->space, cpu);
 #endif
 }
 
 /**
- * tcb_t::get_mr: returns value of message register
+ * tcb_get_mr: returns value of message register
  * @index: number of message register
  */
-INLINE word_t tcb_t::get_mr(word_t index)
+INLINE word_t tcb_get_mr (tcb_t *self, word_t index)
 {
-    return get_utcb()->mr[index];
+    return tcb_get_utcb(self)->mr[index];
 }
 
 /**
- * tcb_t::set_mr: sets the value of a message register
+ * tcb_set_mr: sets the value of a message register
  * @index: number of message register
  * @value: value to set
  */
-INLINE void tcb_t::set_mr(word_t index, word_t value)
+INLINE void tcb_set_mr (tcb_t *self, word_t index, word_t value)
 {
-    get_utcb()->mr[index] = value;
+    tcb_get_utcb(self)->mr[index] = value;
 }
 
 /**
@@ -144,7 +144,7 @@ INLINE void tcb_t::set_mr(word_t index, word_t value)
  * @param start MR start index
  * @param count number of MRs to be copied
  */
-INLINE void tcb_t::copy_mrs(tcb_t * dest, word_t start, word_t count)
+INLINE void tcb_copy_mrs (tcb_t *self, tcb_t * dest, word_t start, word_t count)
 {
     ASSERT(start + count <= IPC_NUM_MR);
     ASSERT(count > 0);
@@ -159,46 +159,46 @@ INLINE void tcb_t::copy_mrs(tcb_t * dest, word_t start, word_t count)
 	      "+r" (count)
 	    : /* inputs */
 	      /* Handle pre-increment with -1 offset. */
-	      "r" (&this->get_utcb()->mr[start-1]), 
-	      "r" (&dest->get_utcb()->mr[start-1])
+	      "r" (&self->tcb_get_utcb(self)->mr[start-1]), 
+	      "r" (&dest->tcb_get_utcb(self)->mr[start-1])
 	    : /* clobbers */
 	      "ctr"
 	    );
 }
 
 /**
- * tcb_t::get_br: returns value of buffer register
+ * tcb_get_br: returns value of buffer register
  * @index: number of buffer register
  */
-INLINE word_t tcb_t::get_br(word_t index)
+INLINE word_t tcb_get_br (tcb_t *self, word_t index)
 {
-    return get_utcb()->br[32-index];
+    return tcb_get_utcb(self)->br[32-index];
 }
 
 /**
- * tcb_t::set_br: sets the value of a buffer register
+ * tcb_set_br: sets the value of a buffer register
  * @index: number of buffer register
  * @value: value to set
  */
-INLINE void tcb_t::set_br(word_t index, word_t value)
+INLINE void tcb_set_br (tcb_t *self, word_t index, word_t value)
 {
-    get_utcb()->br[32-index] = value;
+    tcb_get_utcb(self)->br[32-index] = value;
 }
 
 #ifdef CONFIG_DYNAMIC_TCBS
-INLINE void tcb_t::allocate()
+INLINE void tcb_allocate (tcb_t *self)
 {
     // Write to the tcb, to ensure that the kernel maps this tcb
     // with write access.  Write to the bottom of the stack.
     // TODO: should we do this?  It wastes a cache line.
-    *(word_t *)( (word_t)this + sizeof(tcb_t) ) = 0;
+    *(word_t *)( (word_t)self + sizeof(tcb_t) ) = 0;
 }
 #endif
 
 
-INLINE void tcb_t::set_space(space_t * space)
+INLINE void tcb_set_space (tcb_t *self, space_t * space)
 {
-    this->space = space;
+    self->space = space;
 
     if (!space)
 	return;
@@ -207,35 +207,35 @@ INLINE void tcb_t::set_space(space_t * space)
     {
 	/* Thread switch expects pdir_cache to be 0 for kernel threads.
 	 */
-	this->pdir_cache = 0;
-	this->resources.set_kernel_thread( this );
+	self->pdir_cache = 0;
+	self->resources.set_kernel_thread( self );
 	return;
     }
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
-    this->pdir_cache = (word_t)space->get_segment_id().raw;
+    self->pdir_cache = (word_t)space->get_segment_id().raw;
     TRACE_TCB("set_space(), space 0x%p, tcb 0x%p, kernel_space 0x%p\n", 
-	      space, this, get_kernel_space() );
+	      space, self, get_kernel_space() );
 
-    space->sync_kernel_space( this );	/* Map this tcb into the space. */
-    space->handle_hash_miss( this );	/* Install this tcb into the pg hash. */
-    space->handle_hash_miss( space );	/* TODO: is this the solution? */
+    space->sync_kernel_space( self );	/* Map self tcb into the space. */
+    space->handle_hash_miss( self );	/* Install self tcb into the pg hash. */
+    space->handle_hash_miss( space );	/* TODO: is self the solution? */
 #endif
 }
 
-INLINE word_t * tcb_t::get_stack_top()
+INLINE word_t * tcb_get_stack_top (tcb_t *self)
 {
     word_t stack;
     /* The powerpc eabi stack must be 8-byte aligned. */
-    stack = ((word_t)this + TOTAL_TCB_SIZE) & ~(8-1);
+    stack = ((word_t)self + TOTAL_TCB_SIZE) & ~(8-1);
     return (word_t *)stack;
 }
 
-INLINE void tcb_t::init_stack()
+INLINE void tcb_init_stack (tcb_t *self)
 {
-    this->stack = get_stack_top();
+    self->stack = tcb_get_stack_top(self);
     TRACE_TCB( "stack = %p, tcb bottom = %p, tcb size = %d\n", 
-	       this->stack, this, sizeof(tcb_t) );
+	       self->stack, self, sizeof(tcb_t) );
 }
 
 
@@ -248,18 +248,18 @@ INLINE void tcb_t::init_stack()
 
 
 /**
- * tcb_t::switch_to: switches to specified tcb
+ * tcb_switch_to: switches to specified tcb
  */
-INLINE void tcb_t::switch_to(tcb_t * dest)
+INLINE void tcb_switch_to (tcb_t *self, tcb_t * dest)
 {
     ASSERT(dest->stack);
     ASSERT(get_cpu() == dest->get_cpu());
-    ASSERT(dest != this);
+    ASSERT(dest != self);
 
     // TODO: adjust the thread switch return address to load 
     // resources.  Thus the common path need not check for a load.
-    if( EXPECT_FALSE(this->resource_bits) )
-	this->resources.save( this );
+    if( EXPECT_FALSE(self->resource_bits) )
+	self->resources.save( self );
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
     /* NOTE: pdir_cache holds the segment ID. */
@@ -304,12 +304,13 @@ INLINE void tcb_t::switch_to(tcb_t * dest)
     {
 	asid_t *asid = (asid_t*)dest->pdir_cache;
 	word_t current_pid = ppc_get_pid();
-	if (asid->get() != current_pid)
+	if (asid_get (asid) != current_pid)
 	{
+	    word_t dest_pid;
 	    // AS switch...
-	    if ( EXPECT_FALSE(!asid->is_valid()) )
-		dest->get_space()->allocate_asid();
-	    word_t dest_pid = get_asid_manager()->reference(asid);
+	    if ( EXPECT_FALSE(!asid_is_valid (asid)) )
+		space_allocate_asid (tcb_get_space (dest));
+	    dest_pid = asid_manager_reference (get_asid_manager(), asid);
 	    ASSERT(dest_pid);
 	    ppc_set_pid(dest_pid);
 	}
@@ -338,7 +339,7 @@ INLINE void tcb_t::switch_to(tcb_t * dest)
 	    "1:"				/* The return address. */
 	    : "=b" (dummy0), "=b" (dummy1), "=b" (dummy2)
 	    : [dest_sp] "0" (dest->stack),
-	      [this_sp] "1" (&this->stack),
+	      [this_sp] "1" (&self->stack),
 	      [dest_tcb] "2" (dest)
 	    : "memory", "r0", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", 
 	      "r10", "r11", "r12", "r13", "r14", "r15", "r16", "r17", "r18",
@@ -347,8 +348,8 @@ INLINE void tcb_t::switch_to(tcb_t * dest)
 	      "cr0", "cr1", "cr2", "cr3", "cr4", "cr5", "cr6", "cr7", "xer"
         );
 
-    if( EXPECT_FALSE(this->resource_bits) )
-	this->resources.load( this );
+    if( EXPECT_FALSE(self->resource_bits) )
+	self->resources.load( self );
 }
 
 /**********************************************************************
@@ -356,56 +357,56 @@ INLINE void tcb_t::switch_to(tcb_t * dest)
  *                        notification functions
  *
  **********************************************************************/
-INLINE void tcb_t::notify( void (*func)() )
+INLINE void tcb_notify (tcb_t *self, void (*func)(void))
 {
-    this->notify( (void (*)(word_t, word_t))func, 0, 0 );
+    self->notify( (void (*)(word_t, word_t))func, 0, 0 );
 }
 
-INLINE void tcb_t::notify( void (*func)(word_t), word_t arg1 )
+INLINE void tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg1)
 {
-    this->notify( (void (*)(word_t, word_t))func, arg1, 0 );
+    self->notify( (void (*)(word_t, word_t))func, arg1, 0 );
 }
 
 /* 
  * access functions for ex-regs'able registers
  */
-INLINE addr_t tcb_t::get_user_ip()
+INLINE addr_t tcb_get_user_ip (tcb_t *self)
 {
-    return addr_t(get_user_syscall_regs(this)->srr0_ip);
+    return addr_t(get_user_syscall_regs(self)->srr0_ip);
 }
 
-INLINE addr_t tcb_t::get_user_sp()
+INLINE addr_t tcb_get_user_sp (tcb_t *self)
 {
-    return addr_t(get_user_syscall_regs(this)->r1_stack);
+    return addr_t(get_user_syscall_regs(self)->r1_stack);
 }
 
-INLINE word_t tcb_t::get_user_flags()
+INLINE word_t tcb_get_user_flags (tcb_t *self)
 {
-    return get_user_syscall_regs(this)->srr1_flags & MSR_USER_MASK;
+    return get_user_syscall_regs(self)->srr1_flags & MSR_USER_MASK;
 }
 
-INLINE void tcb_t::set_user_ip(addr_t ip)
+INLINE void tcb_set_user_ip (tcb_t *self, addr_t ip)
 {
-    get_user_syscall_regs(this)->srr0_ip = word_t(ip);
+    get_user_syscall_regs(self)->srr0_ip = word_t(ip);
 }
 
-INLINE void tcb_t::set_user_sp(addr_t sp)
+INLINE void tcb_set_user_sp (tcb_t *self, addr_t sp)
 {
-    get_user_syscall_regs(this)->r1_stack = word_t(sp);
+    get_user_syscall_regs(self)->r1_stack = word_t(sp);
 }
 
-INLINE void tcb_t::set_user_flags(const word_t flags)
+INLINE void tcb_set_user_flags (tcb_t *self, const word_t flags)
 {
-    get_user_syscall_regs(this)->srr1_flags = 
+    get_user_syscall_regs(self)->srr1_flags = 
 	(flags & MSR_USER_MASK) | MSR_USER;
 }
 
-INLINE void tcb_t::return_from_ipc (void)
+INLINE void tcb_return_from_ipc (tcb_t *self)
 {
     return_ipc_abort();
 }
 
-INLINE void tcb_t::return_from_user_interruption (void)
+INLINE void tcb_return_from_user_interruption (tcb_t *self)
 {
     word_t return_stack;
     extern word_t _except_return_shortcircuit[];
@@ -414,7 +415,7 @@ INLINE void tcb_t::return_from_user_interruption (void)
     // exit path.  So we jump to the point in assembler code which
     // starts restoring the user's full exception context.
 
-    return_stack = (word_t)this->get_stack_top() - 
+    return_stack = (word_t)self->get_stack_top() - 
 	(sizeof(except_regs_t) + EABI_STACK_SIZE);
 
     // Install the stack, and jump to the context store code.
@@ -435,15 +436,15 @@ INLINE void tcb_t::return_from_user_interruption (void)
  **********************************************************************/
 
 /**
- * tcb_t::do_ipc: invokes an in-kernel IPC
+ * tcb_do_ipc: invokes an in-kernel IPC
  * @param to_tid destination thread id
  * @param from_tid from specifier
  * @param timeout IPC timeout
  * @return IPC message tag (MR0)
  */
-INLINE msg_tag_t tcb_t::do_ipc( threadid_t to_tid, threadid_t from_tid, timeout_t timeout )
+INLINE msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to_tid, threadid_t from_tid, timeout_t timeout)
 {
-    this->resources.set_kernel_ipc( this );
+    self->resources.set_kernel_ipc( self );
 
     register word_t r3 asm("r3") = to_tid.get_raw();
     register word_t r4 asm("r4") = from_tid.get_raw();
@@ -472,9 +473,9 @@ INLINE msg_tag_t tcb_t::do_ipc( threadid_t to_tid, threadid_t from_tid, timeout_
 #endif
 	    );
 
-    this->resources.clr_kernel_ipc( this );
+    self->resources.clr_kernel_ipc( self );
 
-    msg_tag_t tag = this->get_mr(0);
+    msg_tag_t tag = self->get_mr(0);
     return tag;
 }
 
@@ -485,20 +486,20 @@ INLINE msg_tag_t tcb_t::do_ipc( threadid_t to_tid, threadid_t from_tid, timeout_
  *
  **********************************************************************/
 
-INLINE void tcb_t::adjust_for_copy_area( tcb_t * dst, addr_t * s, addr_t * d )
+INLINE void tcb_adjust_for_copy_area (tcb_t *self, tcb_t * dst, addr_t * s, addr_t * d)
 {
-    resources.setup_copy_area( this, s, dst, d );
-    resources.enable_copy_area( this );
+    resources.setup_copy_area( self, s, dst, d );
+    resources.enable_copy_area( self );
 }
 
-INLINE void tcb_t::release_copy_area( void )
+INLINE void tcb_release_copy_area (tcb_t *self)
 {
-    resources.disable_copy_area( this );
+    resources.disable_copy_area( self );
 }
 
-INLINE addr_t tcb_t::copy_area_real_address( addr_t addr )
+INLINE addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)
 {
-    return resources.copy_area_real_address( this, addr );
+    return resources.copy_area_real_address( self, addr );
 }
 
 /**********************************************************************
@@ -509,29 +510,29 @@ INLINE addr_t tcb_t::copy_area_real_address( addr_t addr )
 #if defined(CONFIG_X_CTRLXFER_MSG)
 EXTERN_TRACEPOINT(IPC_CTRLXFER_ITEM_DETAILS);
 
-INLINE void tcb_t::set_fault_ctrlxfer_items(word_t fault, ctrlxfer_mask_t mask)
+INLINE void tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t mask)
 {
     word_t idx = fault - 2;
-    if (idx < IPC_CTRLXFER_STDFAULTS + arch_ktcb_t::fault_max)
-	this->fault_ctrlxfer[idx] = mask;
+    if (idx < IPC_CTRLXFER_STDFAULTS + ARCH_KTCB_FAULT_MAX)
+	self->fault_ctrlxfer[idx] = mask;
 }
 
-INLINE ctrlxfer_mask_t tcb_t::get_fault_ctrlxfer_items(word_t fault)
+INLINE ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault)
 {  
     word_t idx = fault - 2;
-    return (idx < IPC_CTRLXFER_STDFAULTS + arch_ktcb_t::fault_max) ?
-	this->fault_ctrlxfer[idx] : ctrlxfer_mask_t(0);
+    return (idx < IPC_CTRLXFER_STDFAULTS + ARCH_KTCB_FAULT_MAX) ?
+	self->fault_ctrlxfer[idx] : ctrlxfer_mask_t(0);
 }
 
-INLINE word_t tcb_t::append_ctrlxfer_item(msg_tag_t tag, word_t offset)
+INLINE word_t tcb_append_ctrlxfer_item (tcb_t *self, msg_tag_t tag, word_t offset)
 {
     word_t fault = (0x1000 - (tag.get_label() >> 4));
-    if (get_fault_ctrlxfer_items(fault))
+    if (tcb_get_fault_ctrlxfer_items(self, fault))
     {
 	TRACE_CTRLXFER_DETAILS( "append ctrlxfer item %d", fault);
 	flags += kernel_ctrlxfer_msg;
 	msg_item_t item = ctrlxfer_item_t::kernel_fault_item(fault);
-	set_mr( offset++, item.raw);
+	tcb_set_mr (self, offset++, item.raw);
 	return 1;
     }
     return 0;
@@ -572,7 +573,7 @@ INLINE cpuid_t get_current_cpu()
  *
  * Switches to the initial thread.  The stack is expected to contain a
  * notify frame.
- * We use this function, rather than tcb_t::switch_to(), because the outgoing
+ * We use this function, rather than tcb_switch_to(), because the outgoing
  * stack isn't a valid tcb.
  */
 INLINE void NORETURN initial_switch_to( tcb_t *tcb )
@@ -606,7 +607,7 @@ INLINE void NORETURN initial_switch_to( tcb_t *tcb )
  * @param ip the initial instruction pointer           
  * @param sp the initial stack pointer
  */
-INLINE void tcb_t::arch_init_root_server (space_t * space, word_t ip, word_t sp)
+INLINE void tcb_arch_init_root_server (tcb_t *self, space_t * space, word_t ip, word_t sp)
 { 
 }
 
