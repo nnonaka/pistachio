@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2005,  Karlsruhe University
  *                
- * File path:     kdb/generic/mdb.cc
+ * File path:     kdb/generic/mdb.c
  * Description:   Functions for debugging mapping databases
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,13 @@
 
 DECLARE_CMD_GROUP (mdb);
 
+/* were kdb_t::dump_table / dump_resource_table / dump_resource_map */
+static void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth);
+static void dump_resource_table (mdb_t *mdb, mdb_table_t *table, word_t addr,
+				 word_t depth);
+static void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
+			       word_t depth);
+
 
 /**
  * Menu for mapping database
@@ -53,7 +60,7 @@ DECLARE_CMD (cmd_mdb_menu, root, 'm', "mdb", "mapping database");
 
 CMD (cmd_mdb_menu, cg)
 {
-    return mdb.interact (cg, "mdb");
+    return cmd_group_interact (&mdb, cg, "mdb");
 }
 
 
@@ -65,7 +72,10 @@ DECLARE_CMD (cmd_mdb_mem_dump, mdb, 'm', "dumpmem",
 
 CMD (cmd_mdb_mem_dump, cg)
 {
-    word_t addr =  get_hex ("Address");
+    word_t addr;
+
+    (void) cg;
+    addr = get_hex ("Address", 0, NULL);
     if (addr == ABORT_MAGIC)
 	return CMD_NOQUIT;
 
@@ -82,8 +92,8 @@ DECLARE_CMD (cmd_mdb_mem_dump_all, mdb, 'M', "dumpallmem",
 
 CMD (cmd_mdb_mem_dump_all, cg)
 {
-    extern mdb_node_t * sigma0_memnode;
-    dump_table (&mdb_mem, sigma0_memnode->get_table (), 0);
+    (void) cg;
+    dump_table (&mdb_mem, mdb_node_get_table (sigma0_memnode), 0);
     return CMD_NOQUIT;
 }
 
@@ -123,56 +133,63 @@ static const char * sz_suf (word_t sz)
  * @param t		table to dump
  * @param depth		current recursion depth
  */
-STATIC void kdb_t::dump_table (mdb_t * mdb, mdb_table_t * t, word_t depth)
+static void dump_table (mdb_t *mdb, mdb_table_t *t, word_t depth)
 {
+    word_t paddr;
+    mdb_tableent_t *te;
+    word_t k;
+
     if (t == NULL)
 	return;
 
-    word_t paddr = t->prefix & ~(((1UL << t->objsize) << t->radix) - 1);
+    paddr = t->prefix & ~(((1UL << t->objsize) << t->radix) - 1);
 
     printf ("%s%p table [objsize=%d%s  radix=%d  count=%d] (%p)\n",
 	    indent (depth), paddr,
 	    sz_num (t->objsize), sz_suf (t->objsize),
 	    1UL << t->radix, t->count, t);
 
-    mdb_tableent_t * te = t->get_entry (0);
+    te = mdb_table_get_entry (t, 0);
 
-    for (word_t k = 0;
+    for (k = 0;
 	 k < (1UL << t->radix);
 	 k++, te++, paddr += (1UL << t->objsize))
     {
-	if (! te->is_valid ())
+	mdb_node_t *n;
+	word_t start_depth;
+
+	if (! mdb_tableent_is_valid (te))
 	    continue;
 
-	if (te->is_table ())
-	    dump_table (mdb, te->get_table (), depth + 1);
+	if (mdb_tableent_is_table (te))
+	    dump_table (mdb, mdb_tableent_get_table (te), depth + 1);
 
-	if (te->get_node ())
+	if (mdb_tableent_get_node (te))
 	{
 	    printf ("%s%p ", indent (depth + 1), paddr);
 
-	    mdb_node_t * n = te->get_node ();
+	    n = mdb_tableent_get_node (te);
 	    if (n == NULL)
 	    {
 		printf ("[null node]\n");
 		continue;
 	    }
-	    word_t start_depth = n->get_depth ();
+	    start_depth = mdb_node_get_depth (n);
 
-	    mdb->dump (n);
-	    if (n->get_table ())
-		dump_table (mdb, n->get_table (), depth + 2);
+	    mdb->ops->dump (mdb, n);
+	    if (mdb_node_get_table (n))
+		dump_table (mdb, mdb_node_get_table (n), depth + 2);
 
-	    n = n->get_next ();
+	    n = mdb_node_get_next (n);
 	    while (n != NULL)
 	    {
-		printf ("%s%ws ", indent (depth + 1 + n->get_depth ()
+		printf ("%s%ws ", indent (depth + 1 + mdb_node_get_depth (n)
 					  - start_depth), "");
-		mdb->dump (n);
-		if (n->get_table ())
-		    dump_table (mdb, n->get_table (),
-				depth + 2 + n->get_depth () - start_depth);
-		n = n->get_next ();
+		mdb->ops->dump (mdb, n);
+		if (mdb_node_get_table (n))
+		    dump_table (mdb, mdb_node_get_table (n),
+				depth + 2 + mdb_node_get_depth (n) - start_depth);
+		n = mdb_node_get_next (n);
 	    }
 	}
     }
@@ -182,25 +199,27 @@ STATIC void kdb_t::dump_table (mdb_t * mdb, mdb_table_t * t, word_t depth)
 /**
  * Dump part of mapping table that refers to object residing at a
  * particular address.
- * 
+ *
  * @param mdb		mapping database
  * @param table		mapping table
  * @param addr		physical address
  * @param depth		current recursion depth
  */
-STATIC void kdb_t::dump_resource_table (mdb_t * mdb, mdb_table_t * table, word_t addr, word_t depth)
+static void dump_resource_table (mdb_t *mdb, mdb_table_t *table, word_t addr,
+				 word_t depth)
 {
-    while (table && table->match_prefix (addr))
+    while (table && mdb_table_match_prefix (table, addr))
     {
 	printf ("%stable %p [objsize=%d%s  radix=%d  count=%d] (%p)\n",
-		indent (depth - 1), table->get_prefix (),
+		indent (depth - 1), mdb_table_get_prefix (table),
 		sz_num (table->objsize), sz_suf (table->objsize),
 		1UL << table->radix, table->count, table);
 
-	if (table->get_node (addr))
-	    dump_resource_map (mdb, table->get_node (addr), addr, depth + 1);
+	if (mdb_table_get_node_at (table, addr))
+	    dump_resource_map (mdb, mdb_table_get_node_at (table, addr), addr,
+			       depth + 1);
 
-	table = table->get_table (addr);
+	table = mdb_table_get_table (table, addr);
 	depth++;
     }
 }
@@ -215,19 +234,21 @@ STATIC void kdb_t::dump_resource_table (mdb_t * mdb, mdb_table_t * table, word_t
  * @param addr		physical address
  * @param depth		current recursion depth
  */
-STATIC void kdb_t::dump_resource_map (mdb_t * mdb, mdb_node_t * node, word_t addr, word_t depth)
+static void dump_resource_map (mdb_t *mdb, mdb_node_t *node, word_t addr,
+			       word_t depth)
 {
-    word_t start_depth = node->get_depth ();
+    word_t start_depth = mdb_node_get_depth (node);
+
     while (node)
     {
-	if (node->get_depth () > 0)
+	if (mdb_node_get_depth (node) > 0)
 	{
-	    printf ("%s", indent (depth - start_depth + node->get_depth ()-1));
-	    mdb->dump (node);
+	    printf ("%s", indent (depth - start_depth + mdb_node_get_depth (node) - 1));
+	    mdb->ops->dump (mdb, node);
 	}
-	if (node->get_table ())
-	    dump_resource_table (mdb, node->get_table (), addr,
-				 node->get_depth () - start_depth + depth + 1);
-	node = node->get_next ();
+	if (mdb_node_get_table (node))
+	    dump_resource_table (mdb, mdb_node_get_table (node), addr,
+				 mdb_node_get_depth (node) - start_depth + depth + 1);
+	node = mdb_node_get_next (node);
     }
 }

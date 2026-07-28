@@ -38,7 +38,7 @@ SOURCES+=	kdb/arch/x86/x64/disas.cc kdb/arch/x86/x64/amd64-dis.c kdb/generic/spr
 endif
 
 ifeq ("$(CONFIG_NEW_MDB)","y")
-SOURCES+=	kdb/generic/mdb.cc
+SOURCES+=	kdb/generic/mdb.c
 else
 SOURCES+=	kdb/generic/mapping.c
 endif

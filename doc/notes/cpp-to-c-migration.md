@@ -4671,3 +4671,54 @@ seemed worse than ~50 bytes of unreferenced code in one configuration.
 remaining blockers are all pre-existing and unrelated: the PIC path
 (`8259.h`, `intctrl-pic.cc/h`, `intctrl.h`, `pc99/intctrl.c` — §95's seven-config
 blocker), `timer.cc`, `linear_ptab_walker.c`, `space.c` and `types.h`.
+
+
+## §113 — kdb/generic/mdb.cc: the mapping database stack is C
+
+`kdb/generic/mdb.c` (233 -> 254 lines), `mdb.o` 9216 bytes, 0 errors,
+0 warnings. **`src/generic/` and `kdb/generic/` now hold no C++ mdb code at
+all**: `mdb.h`, `mdb.c`, `mdb_mem.h`, `mdb_mem.c`, `kdb/generic/mdb.c`.
+
+Mechanical, given §110's header: the three `kdb_t::` statics become file-static
+functions with forward declarations, `mdb.interact (cg, "mdb")` becomes
+`cmd_group_interact (&mdb, cg, "mdb")`, `get_hex ("Address")` picks up the two
+arguments the C prototype has always required (`defnum`, `defstr`), and
+`mdb->dump (n)` becomes `mdb->ops->dump (mdb, n)`.
+
+### Where the newmdb config now stands
+
+    §109 (before any of this)   mdb.cc could not compile at all
+    §111 mdb.c                  189 errors
+    §112 mdb_mem.c              100 errors
+    §113 kdb/generic/mdb.c       91 errors
+
+None of the 91 is in an mdb file. What remains in `x86-x64-p4-newmdb`:
+
+  - the PIC path — `8259.h`, `intctrl-pic.cc/h`, `glue/v4-x86/intctrl.h`,
+    `kdb/platform/pc99/intctrl.c` — §95's blocker for seven configs
+  - `glue/v4-x86/timer.cc`, `linear_ptab_walker.c`, `types.h`
+  - `glue/v4-x86/space.c`, whose five errors predate this work
+
+### A tangle worth naming before someone else finds it
+
+`space.c`'s failures in this configuration are a **`mapnode_t` identity
+conflict**, not an mdb bug:
+
+    src/generic/mapping.h:37   struct mapnode_t;          /* the old MDB's node */
+    src/arch/x86/pgent.h:29    #define mapnode_t mdb_node_t
+
+With `CONFIG_NEW_MDB=y` both headers are in scope, so the token means the old
+database's node in one file and the new database's node in another, and
+`pgent_vaddr`/`pgent_mapnode`/`pgent_set_linknode` end up with two incompatible
+declarations. A `#define` of a type name across two mapping-database
+implementations was always going to do this; it only became visible once the
+new-MDB configuration could get far enough to compile `space.c`.
+
+Untouched here — it is a decision about which database owns the name, not a
+transcription — but it is the next thing in the way of that config, and
+`glue/v4-x86/space.c` is C already, so it is not migration work.
+
+### Verification
+
+Gate: 0 errors, 709 symbols with identical bodies (the 709 including §112's
+three unused `pgent_*` wrappers), boots to userland.
