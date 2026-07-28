@@ -38,12 +38,14 @@ struct mapnode_t;
 struct rootnode_t;
 
 /*
- * ptab.h provides the (architecture specific) MDB_NUM_PGSIZES constant and
- * page-shift tables, which C consumers of this header need.  The pgent_t and
- * fpage_t class machinery, on the other hand, is only touched by the C++
- * method bodies below, so it is guarded off for the C path.
+ * pgent.h provides the (architecture specific) MDB_NUM_PGSIZES constant and
+ * page-shift tables, which consumers of this header need.  This used to name
+ * ptab.h through INC_ARCH_SA, but that macro is defined only by
+ * glue/v4-x86/config.h and only x86 keeps the constant in a subarch ptab.h --
+ * powerpc has it in pgent-swtlb.h/pgent-pghash.h, selected by its own pgent.h.
+ * INC_ARCH(pgent.h) is the spelling that resolves on every architecture.
  */
-#include INC_ARCH_SA(ptab.h)
+#include INC_ARCH(pgent.h)
 
 
 /**

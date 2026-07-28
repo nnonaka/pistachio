@@ -61,13 +61,17 @@ typedef u64_t			paddr_t;
 typedef u32_t			paddr_t;
 #endif
 
-INLINE paddr_t addr_offset(paddr_t addr, word_t off)
+/* These were C++ overloads of addr_offset/addr_mask in generic/types.h, which
+   take addr_t.  paddr_t is a distinct type here -- u64_t on ppc44x, for 36-bit
+   addressing -- so in C they need distinct names.  No caller passes a paddr_t
+   today; every site in the powerpc tree uses the addr_t forms. */
+INLINE paddr_t paddr_offset (paddr_t addr, word_t off)
 {
     return (paddr_t)(addr + off);
 }
 
 
-INLINE paddr_t addr_mask (paddr_t addr, word_t mask)
+INLINE paddr_t paddr_mask (paddr_t addr, word_t mask)
 {
     return (paddr_t) (addr & mask);
 }

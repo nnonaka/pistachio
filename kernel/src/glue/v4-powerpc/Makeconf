@@ -43,12 +43,12 @@ ifeq ("$(CONFIG_X_PPC_SOFTHVM)","y")
 SOURCES += src/glue/v4-powerpc/softhvm.cc
 endif
 
-SOURCES += $(addprefix src/generic/, linear_ptab_walker.cc mapping_alloc.c)
+SOURCES += $(addprefix src/generic/, linear_ptab_walker.c mapping_alloc.c)
 
 ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	src/generic/mdb.cc \
 		src/generic/mdb_mem.cc
 else
-SOURCES+=	src/generic/mapping.cc
+SOURCES+=	src/generic/mapping.c
 endif
 

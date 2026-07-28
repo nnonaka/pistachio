@@ -37,8 +37,8 @@
 #include INC_API(tcb.h)
 #include INC_API(kernelinterface.h)
 
-MKASMSYM( TSTATE_RUNNING, (word_t) thread_state_t::running );
-MKASMSYM( TSTATE_WAITING_FOREVER, (word_t) thread_state_t::waiting_forever );
+MKASMSYM( TSTATE_RUNNING, (word_t) THREAD_STATE_RUNNING );
+MKASMSYM( TSTATE_WAITING_FOREVER, (word_t) THREAD_STATE_WAITING_FOREVER );
 
 MKASMSYM( OFS_TSWITCH_FRAME_IP, offsetof(tswitch_frame_t, ip) );
 MKASMSYM( OFS_TSWITCH_FRAME_R30, offsetof(tswitch_frame_t, r30) );

@@ -161,8 +161,7 @@ DEF_SET_BAT(ppc_set_dbat3l, "543")
 #define BAT_PP_READ_WRITE	0x2
 
 #if !defined(ASSEMBLY)
-class ppc_bat_t {
-public:
+struct ppc_bat_t {
     union {
 	struct {
 	    word_t bepi : 15;
@@ -185,6 +184,7 @@ public:
 	} raw;
     };
 };
+typedef struct ppc_bat_t ppc_bat_t;
 #endif	/* !ASSEMBLY */
 
 #endif	/* __ARCH__POWERPC__BAT_H__ */
