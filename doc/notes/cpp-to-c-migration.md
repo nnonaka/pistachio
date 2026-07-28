@@ -3581,3 +3581,69 @@ So the §93 policy stands unchanged: powerpc is not a constraint on x86 work, an
 reviving it means migrating its arch and glue headers and its 53 `.cc` files as
 a project of its own. The difference is that the baseline is now a number
 someone can work against rather than an argument.
+
+## §98 — Starting the powerpc conversion
+
+§97 established a measurable baseline for the ppc44x config (the only powerpc
+configuration in `contrib/configs`, and it has both `CONFIG_X_PPC_SOFTHVM` and
+`CONFIG_X_CTRLXFER_MSG` on). Scope, measured rather than estimated:
+
+    65 translation units, of which 26 are .cc
+    25 powerpc headers still contain C++ (13 arch, 9 glue, 3 platform)
+
+**Objects built: 1 -> 13.** Error counts are *not* a progress metric here and
+were misleading twice: they rose from 3913 to 9737 across two steps that were
+both clear improvements, because a TU that dies on a missing header reports one
+error while a TU that gets properly underway reports two hundred. Objects built
+and failing-TU count are the honest measures.
+
+### The first third of the work was not powerpc's fault
+
+Four of the first five fixes were fallout the x86 migration left behind:
+
+  - `generic/mapping.h` included `INC_ARCH_SA(ptab.h)`, added by `ce22043`.
+    That macro is defined only in `glue/v4-x86/config.h`, and only x86 keeps
+    `MDB_NUM_PGSIZES` in a subarch `ptab.h`. `INC_ARCH(pgent.h)` resolves
+    everywhere; the x86 disassembly is unchanged by the switch.
+  - `glue/v4-powerpc/Makeconf` still named `linear_ptab_walker.cc` and
+    `mapping.cc`, renamed to `.c` during the migration — so powerpc was
+    silently not building them at all.
+  - `arch/powerpc/types.h` defined `addr_offset`/`addr_mask` as C++ **overloads**
+    of the generic `addr_t` ones. Renamed `paddr_offset`/`paddr_mask`; nothing
+    passes a `paddr_t` today.
+  - `arch/powerpc/frame.h` never had a `typedef` for `syscall_regs_t`, which is
+    fine in C++ and fatal in C — that one line was failing every TU including
+    `syscalls.h`.
+
+A cross-architecture migration breaks the ports it is not compiling, silently,
+and the breakage is indistinguishable from the ports' own rot until something
+compiles them. §93 and §95 both reasoned about this correctly; neither could see
+these four, because nothing built powerpc.
+
+### Converted so far
+
+`bat.h` (`ppc_bat_t`), `frame.h` (`except_regs_t` + free functions),
+`debug.h` (`debug_param_t`, default args on `spin`/`spin_forever`),
+`syscalls.h` and `string.h` (`extern "C"` -> `BEGIN_DECLS`/`EXTERN_C`),
+`ppc_registers.h` (`ppc_esr_t`, `ppc_tcr_t`, `ppc_tsr_t`), and
+`asmsyms.cc` -> `.c`, which gates every `.S` file because it generates
+`asmsyms.h`.
+
+**`ppc_tcr_t` had a constructor zeroing `raw`** — the §91 trap again, and
+`glue/v4-powerpc/init.cc:379` declares a bare `ppc_tcr_t tcr;` that depends on
+it. `PPC_TCR_INIT` is provided and the requirement recorded beside the type, to
+be applied when init.cc is converted.
+
+### What is left, and the order it wants
+
+The remaining 7899 errors are dominated by one interlocked chain:
+`glue/v4-powerpc/tcb.h` defines ~31 out-of-line `tcb_t::` methods, whose bodies
+call `space->get_asid()` and friends, so it cannot be converted before
+`glue/v4-powerpc/space.h`. `api/v4/tcb.h` already declares the exact C contract
+each architecture must supply (`tcb_get_mr`, `tcb_set_utcb_location`,
+`tcb_switch_to`, ...), so the target names are not a judgement call — they are
+fixed by the shared header the x86 side already satisfies.
+
+Suggested order: `space.h` -> `tcb.h`/`ktcb.h` -> `resource_functions.h` ->
+`pgent-swtlb*.h`/`swtlb.h` -> the remaining leaf arch headers -> the 26 `.cc`
+files, of which `init.cc`, `space-swtlb.cc` and `softhvm.cc` are the large ones.
