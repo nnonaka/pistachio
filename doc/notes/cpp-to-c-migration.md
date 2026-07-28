@@ -4292,3 +4292,94 @@ what a five-second read of the rule would have settled.
 powerpc64 port, x86-x32 and its x32comp layer, the OpenFirmware platforms
 (ofppc, ofpower3/4, ofg5), efi, simics, and `generic/mdb.cc`/`vrt.cc` with their
 kdb counterparts. §95 measured which x64 configs those block: 10 of 11.
+
+
+## §108 — generic/vrt.cc: scoped, not converted. Why it cannot be split
+
+Started on `src/generic/vrt.cc` and stopped before writing code, because the
+survey changed what the job is. Recording the analysis so the next attempt can
+start from it rather than repeat it.
+
+### It is a five-file component, not a file
+
+`CONFIG_X86_IO_FLEXPAGES` gates `src/generic/vrt.cc` (`src/generic/Makeconf:40`)
+and `kdb/generic/vrt.cc` (`kdb/generic/Makeconf:51`). Two configs set it, and
+one of them is x64 — `x86-x64-p4-iofp`, which §95 listed as blocked "on
+generic/vrt.h". Measured: 61 errors, rooted in
+
+    src/generic/vrt.h        33      src/glue/v4-x86/mdb_io.h    4
+    src/glue/v4-x86/vrt_io.h  9      src/glue/v4-x86/io_space.h  3
+    src/glue/v4-x86/io_fpage.h 7     + 4 spillover in api/v4 and space.c
+
+                                    lines
+    src/generic/vrt.h                 471
+    src/generic/vrt.cc                799
+    kdb/generic/vrt.cc                103
+    src/glue/v4-x86/vrt_io.h          171
+    src/glue/v4-x86/vrt_io.cc         239
+                                    -----
+                                     1783
+
+### The coupling is virtual dispatch, and that is why it is indivisible
+
+`vrt_t` is the only class in this migration with **real polymorphism**: nine
+virtual methods, of which `vrt.cc` defines *none* — they are pure in practice,
+and the single subclass `vrt_io_t` (`glue/v4-x86/vrt_io.h:43`) supplies all of
+them. The generic algorithms in `vrt.cc` (`lookup`, `map_fpage`, `mapctrl`)
+drive the VRT entirely through those calls.
+
+Converting `vrt.h` alone produces something that still *compiles* and is wrong
+at run time: `class vrt_io_t : public vrt_t` remains legal C++ when `vrt_t` is a
+plain struct, its `get_radix`/`get_name`/... stop being overrides, nothing sets
+the dispatch pointers, and the first `map_fpage` dereferences them. That is
+precisely the silent-disagreement shape this migration has hit three times
+already — §99's `tcb_get_tcb` under `CONFIG_STATIC_TCBS`, §104's
+`policy_scheduler_init`, §105's stale `SCHED`. Splitting the component would
+manufacture a fourth.
+
+So the honest boundaries are "all five files" or "none". I stopped at none.
+
+### The design the conversion should use
+
+An ops table, laid out to match the C++ object exactly:
+
+    typedef struct vrt_ops_t {
+        word_t       (*get_radix)        (vrt_t *self, word_t objsize);
+        word_t       (*get_next_objsize) (vrt_t *self, word_t objsize);
+        word_t       (*get_vrt_size)     (vrt_t *self);
+        mdb_t *      (*get_mapdb)        (vrt_t *self);
+        const char * (*get_name)         (vrt_t *self);
+        void         (*set_object)       (vrt_t *self, vrt_node_t *n, word_t n_sz,
+                                          word_t paddr, vrt_node_t *o, word_t o_sz,
+                                          word_t access);
+        word_t       (*get_address)      (vrt_t *self, vrt_node_t *n);
+        word_t       (*make_misc)        (vrt_t *self, vrt_node_t *obj, mdb_node_t *map);
+        void         (*dump)             (vrt_t *self, vrt_node_t *n);
+    } vrt_ops_t;
+
+    struct vrt_t { const vrt_ops_t *ops; vrt_table_t *root_table; };
+
+The `ops` pointer first is not arbitrary: the Itanium ABI puts the vptr at
+offset 0 and `root_table` after it, so this reproduces the C++ layout, and
+`struct vrt_io_t { vrt_t base; ... }` reproduces `class vrt_io_t : public
+vrt_t`. Worth checking against the old object rather than trusting the claim.
+
+Two further pieces: `vrt_table_t::operator new (size_t, word_t radix_log2)` and
+`operator delete` become `vrt_table_alloc(word_t radix_log2)` /
+`vrt_table_free(vrt_table_t *)` — they are ordinary allocator calls
+(`mdb_alloc_buffer`) with no placement semantics. `vrt_io_t` has its own
+`operator new`/`delete` needing the same treatment.
+
+### The part that deserves care
+
+`vrt_t::map_fpage` is 537 lines of dense pointer and table-recursion logic,
+hand-unrolled into `r_ftable[]`/`r_fnode[]`/`r_fnum[]` arrays to avoid stack
+recursion, with `goto` targets threading the sender/receiver walks together. It
+is the map/grant path of the mapping database. A transcription error there would
+be silent, and would corrupt address spaces rather than fail to build. It should
+be converted with the whole function in view, not incrementally, and checked
+against a disassembly of the old object rather than only "it compiles".
+
+That is the reason this was deferred rather than started: there was room to
+begin it but not to finish it, and a half-transcribed `map_fpage` is the worst
+artifact this migration could leave behind.
