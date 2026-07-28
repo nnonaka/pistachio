@@ -38,7 +38,6 @@
 #include INC_ARCH(types.h)
 /* At this point we should have word_t defined */
 
-#if !defined(__cplusplus)
 /*
  * The kernel's C++ sources use bool/true/false freely.  Headers shared with
  * C translation units (during the C++ -> C conversion) must therefore parse
@@ -48,7 +47,6 @@
 typedef _Bool bool;
 #define true  1
 #define false 0
-#endif
 
 #if defined(CONFIG_IS_32BIT)
 #define SIZE_T unsigned int
@@ -74,18 +72,6 @@ typedef void*			addr_t;
 typedef word_t		addr_word_t;
 
 
-#if defined(__cplusplus)
-/**
- * Add offset to address.
- * @param addr		original address
- * @param off		offset to add
- * @return new address
- */
-INLINE addr_t addr_offset(addr_t addr, addr_t off)
-{
-    return (addr_t)((word_t)addr + (word_t)off);
-}
-#endif
 
 /**
  * Add offset to address.
@@ -142,42 +128,14 @@ INLINE addr_t addr_align_up (addr_t addr, word_t align)
 
 #endif /* !defined(ASSEMBLY) */
 
-#if defined(__cplusplus)
-template<typename T> inline const T& min(const T& a, const T& b)
-{
-    if (b < a)
-        return b;
-    return a;
-}
-
-template<typename T> inline const T& max(const T& a, const T& b)
-{
-    if (a < b)
-        return b;
-    return a;
-}
-
-template <class T> class ringlist_t
-{
-public:
-    T * next;
-    T * prev;
-};
-
-#endif /* defined(__cplusplus) */
 
 /*
  * Concrete instantiation of ringlist_t<T> used as a struct member
  * (ringlist_t<tcb_t> in tcb_t / rr_sched_ktcb_t).  In C++ it aliases the
  * template above; in C it is the plain two-pointer struct.
  */
-#if defined(__cplusplus)
-class tcb_t;
-typedef ringlist_t<tcb_t> ringlist_tcb_t;
-#else
 struct tcb_t;
 struct ringlist_tcb_t { struct tcb_t *next; struct tcb_t *prev; };
 typedef struct ringlist_tcb_t ringlist_tcb_t;
-#endif
 
 #endif /* !__TYPES_H__ */

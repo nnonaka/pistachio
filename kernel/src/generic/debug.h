@@ -117,11 +117,7 @@ do {								\
 
 # endif
 
-#if defined(__cplusplus)
-# define TID(x)		((x).get_raw())
-#else
 # define TID(x)		((x).raw)
-#endif
 
 /* From kdb/generic/entry.cc */
 BEGIN_DECLS

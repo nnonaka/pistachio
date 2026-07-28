@@ -33,92 +33,6 @@
 #define __BITMASK_H__
 
 
-#if defined(__cplusplus)
-/**
- * Generic bitmask manipulation.
- */
-template <typename T> class bitmask_t
-{
-    T	maskvalue;
-    static const word_t masksize = sizeof(T) * 8;
-    
-public:
-
-    // Constructors
-    bitmask_t (void) { maskvalue = 0; }
-    bitmask_t (T initvalue) 
-	{ maskvalue = initvalue; }    
-    
-    // Modification 
-    bitmask_t clear()
-	{
-	    maskvalue = 0;
-	    return (bitmask_t) maskvalue;
-	}
-  
-
-    inline bitmask_t operator = (const int &n) 
-	{
-	    maskvalue = (1UL << n);
-	    return (bitmask_t) maskvalue;
-	}
-    
-    inline bitmask_t operator + (const int &n) const
-	{
-	    bitmask_t m (maskvalue | (1UL << n));
-	    return m;
-	}
-
-    inline bitmask_t operator - (const int &n) const
-	{
-	    bitmask_t m (maskvalue & ~(1UL << n));
-	    return m;
-	}
-
-    inline bitmask_t operator += (const int &n)
-	{
-	    maskvalue = maskvalue | (1UL << n);
-	    return (bitmask_t) maskvalue;
-	}
-   
-    inline bitmask_t operator -= (const int &n)
-	{
-	    maskvalue = maskvalue & ~(1UL << n);
-	    return (bitmask_t) maskvalue;
-	}
-
-    // Predicates
-    inline bitmask_t operator == (bitmask_t &m2) const
-	{
-	    return maskvalue == m2.maskvalue;
-	}
-
-
-    inline bool is_set (const int &n) const
-	{ 
-	    return (maskvalue & (1UL << n)) != 0;
-	}
-
-    // Conversion
-
-    inline operator T (void) const
-	{ 
-	    return maskvalue;
-	}
-
-#if defined(CONFIG_DEBUG)
-    char *string()
-	{
-	    static const char *d = "0123456789abcdef";
-	    static char s[3+masksize];
-	    s[0] = '['; s[1+masksize]=']'; s[2+masksize]=0;
-	    for (word_t i=0; i< masksize; i++)
-		s[masksize-i] = is_set(i) ? d[i%16] : '~';
-	    return s;
-	}
-#endif
-};
-#endif /* __cplusplus */
 
 /*
  * Concrete instantiations of bitmask_t<T> used as struct members
@@ -126,18 +40,12 @@ public:
  * template above -- identical layout, full operator set.  In C they are the
  * plain backing struct (a single T maskvalue).
  */
-#if defined(__cplusplus)
-typedef bitmask_t<word_t> bitmask_word_t;
-typedef bitmask_t<u32_t>  bitmask_u32_t;
-typedef bitmask_t<u16_t>  bitmask_u16_t;
-#else
 struct bitmask_word_t { word_t maskvalue; };
 typedef struct bitmask_word_t bitmask_word_t;
 struct bitmask_u32_t  { u32_t  maskvalue; };
 typedef struct bitmask_u32_t bitmask_u32_t;
 struct bitmask_u16_t  { u16_t  maskvalue; };
 typedef struct bitmask_u16_t bitmask_u16_t;
-#endif
 
 
 

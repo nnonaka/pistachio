@@ -32,13 +32,8 @@
 #ifndef __MAPPING_H__
 #define __MAPPING_H__
 
-#if defined(__cplusplus)
-class space_t;
-class pgent_t;
-#else
 struct space_t;
 struct pgent_t;
-#endif
 struct mapnode_t;
 struct rootnode_t;
 
@@ -49,10 +44,6 @@ struct rootnode_t;
  * method bodies below, so it is guarded off for the C path.
  */
 #include INC_ARCH_SA(ptab.h)
-#if defined(__cplusplus)
-#include INC_ARCH(pgent.h)
-#include INC_API(fpage.h)
-#endif
 
 
 /**
@@ -143,171 +134,6 @@ struct mapnode_t
 	word_t raw[3];
     };
 
-#if defined(__cplusplus)
-
-    enum pgsize_e {
-	size_max = MDB_NUM_PGSIZES-1
-    };
-
-    // Previous pointer and backing pointer
-
-    pgent_t * get_pgent (mapnode_t * prev)
-	{
-	    return (pgent_t *) ((x.prev_ptr << 1) ^ (word_t) prev);
-	}
-
-    pgent_t * get_pgent (rootnode_t * prev)
-	{
-	    return (pgent_t *) ((x.prev_ptr << 1) ^ (word_t) prev);
-	}
-
-    mapnode_t * get_prevmap (pgent_t * pg)
-	{
-	    if (x.is_prev_root)
-		return (mapnode_t *) NULL;
-	    else
-		return (mapnode_t *) ((x.prev_ptr << 1) ^ (word_t) pg);
-	}
-
-    rootnode_t * get_prevroot (pgent_t * pg)
-	{
-	    if (! x.is_prev_root)
-		return (rootnode_t *) NULL;
-	    else
-		return (rootnode_t *) ((x.prev_ptr << 1) ^ (word_t) pg);
-	}
-
-    void set_backlink (mapnode_t * prev, pgent_t * pg)
-	{
-	    word_t p = ((word_t) prev ^ (word_t) pg) >> 1;
-	    x.prev_ptr = p & MDB_BITMASK (BITS_WORD - 1);
-	    x.is_prev_root = 0;
-	}
-
-    void set_backlink (rootnode_t * prev, pgent_t * pg)
-	{
-	    word_t p = ((word_t) prev ^ (word_t) pg) >> 1;
-	    x.prev_ptr = p & MDB_BITMASK (BITS_WORD - 1);
-	    x.is_prev_root = 1;
-	}
-
-    bool is_prev_root (void)
-	{
-	    return x.is_prev_root;
-	}
-
-
-    // Next pointer
-
-    mapnode_t * get_nextmap (void)
-	{
-	    if (! x.is_next_map)
-		return (mapnode_t *) NULL;
-	    else if (x.is_next_root)
-		return (mapnode_t *) ((dualnode_t *) (x.next_ptr << 2))->map;
-	    else
-		return (mapnode_t *) (x.next_ptr << 2);
-	}
-
-    rootnode_t * get_nextroot (void)
-	{
-	    if (! x.is_next_root)
-		return (rootnode_t *) NULL;
-	    else if (x.is_next_map)
-		return (rootnode_t *) ((dualnode_t *) (x.next_ptr << 2))->root;
-	    else
-		return (rootnode_t *) (x.next_ptr << 2);
-	}
-
-    dualnode_t * get_nextdual (void)
-	{
-	    if (x.is_next_root && x.is_next_map)
-		return (dualnode_t *) (x.next_ptr << 2);
-	    else
-		return (dualnode_t *) NULL;
-	}
-
-    void set_next (mapnode_t * map)
-	{
-	    word_t p = ((word_t) map) >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 0;
-	    x.is_next_map = 1;
-	}
-
-    void set_next (rootnode_t *root)
-	{
-	    word_t p = ((word_t) root) >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 1;
-	    x.is_next_map = 0;
-	}
-
-    void set_next (dualnode_t * dual)
-	{
-	    word_t p = ((word_t) dual) >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 1;
-	    x.is_next_map = 1;
-	}
-
-    bool is_next_root (void)
-	{
-	    return x.is_next_root && !x.is_next_map;
-	}
-
-    bool is_next_map (void)
-	{
-	    return x.is_next_map && !x.is_next_root;
-	}
-
-    bool is_next_both (void)
-	{ 
-	    return x.is_next_root && x.is_next_map;
-	}
-
-    // Address space identifier
-
-    space_t * get_space (void)
-	{
-	    return (space_t *) (x.space << (BITS_WORD - MDB_SPACE_BITS));
-	}
-
-    void set_space (space_t * space)
-	{
-	    word_t s = ((word_t) space) >> (BITS_WORD - MDB_SPACE_BITS);
-	    x.space = s & MDB_BITMASK (MDB_SPACE_BITS);
-	}
-
-    // Referenced bits
-
-    word_t get_rwx (void)
-	{
-	    return x.rwx;
-	}
-
-    void set_rwx (word_t rwx)
-	{
-	    x.rwx = rwx & MDB_BITMASK (3);
-	}
-
-    void update_rwx (word_t rwx)
-	{
-	    x.rwx |= rwx & MDB_BITMASK (3);
-	}
-
-    // Tree depth
-
-    word_t get_depth (void)
-	{
-	    return x.tree_depth;
-	}
-
-    void set_depth (word_t depth)
-	{
-	    x.tree_depth = depth & MDB_BITMASK (BITS_WORD - MDB_SPACE_BITS - 3);
-	}
-#endif /* __cplusplus */
 
 } __attribute__ ((packed));
 typedef struct mapnode_t mapnode_t;
@@ -328,79 +154,10 @@ struct rootnode_t
 	word_t raw;
     };
 
-#if defined(__cplusplus)
-    mapnode_t * get_map (void)
-	{
-	    if (! x.is_next_map)
-		return (mapnode_t *) NULL;
-	    else if (x.is_next_root)
-		return (mapnode_t *) ((dualnode_t *) (x.next_ptr << 2))->map;
-	    else
-		return (mapnode_t *) (x.next_ptr << 2);
-	}
-
-    rootnode_t * get_root (void)
-	{
-	    if (! x.is_next_root)
-		return (rootnode_t *) NULL;
-	    else if (x.is_next_map)
-		return (rootnode_t *) ((dualnode_t *) (x.next_ptr << 2))->root;
-	    else
-		return (rootnode_t *) (x.next_ptr << 2);
-	}
-
-    dualnode_t * get_dual (void)
-	{
-	    if (x.is_next_root && x.is_next_map)
-		return (dualnode_t *) (x.next_ptr << 2);
-	    else
-		return (dualnode_t *) NULL;
-	}
-
-    void set_ptr (mapnode_t * map)
-	{
-	    word_t p = (word_t) map >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 0;
-	    x.is_next_map = 1;
-	}
-
-    void set_ptr (rootnode_t * root)
-	{
-	    word_t p = (word_t) root >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 1;
-	    x.is_next_map = 0;
-	}
-
-    void set_ptr (dualnode_t * dual)
-	{
-	    word_t p = (word_t) dual >> 2;
-	    x.next_ptr = p & MDB_BITMASK (BITS_WORD - 2);
-	    x.is_next_root = 1;
-	    x.is_next_map = 1;
-	}
-
-    bool is_next_root (void)
-	{
-	    return x.is_next_root && !x.is_next_map;
-	}
-
-    bool is_next_map (void)
-	{
-	    return x.is_next_map && !x.is_next_root;
-	}
-
-    bool is_next_both (void)
-	{
-	    return x.is_next_root && x.is_next_map;
-	}
-#endif /* __cplusplus */
 };
 typedef struct rootnode_t rootnode_t;
 
 
-#if !defined(__cplusplus)
 /*
  * C reimplementations of the mapnode_t/rootnode_t methods for mapping.c (their
  * bitfield data is C-visible; only the methods were C++-only).  The C++
@@ -570,7 +327,6 @@ INLINE bool rootnode_is_next_map (rootnode_t *self)
 { return self->x.is_next_map && !self->x.is_next_root; }
 INLINE bool rootnode_is_next_both (rootnode_t *self)
 { return self->x.is_next_root && self->x.is_next_map; }
-#endif /* !__cplusplus */
 
 
 /**
@@ -589,40 +345,6 @@ extern word_t mdb_pgshifts[];
  * readable.
  */
 
-#if defined(__cplusplus)
-INLINE mapnode_t::pgsize_e operator-- (mapnode_t::pgsize_e & l, int)
-{
-    mapnode_t::pgsize_e ret = l;
-    l = (mapnode_t::pgsize_e) ((word_t) l - 1);
-    return ret;
-}
-
-INLINE mapnode_t::pgsize_e operator++ (mapnode_t::pgsize_e & l, int)
-{
-    mapnode_t::pgsize_e ret = l;
-    l = (mapnode_t::pgsize_e) ((word_t) l + 1);
-    return ret;
-}
-
-INLINE mapnode_t::pgsize_e operator+ (mapnode_t::pgsize_e l, int r)
-{
-    return (mapnode_t::pgsize_e) ((word_t) l + r);
-}
-
-INLINE mapnode_t::pgsize_e operator- (mapnode_t::pgsize_e l, int r)
-{
-    return (mapnode_t::pgsize_e) ((word_t) l - r);
-}
-
-
-
-/*
- * Function prototypes
- */
-
-/* From generic/mapping.c: mdb_map/mdb_flush are now file-static there; their
-   external entry points are mdb_map_c/mdb_flush_c (declared below). */
-#endif /* __cplusplus */
 
 /* init_mdb is called from init.cc (C++) but defined in mapping.c (C). */
 BEGIN_DECLS

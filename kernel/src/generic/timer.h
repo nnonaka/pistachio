@@ -34,24 +34,5 @@
 
 #include <debug.h>	// For UNIMPLEMENTED()	
 
-#if defined(__cplusplus)
-class generic_periodic_timer_t {
-
-public:
-    void init_global()				{ UNIMPLEMENTED(); };
-    void init_cpulocal()			{ UNIMPLEMENTED(); };
-    void setup(word_t rate)			{ UNIMPLEMENTED(); };
-};
-
-
-
-class generic_aperiodic_timer_t {
-
-public:
-    void init_global()				{ UNIMPLEMENTED(); };
-    void init_cpulocal()			{ UNIMPLEMENTED(); };
-    void setup()				{ UNIMPLEMENTED(); };
-};
-#endif /* __cplusplus */
 
 #endif /* !__TIMER_H__ */

@@ -40,33 +40,6 @@
   - a porting helper, the real intctrl_t can be derived from it
 */
 
-#if defined(__cplusplus)
-class generic_intctrl_t {
- public:
-    void mask(word_t irq)		 { UNIMPLEMENTED(); }
-    // unmask returns true if an IRQ was already pending
-    bool unmask(word_t irq)		 { UNIMPLEMENTED(); return false; }
-    void mask_and_ack(word_t irq)	 { UNIMPLEMENTED(); }
-    void ack(word_t irq)		 { UNIMPLEMENTED(); }
-    void enable(word_t irq)		 { UNIMPLEMENTED(); }
-    void disable(word_t irq)		 { UNIMPLEMENTED(); }
-
-    /* set affinity/routing */
-    void set_cpu(word_t irq, word_t cpu) { UNIMPLEMENTED(); }
-
-    /* system-global initialization */
-    void init_arch()			 { UNIMPLEMENTED(); }
-    /* cpu-local initialization */
-    void init_cpu()			 { UNIMPLEMENTED(); }
-    
-    word_t get_number_irqs()		 { UNIMPLEMENTED(); return 0; }
-    bool is_irq_available(word_t irq)	 { UNIMPLEMENTED(); return false; }
-
-    /* handler invoked on interrupt */
-    void handle_irq(word_t irq)		 { UNIMPLEMENTED(); }
-};
-
-#endif /* __cplusplus */
 
 /* callback function (defined in api/v4/interrupt.c with C linkage); declared
    for both languages -- platform/generic/intctrl-apic.c is C. */

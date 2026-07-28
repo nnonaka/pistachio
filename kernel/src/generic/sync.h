@@ -45,12 +45,6 @@ INLINE void memory_barrier()
 #define DECLARE_SPINLOCK(name) extern spinlock_t name
 
 struct spinlock_t {
-#if defined(__cplusplus)
-    void lock() {}
-    void unlock() {}
-    void init() {}
-    bool is_locked() { return false; }
-#endif
 };
 typedef struct spinlock_t spinlock_t;
 
@@ -77,31 +71,12 @@ struct lockstate_t {
     } flags;
     word_t rcu_epoch;
 
-#if defined(__cplusplus)
-    void init(bool enabled)
-	{
-	    flags.raw = 0;
-	    flags.X.enabled = enabled;
-	}
-
-    bool is_enabled() {
-	//return is_active();
-	return flags.X.enabled;
-    }
-
-    bool is_active() {
-	//return true;
-	return flags.raw;
-    }
-#endif
 };
 typedef struct lockstate_t lockstate_t;
 
-#if !defined(__cplusplus)
 /* C forms of the lockstate_t predicates (the flags union is C-visible). */
 INLINE bool lock_state_is_enabled (lockstate_t *self)	{ return self->flags.X.enabled; }
 INLINE bool lock_state_is_active (lockstate_t *self)	{ return self->flags.raw != 0; }
-#endif
 
 
 #endif
