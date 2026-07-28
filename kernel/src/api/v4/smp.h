@@ -88,25 +88,6 @@ INLINE void cpu_mb_entry_set (cpu_mb_entry_t *self, xcpu_handler_t handler,
     self->param[2] = param2;
 }
 
-/* C form of the get_on_cpu<T> template: locate a cpu-local object's copy for
-   another CPU by walking that CPU's page table. */
-INLINE void * get_on_cpu_c (cpuid_t cpu, void *item)
-{
-#if defined(CONFIG_SMP)
-    pgent_t *pgent;
-    int pgsize;
-    space_t *kspace = get_kernel_space_c ();
-
-    if (space_lookup_mapping (kspace, item, &pgent, &pgsize, cpu))
-	return addr_offset (phys_to_virt (pgent_address (pgent, kspace, (word_t) pgsize)),
-			    addr_mask (item, page_mask ((word_t) pgsize)));
-    return NULL;
-#else
-    (void) cpu;
-    return item;
-#endif
-}
-
 INLINE void cpu_mb_entry_set_many (cpu_mb_entry_t *self, xcpu_handler_t handler,
 				   tcb_t *tcb, word_t p0, word_t p1, word_t p2, word_t p3,
 				   word_t p4, word_t p5, word_t p6, word_t p7)
@@ -203,5 +184,31 @@ END_DECLS
 #define ON_CONFIG_SMP(x) do { } while(0)
 
 #endif /* CONFIG_SMP */
+
+
+/* C form of the get_on_cpu<T> template: locate a cpu-local object's copy for
+   another CPU by walking that CPU's page table.
+ *
+ * Deliberately outside the CONFIG_SMP block above.  kdb calls this
+ * unconditionally, and on a uniprocessor "cpu-local copy for cpu N" is just
+ * the object itself -- so the fallback below has to be reachable, which it is
+ * not if the whole function is compiled out with the rest of the SMP code.
+ */
+INLINE void * get_on_cpu_c (cpuid_t cpu, void *item)
+{
+#if defined(CONFIG_SMP)
+    pgent_t *pgent;
+    int pgsize;
+    space_t *kspace = get_kernel_space_c ();
+
+    if (space_lookup_mapping (kspace, item, &pgent, &pgsize, cpu))
+	return addr_offset (phys_to_virt (pgent_address (pgent, kspace, (word_t) pgsize)),
+			    addr_mask (item, page_mask ((word_t) pgsize)));
+    return NULL;
+#else
+    (void) cpu;
+    return item;
+#endif
+}
 
 #endif /* !__API__V4__SMP_H__ */

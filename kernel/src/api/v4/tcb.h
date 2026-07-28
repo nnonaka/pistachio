@@ -178,7 +178,21 @@ __attribute__ ((const)) INLINE tcb_t * addr_to_tcb (addr_t addr)
     return (tcb_t *) ((word_t) addr & KTCB_MASK);
 }
 
-#if !defined(CONFIG_STATIC_TCBS)
+#if defined(CONFIG_STATIC_TCBS)
+/* Static TCBs: the linear pointer array lives in api/v4/thread.c. */
+extern tcb_t * tcb_array[TOTAL_KTCBS];
+
+INLINE bool tcb_is_tcb (addr_t addr)
+{
+    tcb_t *tcb = addr_to_tcb (addr);
+    word_t i;
+
+    for (i = 0; i < TOTAL_KTCBS; i++)
+	if (tcb_array[i] == tcb)
+	    return true;
+    return false;
+}
+#else
 INLINE bool tcb_is_tcb (addr_t addr)
 {
     return space_is_tcb_area (addr);
@@ -198,12 +212,19 @@ INLINE bool tcb_is_tcb (addr_t addr)
    for C++ callers). Add more here as C files come to need them. */
 INLINE threadid_t tcb_get_local_id (const tcb_t *self) { return self->myself_local; }
 
-/* Mirror of tcb_t::get_tcb (dynamic-KTCB branch; CONFIG_STATIC_TCBS is off). */
+/* Mirror of tcb_t::get_tcb. */
+#if defined(CONFIG_STATIC_TCBS)
+INLINE tcb_t * tcb_get_tcb (threadid_t tid)
+{
+    return tcb_array[threadid_get_threadno (&tid) & VALID_THREADNO_MASK];
+}
+#else
 INLINE tcb_t * tcb_get_tcb (threadid_t tid)
 {
     return (tcb_t *) ((KTCB_AREA_START) +
 	((threadid_get_threadno (&tid) & VALID_THREADNO_MASK) * KTCB_SIZE));
 }
+#endif
 
 /* C accessors for tcb_t data members (private in C++, but plain fields in C).
    The non-trivial methods (get_mr, notify, send_pagefault_ipc, ...) are wrapped
@@ -215,6 +236,12 @@ INLINE space_t *  tcb_get_space (const tcb_t *self)		{ return self->space; }
 INLINE utcb_t *   tcb_get_utcb (const tcb_t *self)		{ return self->utcb; }
 /* get_saved_state's default argument was level 0. */
 INLINE word_t     tcb_get_saved_state (const tcb_t *self)	{ return self->misc.saved_state[0].state; }
+/* Matching setters; saved_state[0] is the nesting level the non-nested IPC
+   paths use. */
+INLINE void       tcb_set_saved_state (tcb_t *self, word_t state)
+	{ self->misc.saved_state[0].state = state; }
+INLINE void       tcb_set_saved_partner (tcb_t *self, threadid_t tid)
+	{ self->misc.saved_state[0].partner = tid; }
 /* preempt_flags/cop_flags are plain data members of the UTCB. */
 INLINE word_t     tcb_get_cop_flags (const tcb_t *self)		{ return self->utcb->cop_flags; }
 INLINE threadid_t tcb_get_intended_receiver (const tcb_t *self)	{ return self->utcb->intended_receiver; }
@@ -232,22 +259,25 @@ INLINE void       tcb_set_partner (tcb_t *self, threadid_t tid)	{ self->partner 
 INLINE void       tcb_set_irq_handler (tcb_t *self, threadid_t tid) { sched_ktcb_set_scheduler (&self->sched_state, tid); }
 INLINE threadid_t tcb_get_irq_handler (tcb_t *self)		{ return sched_ktcb_get_scheduler (&self->sched_state); }
 
-/* Dynamic-KTCB allocate/deallocate (CONFIG_STATIC_TCBS off): the TCB area is
-   demand-paged, so allocation just touches the page and clears the stack. */
+#if defined(CONFIG_STATIC_TCBS)
+/* Static-KTCB forms; defined in api/v4/thread.c, which owns tcb_array. */
+tcb_t *    tcb_allocate (threadid_t dest);
+void       tcb_deallocate (threadid_t dest);
+#else
+/* Dynamic-KTCB allocate/deallocate: the TCB area is demand-paged, so
+   allocation just touches the page and clears the stack. */
 INLINE tcb_t * tcb_allocate (threadid_t dest)
     { tcb_t *tcb = tcb_get_tcb (dest); tcb->kernel_stack[0] = 0; return tcb; }
 INLINE void tcb_deallocate (threadid_t dest)			{ (void) dest; }
+#endif
 
 /* flags is a bitmask_word_t; poke its maskvalue directly (see bitmask.h). */
 #define TCB_FLAG_HAS_XFER_TIMEOUT	0	/* tcb_t::has_xfer_timeout */
 #define TCB_FLAG_SCHEDULE_IN_PROGRESS	1	/* tcb_t::schedule_in_progress */
 #define TCB_FLAG_KERNEL_CTRLXFER_MSG	2	/* tcb_t::kernel_ctrlxfer_msg */
 #if defined(CONFIG_X_CTRLXFER_MSG)
-/* NB: tcb_ctrlxfer was tcb_t::ctrlxfer, which is declared and called but has
-   no definition anywhere -- not in this tree and not in the original import
-   that introduced control-transfer items as an experimental feature. So a
-   CONFIG_X_CTRLXFER_MSG build compiles but cannot link, independently of this
-   migration. */
+/* tcb_ctrlxfer was tcb_t::ctrlxfer; the definition lives in api/v4/thread.c,
+   inside the same CONFIG_X_CTRLXFER_MSG guard as this declaration. */
 word_t tcb_ctrlxfer (tcb_t *self, tcb_t *dst, msg_item_t item, word_t src_idx,
 		     word_t dst_idx, bool src_mr, bool dst_mr);
 void   tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t mask);

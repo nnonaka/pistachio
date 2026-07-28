@@ -77,6 +77,52 @@ void tcb_resources_purge (thread_resources_t *, tcb_t *);
 
 tcb_t *__dummy_tcb = (tcb_t *) &__whole_dummy_tcb;
 
+/* Architecture-neutral: __dummy_tcb is defined just above. */
+tcb_t * get_dummy_tcb_c (void)			{ return __dummy_tcb; }
+
+
+#if defined(CONFIG_STATIC_TCBS)
+/*
+ * Static TCBs: a linear array of pointers rather than a demand-paged virtual
+ * KTCB area.  Required by PPC440 (config/powerpc.cml: CPU_POWERPC_PPC440
+ * implies STATIC_TCBS), whose software-managed TLB cannot take faults on the
+ * KTCB area.  tcb_array was a static member of class tcb_t; in C it is a
+ * plain file-scope array, which is what the assembler stubs already assume --
+ * they reach it through static_tcb_array (see x86 trap.S).
+ */
+tcb_t *tcb_array[TOTAL_KTCBS];
+addr_t static_tcb_array;
+
+/* FIXME (inherited): is_tcb() scans all TOTAL_KTCBS entries. */
+tcb_t * tcb_allocate (threadid_t dest)
+{
+    word_t idx = threadid_get_threadno (&dest);
+    ASSERT (idx < TOTAL_KTCBS);
+    if (tcb_array[idx] == get_dummy_tcb_c ())
+	tcb_array[idx] = (tcb_t *) kmem_alloc (&kmem, kmem_tcb, KTCB_SIZE);
+    return tcb_array[idx];
+}
+
+void tcb_deallocate (threadid_t dest)
+{
+    word_t idx = threadid_get_threadno (&dest);
+    ASSERT (idx < TOTAL_KTCBS);
+    tcb_t *tcb = tcb_array[idx];
+    tcb_array[idx] = get_dummy_tcb_c ();
+    kmem_free (&kmem, kmem_tcb, (void *) tcb, KTCB_SIZE);
+}
+
+void tcb_init_tcbs (void)
+{
+    word_t i;
+
+    for (i = 0; i < TOTAL_KTCBS; i++)
+	tcb_array[i] = get_dummy_tcb_c ();
+
+    static_tcb_array = (addr_t) &tcb_array[0];
+}
+#endif /* defined(CONFIG_STATIC_TCBS) */
+
 
 /* Forward declarations for the file-static / self-referencing pieces. */
 static tcb_t * create_root_server (threadid_t dest_tid, threadid_t scheduler_tid,
@@ -998,6 +1044,106 @@ bool tcb_send_preemption_ipc (tcb_t *self)
 
     return msg_tag_is_error (&tag);
 }
+
+
+#if defined(CONFIG_X_CTRLXFER_MSG)
+
+/* C form of tcb_t::ctrlxfer.  The bitmask operators it used are gone with the
+   C++ template: `mask += n' set bit n and `mask -= n' cleared it (see the
+   pre-migration generic/bitmask.h), so both become explicit shifts here.  The
+   register-transfer members are the glue-supplied get_ctrlxfer_regs /
+   set_ctrlxfer_regs tables, called through &tcb->arch instead of C++
+   pointer-to-member syntax; they take the MR index by pointer and advance it. */
+word_t tcb_ctrlxfer (tcb_t *self, tcb_t *dst, msg_item_t item, word_t src_idx,
+		     word_t dst_idx, bool src_mr, bool dst_mr)
+{
+    word_t num_regs = 0;
+    word_t ctrlxfer_item_id;
+    msg_item_t ctrlxfer_item;
+    ctrlxfer_mask_t ctrlxfer_mask;
+
+    ctrlxfer_mask.maskvalue = 0;
+
+    if (tcb_flags_is_set (self, TCB_FLAG_KERNEL_CTRLXFER_MSG))
+    {
+	/*
+	 * on kernel we have inserted a single dummy ctrlxfer item with the
+	 * fault id encoded to reduce the number of saved MRs space; we get the
+	 * "real" items by inspecting the fault bitmasks
+	 */
+	ctrlxfer_mask = tcb_get_fault_ctrlxfer_items (self, msg_item_get_ctrlxfer_id (&item));
+	ctrlxfer_item_id = (word_t) lsb (ctrlxfer_mask.maskvalue);
+	ctrlxfer_item = ctrlxfer_fault_item (ctrlxfer_item_id);
+	TRACE_CTRLXFER_DETAILS( "ctrlxfer kernel msg fault %d mask %x",
+				msg_item_get_ctrlxfer_id (&item),
+				(word_t) ctrlxfer_mask.maskvalue );
+    }
+    else
+    {
+	ctrlxfer_item_id = 1;
+	ctrlxfer_mask.maskvalue |= (1UL << ctrlxfer_item_id);
+	ctrlxfer_item = item;
+    }
+
+    do
+    {
+	word_t id = msg_item_get_ctrlxfer_id (&ctrlxfer_item);
+	word_t num = 0;
+	word_t mask = msg_item_get_ctrlxfer_mask (&ctrlxfer_item);
+
+	ctrlxfer_mask_hwregs (id, &mask);
+	TRACE_CTRLXFER_DETAILS( "ctrlxfer id %d %s mask %x ", id,
+				ctrlxfer_get_idname (id), mask );
+
+	if (src_mr)
+	{
+	    if (dst_mr)
+	    {
+		word_t reg;
+
+		tcb_set_mr (dst, dst_idx++, ctrlxfer_item.raw);
+
+		for (reg = (word_t) lsb (mask); mask != 0;
+		     mask >>= lsb (mask) + 1, reg += (word_t) lsb (mask) + 1, num++)
+		{
+		    TRACE_CTRLXFER_DETAILS( "\t (m%06d->m%06d) -> %08x", src_idx+1,
+					    dst_idx, tcb_get_mr (self, src_idx+1) );
+		    tcb_set_mr (dst, dst_idx++, tcb_get_mr (self, src_idx++ + 1));
+		}
+	    }
+	    else
+	    {
+		// skip ctrlxfer item
+		src_idx++;
+		/* transfer from src mrs to dst frame */
+		num += set_ctrlxfer_regs[id] (&dst->arch, id, mask, self, &src_idx);
+	    }
+	}
+	else
+	{
+	    if (dst_mr)
+	    {
+		tcb_set_mr (dst, dst_idx++, ctrlxfer_item.raw);
+		/* transfer from src frame to dst mrs */
+		num += get_ctrlxfer_regs[id] (&self->arch, id, mask, dst, &dst_idx);
+	    }
+	    else
+		TRACEF("Ignore frame2frame ctrlxfer");
+	}
+
+	num_regs += 1 + num;
+	ctrlxfer_mask.maskvalue &= ~(1UL << ctrlxfer_item_id);
+	ctrlxfer_item_id = (word_t) lsb (ctrlxfer_mask.maskvalue);
+	ctrlxfer_item = ctrlxfer_fault_item (ctrlxfer_item_id);
+
+    } while (ctrlxfer_mask.maskvalue);
+
+    tcb_flags_remove (self, TCB_FLAG_KERNEL_CTRLXFER_MSG);
+
+    return num_regs;
+}
+
+#endif /* defined(CONFIG_X_CTRLXFER_MSG) */
 
 
 /**********************************************************************

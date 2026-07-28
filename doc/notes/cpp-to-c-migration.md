@@ -3647,3 +3647,126 @@ fixed by the shared header the x86 side already satisfies.
 Suggested order: `space.h` -> `tcb.h`/`ktcb.h` -> `resource_functions.h` ->
 `pgent-swtlb*.h`/`swtlb.h` -> the remaining leaf arch headers -> the 26 `.cc`
 files, of which `init.cc`, `space-swtlb.cc` and `softhvm.cc` are the large ones.
+
+
+## §99 — powerpc links. Four bugs, one cause: converting under a single config
+
+The ppc44x kernel now links: **66 objects, 0 errors, 0 implicit declarations,
+0 undefined references, a 1348260-byte ELF image.** That is the first successful
+powerpc link in this migration, and the first evidence that the port's C form is
+self-consistent rather than merely compilable.
+
+Getting the last 27 undefined references to zero turned up four defects. Three
+of them share a single root cause, which is the most transferable thing in this
+section.
+
+### The cause: a guard that is false in the config you build under
+
+`api/v4/thread.cc` was converted (995b205) while only the x86-x64-p4-smp gate
+config was being built. That config has `CONFIG_STATIC_TCBS` **off** and
+`CONFIG_X_CTRLXFER_MSG` **off**. Both `#if` blocks in that file were therefore
+invisible to the compiler, to the diff review, and to every verification step —
+the binary comparison, the symbol comparison, and the boot test all passed,
+because on x86 nothing was missing. The blocks were simply not carried over:
+
+  - `#if defined(CONFIG_STATIC_TCBS)` — `tcb_array`, `static_tcb_array`,
+    `tcb_t::allocate`, `tcb_t::deallocate`, `tcb_t::init_tcbs`
+  - `#if defined(CONFIG_X_CTRLXFER_MSG)` — `tcb_t::ctrlxfer`, ~90 lines
+
+Both are restored in C in `api/v4/thread.c`, under the same guards.
+
+**A config-guarded block is deleted silently when you convert a file under a
+config that disables it.** No warning, no link error, no test failure — until
+some other port turns the guard on. Before converting a file, list its guarded
+regions and check which ones the build config actually compiles; anything false
+needs review by reading, because no tool in the loop will look at it.
+
+### The correction §97 needs
+
+§97 recorded, and a comment in `api/v4/tcb.h` asserted, that `tcb_ctrlxfer`
+"has no definition anywhere — not in this tree and not in the original import."
+**That is wrong.** It is at `995b205^:kernel/src/api/v4/thread.cc:1140`, and was
+introduced with the feature in c881a86. The claim came from a `git grep`
+pipeline ending in `head`, which truncated the output before the definition
+line. The comment in `tcb.h` has been corrected.
+
+Two lessons, the second being the one that actually bit:
+
+  - Do not assert a symbol "has never existed" from a search of HEAD. Ask
+    `git log -S` first — it is the tool that answers that question.
+  - `head` on a grep whose purpose is to prove *absence* converts evidence into
+    its opposite. When the conclusion is "there are none", read the full output.
+
+The same mistaken reasoning nearly wrote off `CONFIG_STATIC_TCBS` as an
+unimplemented feature: `tcb_array` is defined nowhere in HEAD, and PPC440
+*requires* the option (`config/powerpc.cml:181`), so the port looked unbuildable
+by construction. It was in d52a5e2 all along, in the same file.
+
+### `get_on_cpu_c` was defined inside the SMP-only region
+
+`api/v4/smp.h` wrapped lines 40-201 in `#if defined(CONFIG_SMP)`. The C form of
+the `get_on_cpu<T>` template sat at line 93 — inside it — and carried its own
+`#else` branch returning `item` for the uniprocessor case. That fallback could
+never be reached: in a non-SMP build the whole function was compiled out along
+with it. kdb calls it unconditionally. Moved below `#endif /* CONFIG_SMP */`.
+
+Worth noting how this looked from the outside: adding the missing
+`#include INC_API(smp.h)` to `kdb/api/v4/schedule-rr.c` did not fix the
+undefined reference, and a `static inline` that is visible and used *must* be
+emitted. That contradiction is what pointed at the enclosing guard.
+
+### The accessor hoist moved definitions but left prototypes behind
+
+Moving 63 accessors into `api/v4/accessors.c` left six of their declarations in
+`glue/v4-x86/space.h` — an x86-only header. Every port but x86 called those
+functions with no prototype in scope. On powerpc this surfaced as six implicit
+declarations; on x86 it was invisible, because the declarations were still
+there.
+
+It was **not** harmless on x86. C's implicit declaration rule assumes
+`int (...)`, and the gate binary shows the cost:
+
+    thread_control_interrupt_c:
+      before:  xor %eax,%eax; call thread_control_interrupt; test %eax,%eax; setne %al
+      after:   jmp thread_control_interrupt
+
+    space_is_mappable_addr:
+      before:  test %eax,%eax        (bool re-widened to int)
+      after:   test %al,%al
+
+The `xor %eax,%eax` is the varargs AL convention, emitted because an
+unprototyped function might be variadic; the `test %eax,%eax`/`setne` pairs are
+the compiler re-normalising a `bool` it was told was an `int`. Correct by luck
+on this ABI, not by construction.
+
+Declarations now live with the definitions they describe: `fpage_is_addr_in_fpage`
+and `fpage_is_range_in_fpage` in `api/v4/fpage.h`, the three `space_is_*` in
+`api/v4/space.h`, `mem_region_is_empty` in `api/v4/kernelinterface.h`, and
+`tcb_set_saved_state`/`tcb_set_saved_partner` as INLINE in `api/v4/tcb.h` beside
+their getters (they were out-of-line in powerpc glue and absent everywhere else).
+
+**When you hoist a definition to shared code, hoist its declaration too.** A
+prototype left in a per-architecture header is not a compile error anywhere —
+it is an implicit declaration in every port that is not the one you tested.
+
+### The header lied about which branch it implemented
+
+`tcb_get_tcb` and `tcb_allocate` were defined *unconditionally* with dynamic-KTCB
+address arithmetic, each carrying a comment saying "CONFIG_STATIC_TCBS is off".
+For the gate config that was true. For PPC440, which requires the option, the
+kernel would have computed `KTCB_AREA_START + threadno * KTCB_SIZE` for a
+configuration whose whole premise is that TCBs are *not* at those addresses —
+wrong silently, at runtime, with no diagnostic. Both are now guarded, with the
+static forms indexing `tcb_array`.
+
+A comment asserting the state of a config option is a claim about the build, and
+it is only ever checked in the build you happen to run. This one was written
+during the x86 conversion and was false for the only port that sets the option.
+
+### Verification
+
+  - powerpc: clean rebuild, 66/66 objects, 0 errors, 0 implicit declarations,
+    0 undefined references, links.
+  - x86 gate: 0 errors, 0 implicit declarations; 705 symbols before and after,
+    identical bodies except the four above, each an ABI improvement traced to
+    the newly visible prototypes; boots to userland and kdb responds.

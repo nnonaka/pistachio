@@ -50,7 +50,6 @@ void      space_begin_update (void);
 void      space_end_update (void);
 bool      space_is_mappable_addr (space_t *self, addr_t addr);
 bool      space_is_mappable_fpage (space_t *self, fpage_t fp);
-bool      space_is_user_area_addr (addr_t addr);
 bool      space_does_tlbflush_pay (word_t log2size);
 fpage_t   space_get_kip_page_area (space_t *self);
 fpage_t   space_get_utcb_page_area (space_t *self);
@@ -60,7 +59,6 @@ word_t    space_readmem_phys (addr_t paddr);
 void      space_release_kernel_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t log2size);
 void      space_flush_tlb (space_t *self, space_t *curspace);
 void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t vaddr, word_t log2size);
-bool      space_is_sigma0 (space_t *space);
 space_t * get_current_space_c (void);
 /* space_t methods driven by api/v4/space.c (handle_pagefault/free/syscalls). */
 void      space_map_sigma0 (space_t *self, addr_t addr);
@@ -87,7 +85,6 @@ void      space_add_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t s
 /* space_readmem is the asm-name of space_t::readmem (no wrapper needed). */
 bool      space_readmem (space_t *self, addr_t vaddr, word_t *contents);
 bool      space_is_copy_area (addr_t addr);
-bool      space_is_user_area_fpage (fpage_t fpage);
 /* tcb reference-counting / utcb allocation for api/v4/thread.c. */
 void      space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
 bool      space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
@@ -96,9 +93,7 @@ utcb_t *  space_allocate_utcb (space_t *self, tcb_t *tcb);
 void      space_switch_to_kernel_space (cpuid_t cpu);
 space_t * space_allocate_space (void);
 void      space_free_space (space_t *space);
-bool      mem_region_is_empty (struct mem_region_t *self);
 void      align_memregion (struct mem_region_t *region, word_t size);
-bool      fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end);
 /* lookup_mapping stays C++ (its out-param is a 4-byte pgsize_e; a word_t-writing
    C symbol would corrupt the many external callers). This wrapper bridges it for
    linear_ptab_walker.c's readmem, writing the page size as a word_t. */

@@ -67,20 +67,7 @@
 #include INC_GLUE(space.h)
 #include INC_GLUE(bat.h)
 #include INC_GLUE(memcfg.h)
-/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
-   included from C; declare the scheduler entry points this file calls.
-   tcb_set_saved_* and get_idle_tcb come later in api/v4/tcb.h than the glue
-   header that reaches this file. */
-BEGIN_DECLS
-struct scheduler_t * get_current_scheduler (void);
-struct tcb_t * get_idle_tcb (void);
-void scheduler_schedule (struct scheduler_t *self, struct tcb_t *tcb, word_t dest);
-void scheduler_handle_timer_interrupt (struct scheduler_t *self);
-void scheduler_init (struct scheduler_t *self, bool bootcpu);
-void scheduler_start (struct scheduler_t *self, cpuid_t cpu);
-void tcb_set_saved_partner (struct tcb_t *self, threadid_t tid);
-void tcb_set_saved_state (struct tcb_t *self, word_t state);
-END_DECLS
+#include INC_API(schedule.h)	/* sched_* entry points */
 
 
 
@@ -498,9 +485,9 @@ EXTERN_C void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
     setup_kernel_mappings();
 #endif
 
-    scheduler_init (get_current_scheduler(),  false );
-    tcb_notify (get_idle_tcb(),  finish_cpu_init );
-    scheduler_start (get_current_scheduler(),  cpu );
+    sched_init (false);
+    tcb_notify (get_idle_tcb_c (),  finish_cpu_init );
+    sched_start (cpu);
 
     /* not reached */
     while( 1 );
@@ -718,11 +705,11 @@ EXTERN_C void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t r5
 
     /* Initialize the idle tcb, and push notify frames for starting
      * the idle thread. */
-    scheduler_init (get_current_scheduler(),  true );
+    sched_init (true);
 
     /* Push a notify frame for the second stage of initialization, which
      * executes in the context of the idle thread.  This must execute
      * before the scheduler's notify frames. */
-    tcb_notify (get_idle_tcb(),  finish_api_init );
-    scheduler_start (get_current_scheduler(),  0 ); /* Does not return. */
+    tcb_notify (get_idle_tcb_c (),  finish_api_init );
+    sched_start (0); /* Does not return. */
 }

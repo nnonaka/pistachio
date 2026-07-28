@@ -64,4 +64,10 @@ INLINE bool is_privileged_space(space_t * space)
 }
 
 
+/* Defined in api/v4/accessors.c (architecture-neutral wrappers over the
+   arch-specific space_is_user_area in each port's glue space.c). */
+bool space_is_sigma0 (space_t *space);
+bool space_is_user_area_addr (addr_t addr);
+bool space_is_user_area_fpage (fpage_t fpage);
+
 #endif /* !__API__V4__SPACE_H__ */

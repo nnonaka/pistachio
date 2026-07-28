@@ -174,7 +174,11 @@ void   tcb_set_space (tcb_t *self, space_t *space)
 }
 
 void   tcb_init_stack (tcb_t *self)			{ self->stack = tcb_get_stack_top (self); }
+#if !defined(CONFIG_STATIC_TCBS)
+/* Dynamic KTCBs: nothing to do.  The CONFIG_STATIC_TCBS form lives in
+   api/v4/thread.c, next to the tcb_array it initialises. */
 void   tcb_init_tcbs (void)				{ /* Nothing to do (CONFIG_STATIC_TCBS off). */ }
+#endif
 
 word_t * tcb_get_stack_top (tcb_t *self)		{ return (word_t *) addr_offset (self, KTCB_SIZE); }
 
@@ -330,7 +334,6 @@ void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t arg1, w
 }
 
 
-tcb_t * get_dummy_tcb_c (void)			{ extern tcb_t *__dummy_tcb; return __dummy_tcb; }
 
 
 void   initial_switch_to_c (tcb_t *tcb)

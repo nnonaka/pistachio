@@ -51,12 +51,7 @@
 extern ppc_swtlb_t swtlb; /* defined in space-swtlb.cc */
 
 
-/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
-   included here; declare the two entry points this file calls. */
-BEGIN_DECLS
-struct scheduler_t * get_current_scheduler (void);
-void scheduler_handle_timer_interrupt (struct scheduler_t *self);
-END_DECLS
+#include INC_API(schedule.h)	/* sched_* entry points */
 
 DECLARE_TRACEPOINT(PPC_HVM_EXCEPT_PROG);
 DECLARE_TRACEPOINT(PPC_HVM_EXCEPT_DECR);
@@ -659,7 +654,7 @@ EXCDEF( hvm_decrementer_handler )
 	ppc_tsr_t tsr = ppc_tsr_dec_irq ();
 	ppc_tsr_write (&tsr);
     }
-    scheduler_handle_timer_interrupt (get_current_scheduler());
+    sched_handle_timer_interrupt ();
 
     // tick the VM and fire necessary interrupts
     ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;

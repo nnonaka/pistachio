@@ -44,6 +44,7 @@
 #include INC_API(tcb.h)
 #include INC_API(space.h)
 #include INC_API(schedule.h)
+#include INC_API(interrupt.h)	/* thread_control_interrupt */
 #include INC_GLUE(space.h)
 
 #if defined(CONFIG_DEBUG)

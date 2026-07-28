@@ -335,3 +335,105 @@ word_t space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_
     }
     return oldctrl;
 }
+
+
+/**********************************************************************
+ *
+ *   C entry points that api/v4 and generic code call.  The C++ class
+ *   declared most of these and defined none of them -- space_t::is_user_area
+ *   and friends have no definition anywhere in the tree's history, which is
+ *   one reason this port has never linked.  They are written here against the
+ *   address-space constants in glue/v4-powerpc/config.h, matching what
+ *   glue/v4-x86/space.c does for x86.
+ *
+ **********************************************************************/
+
+bool space_is_user_area (addr_t addr)
+{ return (word_t) addr >= USER_AREA_START && (word_t) addr < USER_AREA_END; }
+
+/* space_is_user_area_addr / _fpage are architecture-neutral wrappers over the
+   space_is_user_area above; they live in api/v4/accessors.c. */
+
+bool space_is_tcb_area (addr_t addr)
+{ return (word_t) addr >= KTCB_AREA_START && (word_t) addr < KTCB_AREA_END; }
+
+bool space_is_copy_area (addr_t addr)
+{ return (word_t) addr >= COPY_AREA_START && (word_t) addr < COPY_AREA_END; }
+
+bool space_is_initialized (space_t *self)
+{ fpage_t kip = self->kip_area; return !fpage_is_nil_fpage (&kip); }
+
+bool space_is_mappable_addr (space_t *self, addr_t addr)
+{
+    fpage_t kip = self->kip_area, utcb = self->utcb_area;
+
+    return space_is_user_area (addr) &&
+	!fpage_is_addr_in_fpage (&kip, addr) &&
+	!fpage_is_addr_in_fpage (&utcb, addr);
+}
+
+bool space_is_mappable_fpage (space_t *self, fpage_t fp)
+{
+    fpage_t kip = self->kip_area, utcb = self->utcb_area;
+
+    return space_is_user_area_fpage (fp) &&
+	!fpage_is_overlapping (&kip, fp) &&
+	!fpage_is_overlapping (&utcb, fp);
+}
+
+space_t * get_current_space (void)			{ return tcb_get_space (get_current_tcb ()); }
+space_t * get_current_space_c (void)			{ return get_current_space (); }
+space_t * get_kernel_space_c (void)			{ return get_kernel_space (); }
+bool      is_privileged_space_c (space_t *space)	{ return is_privileged_space (space); }
+
+/* These two were inline in the C++ class: allocate was empty, and release
+   flushed the whole TLB.  asid.h drives both. */
+void space_allocate_hw_asid (space_t *self, word_t hw_asid)	{ (void) self; (void) hw_asid; }
+void space_release_hw_asid (space_t *self, word_t hw_asid)
+{ (void) hw_asid; space_flush_tlb (self, NULL); }
+
+/* Walk the page table for vaddr, as glue/v4-x86/space.c does. */
+bool space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg,
+			   word_t *r_size, cpuid_t cpu)
+{
+    pgent_t *pg = space_pgent_cpu (self, page_table_index (size_max, vaddr), cpu);
+    word_t pgsize = size_max;
+
+    for (;;)
+    {
+	if (!pg)
+	    return false;
+
+	if (pgent_is_valid (pg, self, pgsize))
+	{
+	    if (pgent_is_subtree (pg, self, pgsize))
+	    {
+		if (pgsize == 0)
+		    return false;
+		pg = pgent_next (pgent_subtree (pg, self, pgsize), self, pgsize - 1,
+				 page_table_index (pgsize - 1, vaddr));
+		pgsize--;
+		continue;
+	    }
+	    if (r_pg)   *r_pg = pg;
+	    if (r_size) *r_size = pgsize;
+	    return true;
+	}
+	return false;
+    }
+}
+
+bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size)
+{ return space_lookup_mapping (self, vaddr, r_pg, r_size, 0); }
+
+fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all)
+{
+    mdb_ctrl_t ctrl;
+
+    ctrl.raw = 0;
+    ctrl.set_rights	= !fpage_is_rwx (&fpage);
+    ctrl.reset_status	= 1;
+    ctrl.deliver_status	= 1;
+    fpage_set_rwx (&fpage, ~fpage_get_rwx (&fpage));
+    return space_mapctrl (self, fpage, ctrl, 0, unmap_all);
+}

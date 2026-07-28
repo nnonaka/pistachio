@@ -821,3 +821,41 @@ void tcb_switch_to (tcb_t *self, tcb_t * dest)
     if( EXPECT_FALSE(resource_bits_have_resources (&self->resource_bits)) )
 	tcb_resources_load (&self->resources, self);
 }
+
+
+/**********************************************************************
+ *
+ *   Remaining C entry points declared in api/v4/tcb.h.  As with the space
+ *   predicates, the C++ class declared these and nothing defined them.
+ *
+ **********************************************************************/
+
+/* tcb_set_saved_partner/_state are INLINE in api/v4/tcb.h, beside their getters. */
+
+#if !defined(CONFIG_STATIC_TCBS)
+/* Dynamic KTCBs: nothing to do.  The CONFIG_STATIC_TCBS form lives in
+   api/v4/thread.c, next to the tcb_array it initialises. */
+void tcb_init_tcbs (void)			{ /* Nothing to do (CONFIG_STATIC_TCBS off). */ }
+#endif
+
+/* Switch to the initial thread: install its stack and return into it.  The
+   powerpc thread-switch record puts the resume address at the top of the
+   stack, which is what tcb_switch_to's epilogue also relies on. */
+void initial_switch_to_c (tcb_t *tcb)
+{
+    __asm__ __volatile__ (
+	"mr	%%r1, %0 ;"		/* install the new stack */
+	"lwz	%%r3, 0(%%r1) ;"	/* resume address */
+	"mtctr	%%r3 ;"
+	"bctr ;"
+	:
+	: "b" (tcb->stack)
+	: "r3", "ctr");
+    while (1);
+}
+
+#if !defined(CONFIG_SMP)
+/* api/v4/thread.c defines this only under CONFIG_SMP. */
+bool tcb_migrate_to_processor (tcb_t *self, cpuid_t processor)
+{ (void) self; (void) processor; return false; }
+#endif

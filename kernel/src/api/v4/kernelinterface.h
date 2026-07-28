@@ -456,4 +456,7 @@ END_DECLS
 
 
 
+/* Defined in api/v4/accessors.c (architecture-neutral). */
+bool mem_region_is_empty (struct mem_region_t *self);
+
 #endif /* !__API__V4__KERNELINTERFACE_H__ */

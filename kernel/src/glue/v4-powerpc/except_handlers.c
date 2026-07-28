@@ -50,20 +50,7 @@
 
 
 
-/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
-   included from C; declare the scheduler entry points this file calls.
-   tcb_set_saved_* and get_idle_tcb come later in api/v4/tcb.h than the glue
-   header that reaches this file. */
-BEGIN_DECLS
-struct scheduler_t * get_current_scheduler (void);
-struct tcb_t * get_idle_tcb (void);
-void scheduler_schedule (struct scheduler_t *self, struct tcb_t *tcb, word_t dest);
-void scheduler_handle_timer_interrupt (struct scheduler_t *self);
-void scheduler_init (struct scheduler_t *self, bool bootcpu);
-void scheduler_start (struct scheduler_t *self, cpuid_t cpu);
-void tcb_set_saved_partner (struct tcb_t *self, threadid_t tid);
-void tcb_set_saved_state (struct tcb_t *self, word_t state);
-END_DECLS
+#include INC_API(schedule.h)	/* sched_* entry points */
 
 DECLARE_TRACEPOINT(PPC_EXCEPT_PROG);
 DECLARE_TRACEPOINT(PPC_EXCEPT_DECR);
@@ -75,7 +62,7 @@ INLINE void halt_user_thread( void )
     tcb_t *current = get_current_tcb();
 
     tcb_set_state (current,  THREAD_STATE_HALTED );
-    scheduler_schedule (get_current_scheduler(), get_idle_tcb(), sched_dest);
+    sched_schedule (get_idle_tcb_c (), sched_dest);
 }
 
 static bool send_exception_ipc( word_t exc_no, word_t exc_code )
@@ -337,7 +324,7 @@ EXCDEF( decrementer_handler )
     ppc_set_dec( decrementer_interval );
 #endif
 
-    scheduler_handle_timer_interrupt (get_current_scheduler());
+    sched_handle_timer_interrupt ();
     return_except();
 }
 

@@ -105,6 +105,9 @@ void   arch_unmap_fpage_c (struct tcb_t *from, fpage_t fpage, bool flush);
 void   arch_map_fpage_c (struct tcb_t *src, fpage_t snd_fpage, word_t snd_base, struct tcb_t *dst, fpage_t rcv_fpage, bool grant);
 void   fpage_set_rwx_all (fpage_t *self);	/* the no-arg set_rwx() */
 fpage_t fpage_nilpage (void);
+/* Defined in api/v4/accessors.c (architecture-neutral). */
+bool   fpage_is_addr_in_fpage (fpage_t *self, addr_t addr);
+bool   fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end);
 END_DECLS
 
 
