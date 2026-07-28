@@ -112,10 +112,10 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
     struct mapnode_t *newmap, *map = NULL;
     addr_t f_addr, t_addr;
 
-    pgent_t * r_fpg[X86_PGSIZE_MAX];
-    pgent_t * r_tpg[X86_PGSIZE_MAX];
-    word_t r_fnum[X86_PGSIZE_MAX];
-    word_t r_tnum[X86_PGSIZE_MAX];
+    pgent_t * r_fpg[PGENT_SIZE_MAX];
+    pgent_t * r_tpg[PGENT_SIZE_MAX];
+    word_t r_fnum[PGENT_SIZE_MAX];
+    word_t r_tnum[PGENT_SIZE_MAX];
 
     /* See the original linear_ptab_walker.cc for the full description of this
        recursion-without-function-calls mapping algorithm. */
@@ -161,10 +161,10 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
      * Find pagesize to use, and number of pages to map.
      */
 
-    for (pgsize = X86_PGSIZE_MAX; hw_pgshifts[pgsize] > f_num; pgsize--) {}
+    for (pgsize = PGENT_SIZE_MAX; hw_pgshifts[pgsize] > f_num; pgsize--) {}
 
     f_num = t_num = 1UL << (f_num - hw_pgshifts[pgsize]);
-    f_size = t_size = X86_PGSIZE_MAX;
+    f_size = t_size = PGENT_SIZE_MAX;
     f_off = 0;
 
     fpg = space_pgent (self, page_table_index (f_size, f_addr));
@@ -495,7 +495,7 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 			dbg_pgsize (page_size(t_size)), dbg_szname (page_size(t_size)),
 			addr_offset (f_addr, offset + f_off));
 
-		newmap = mdb_map_c (sigma0_mapnode, fpg, X86_PGSIZE_MAX+1,
+		newmap = mdb_map_c (sigma0_mapnode, fpg, PGENT_SIZE_MAX+1,
 				    addr_offset (f_addr, offset + f_off),
 				    tpg, t_size, t_space, grant);
 
@@ -643,8 +643,8 @@ fpage_t space_mapctrl (space_t * self, fpage_t fpage, mdb_ctrl_t ctrl,
     addr_t vaddr;
     word_t num, rwx = 0;
 
-    pgent_t *r_pg[X86_PGSIZE_MAX];
-    word_t r_num[X86_PGSIZE_MAX];
+    pgent_t *r_pg[PGENT_SIZE_MAX];
+    word_t r_num[PGENT_SIZE_MAX];
 
     TRACEPOINT (FPAGE_MAPCTRL,
 		"<spc=%p>::mapctrl ([%d, %x %x] [%x], %s, %x %c)\n",
@@ -670,17 +670,17 @@ fpage_t space_mapctrl (space_t * self, fpage_t fpage, mdb_ctrl_t ctrl,
      * space.  Enforce unmaps to only cover the supported space.
      */
 
-    if (num > hw_pgshifts[X86_PGSIZE_MAX+1])
-	num = hw_pgshifts[X86_PGSIZE_MAX+1];
+    if (num > hw_pgshifts[PGENT_SIZE_MAX+1])
+	num = hw_pgshifts[PGENT_SIZE_MAX+1];
 
     /*
      * Find pagesize to use, and number of pages to map.
      */
 
-    for (pgsize = X86_PGSIZE_MAX; hw_pgshifts[pgsize] > num; pgsize--) {}
+    for (pgsize = PGENT_SIZE_MAX; hw_pgshifts[pgsize] > num; pgsize--) {}
 
     num = 1UL << (num - hw_pgshifts[pgsize]);
-    size = X86_PGSIZE_MAX;
+    size = PGENT_SIZE_MAX;
     pg = space_pgent (self, page_table_index (size, vaddr));
 
     space_begin_update ();

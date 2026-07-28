@@ -127,7 +127,11 @@ bool      space_is_copy_area (addr_t addr);
 bool      space_is_mappable_addr (space_t *self, addr_t addr);
 bool      space_is_mappable_fpage (space_t *self, fpage_t fpage);
 word_t    space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid);
-void      space_flush_tlb (space_t *self, space_t *curspace, addr_t start, addr_t end);
+/* flush_tlb's start/end defaulted to the whole address space; the shared
+   callers use the two-argument form, so that is the C name, with the range
+   variant spelled out separately. */
+void      space_flush_tlb (space_t *self, space_t *curspace);
+void      space_flush_tlb_range (space_t *self, space_t *curspace, addr_t start, addr_t end);
 void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t log2size);
 paddr_t   space_sigma0_translate (addr_t addr, word_t size);
 word_t    space_sigma0_attributes (pgent_t *pg, paddr_t addr, word_t size);
@@ -189,7 +193,7 @@ INLINE pgent_t * space_get_pdir (space_t *self)
     return self->pdir;
 }
 
-INLINE pgent_t * space_pgent (space_t *self, word_t num, word_t cpu)
+INLINE pgent_t * space_pgent_cpu (space_t *self, word_t num, word_t cpu)
 {
     /* Was get_pdir()->next(this, size_4m, num).  pgent_next lives in
        pgent-swtlb_functions.h, which includes this header, so it is not
@@ -197,6 +201,10 @@ INLINE pgent_t * space_pgent (space_t *self, word_t num, word_t cpu)
        pointer arithmetic, which is what pgent_next does. */
     return space_get_pdir (self) + num;
 }
+
+/* cpu defaulted to 0. */
+INLINE pgent_t * space_pgent (space_t *self, word_t num)
+{ return space_pgent_cpu (self, num, 0); }
 
 INLINE bool space_is_kernel_paged_area (addr_t addr)
 {

@@ -195,12 +195,9 @@ void SECTION (SEC_KDEBUG) dump_utcb (tcb_t * tcb)
  * Dumps a message and buffer registers of a thread in human readable form
  * @param tcb	pointer to thread control block
  */
-/* The CONFIG_X_CTRLXFER_MSG blocks below are off in this config and are
-   translated to C by inspection only.  The ctrlxfer subsystem itself
-   (ctrlxfer_item_t in api/v4/ipc.h) is still C++ and un-migrated, so the names
-   used here -- msg_item_is_ctrlxfer_item, msg_item_get_ctrlxfer_id/_mask,
-   tcb_dump_ctrlxfer_state, tcb_get_fault_ctrlxfer_items,
-   ctrlxfer_item_get_idname/_hwregname/_fault_item_mask -- do not exist yet. */
+/* ctrlxfer_item_t in api/v4/ipc.h is C now, so the names below are the real
+   ones: ctrlxfer_get_idname and ctrlxfer_fault_item.  ctrlxfer_mask_t is a
+   bitmask_u16_t struct, so the bit arithmetic goes through .maskvalue. */
 static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
 {
     msg_tag_t tag = get_msgtag (tcb);
@@ -259,16 +256,16 @@ static void SECTION(SEC_KDEBUG) dump_message_registers(tcb_t * tcb)
                 ctrlxfer_mask_t mask = tcb_get_fault_ctrlxfer_items (tcb, msg_item_get_ctrlxfer_id (&item));
                 word_t id = msg_item_get_ctrlxfer_id (&item);
 
-                printf( "ctrlxfer kernel msg fault %d mask %x\n", msg_item_get_ctrlxfer_id (&item), (word_t) mask);
+                printf( "ctrlxfer kernel msg fault %d mask %x\n", msg_item_get_ctrlxfer_id (&item), (word_t) mask.maskvalue);
 
-                id = lsb(mask);	
-                
+                id = lsb(mask.maskvalue);
+
                 do {
-                    printf("\t id %d %s mask %x %x\n ", id, ctrlxfer_item_get_idname (id),
-                           ctrlxfer_item_fault_item_mask (id), (word_t) mask);
-                    mask -= id;
-                    id = lsb(mask);	
-                } while (mask);
+                    printf("\t id %d %s mask %x %x\n ", id, ctrlxfer_get_idname (id),
+                           ctrlxfer_fault_item (id).mask, (word_t) mask.maskvalue);
+                    mask.maskvalue &= ~(1UL << id);	/* was mask -= id */
+                    id = lsb(mask.maskvalue);
+                } while (mask.maskvalue);
                 
                 i+=1;
                 

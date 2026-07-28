@@ -88,7 +88,7 @@ INLINE void tcb_resources_flush_copy_area (thread_resources_t *self, tcb_t *tcb)
     /* tcb_get_space is defined in api/v4/tcb.h after this header is
        reached, so use the member directly. */
     space_t *space = tcb->space;
-    space_flush_tlb (space, space, (addr_t)COPY_AREA_START, (addr_t)COPY_AREA_END);
+    space_flush_tlb_range (space, space, (addr_t)COPY_AREA_START, (addr_t)COPY_AREA_END);
 }
 #endif
 
