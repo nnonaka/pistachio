@@ -368,16 +368,25 @@ void space_delete_copy_area (space_t *self, word_t n, cpuid_t cpu)
 }
 
 
-#if defined(CONFIG_X86_IO_FLEXPAGES)
-/* IO bitmap methods -- not built in this config (CONFIG_X86_IO_FLEXPAGES off);
-   kept for reference, would need C translation if the option is enabled. */
-#error "CONFIG_X86_IO_FLEXPAGES: space.c io_bitmap methods need translation"
-#endif /* defined(CONFIG_X86_IO_FLEXPAGES) */
+/* The IO bitmap methods are at the end of this file (notes §116). */
 
 void space_arch_free (space_t *self)
 {
+#if defined(CONFIG_X86_IO_FLEXPAGES)
+    if (space_get_io_space (self))
+    {
+	/* Unmap IO-space */
+	mdb_ctrl_t ctrl;
+	ctrl.raw = 0;
+	ctrl.unmap = ctrl.mapctrl_self = true;
+	vrt_mapctrl (&space_get_io_space (self)->base, fpage_complete_arch (),
+		     ctrl, 0, 0);
+	space_free_io_bitmap (self);
+    }
+#else
     (void) self;
-    /* CONFIG_X86_IO_FLEXPAGES / CONFIG_X86_SMALL_SPACES off: nothing to do. */
+#endif
+    /* CONFIG_X86_SMALL_SPACES off: nothing further to do. */
 }
 
 /**********************************************************************
@@ -1185,3 +1194,215 @@ bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t
     if (r_size) *r_size = (word_t) sz;
     return r;
 }
+
+#if defined(CONFIG_X86_IO_FLEXPAGES)
+/*
+ * IO permission bitmap management.  Recovered from 49fab2d^ and converted;
+ * see notes §116.  These sit inside CONFIG_X86_IO_FLEXPAGES, which is why the
+ * C flip dropped them without any build noticing.
+ */
+
+/* was space_t::get_io_bitmap (cpuid_t cpu = current_cpu) */
+addr_t space_get_io_bitmap (space_t *self, cpuid_t cpu)
+{
+    pgent_t *pg;
+    int pgsize;
+
+    if (space_lookup_mapping (self, x86_tss_get_io_bitmap (&tss), &pg, &pgsize, cpu))
+	return phys_to_virt (pgent_address (pg, self, (word_t) pgsize));
+
+    TRACEF("BUG: get_io_bitmap_phys returns NULL\n");
+    enter_kdebug("IO-Fpage BUG?");
+    return NULL;
+}
+
+INLINE io_space_t * space_io_space_slot (space_t *self)
+{ return self->base.data.io_space; }
+
+/* was space_t::get_io_space / set_io_space (inline members) */
+io_space_t * space_get_io_space (space_t *self)
+{
+    return space_io_space_slot (self);
+}
+
+void space_set_io_space (space_t *self, io_space_t *n)
+{
+    self->base.data.io_space = n;
+    vrt_io_set_space (n, self);
+}
+
+/*
+ * installs an allocated 8k region as IO bitmap
+ */
+addr_t space_install_io_bitmap (space_t *self, bool create)
+{
+    addr_t new_bitmap = NULL;
+    cpuid_t cpu = get_current_cpu ();
+    addr_t io_bitmap_mapping;
+    word_t top_idx;
+    pgent_t *src_pgent, *dst_pgent;
+    word_t size;
+
+    if (create)
+    {
+	new_bitmap = kmem_alloc (&kmem, kmem_iofp, IOPERMBITMAP_SIZE);
+	if (! new_bitmap)
+	    return NULL;
+    }
+    else
+    {
+	ASSERT (cpu != self->base.data.reference_ptab);
+	/* Get bitmap from reference page table */
+	new_bitmap = space_get_io_bitmap
+	    (self, (cpuid_t) self->base.data.reference_ptab);
+    }
+    ASSERT (new_bitmap);
+
+    /*
+     * Allocate second level pagetables.  Do not use pgent_make_subtree, as we
+     * have to set it up _before_ installing it.
+     */
+    io_bitmap_mapping = x86_tss_get_io_bitmap (&tss);
+    top_idx = page_table_index (PGENT_SIZE_MAX, io_bitmap_mapping);
+    src_pgent = space_pgent_cpu (self, top_idx, cpu);
+    dst_pgent = create ?
+	space_pgent_cpu (self, top_idx, self->base.data.reference_ptab) :
+	space_pgent_cpu (self, top_idx, cpu);
+    size = PGENT_SIZE_MAX;
+
+    while (size > PGSIZE_KERNEL)
+    {
+	pgent_t *new_subtree = (pgent_t *) kmem_alloc (&kmem, kmem_iofp, X86_PAGE_SIZE);
+
+	if (new_subtree == NULL)
+	{
+	    kmem_free (&kmem, kmem_iofp, new_bitmap, IOPERMBITMAP_SIZE);
+	    return NULL;
+	}
+
+	/* Copy all entries from original page table */
+	src_pgent = pgent_subtree (src_pgent, self, size);
+	ASSERT (src_pgent);
+
+	memcpy (new_subtree, src_pgent, X86_PTAB_BYTES);
+
+	ASSERT (dst_pgent);
+	pgent_set_entry (dst_pgent, self, X86_PGSIZE_4K,
+			 virt_to_phys ((addr_t) new_subtree), 7, 0, false);
+	dst_pgent = pgent_subtree (dst_pgent, self, size);
+
+	size--;
+
+	src_pgent = pgent_next (src_pgent, self, size,
+				page_table_index (size, io_bitmap_mapping));
+	dst_pgent = pgent_next (dst_pgent, self, size,
+				page_table_index (size, io_bitmap_mapping));
+    }
+
+    /* Set the two special entries */
+    ASSERT (size == X86_PGSIZE_4K);
+    pgent_set_entry (dst_pgent, self, size, virt_to_phys (new_bitmap), 4, 0, false);
+#if defined(CONFIG_X86_PGE)
+    pgent_set_global (dst_pgent, self, X86_PGSIZE_4K, false);
+#endif
+
+    dst_pgent = pgent_next (dst_pgent, self, size, 1);
+    pgent_set_entry (dst_pgent, self, size,
+		     virt_to_phys (addr_offset (new_bitmap, X86_PAGE_SIZE)), 4, 0, false);
+#if defined(CONFIG_X86_PGE)
+    pgent_set_global (dst_pgent, self, X86_PGSIZE_4K, false);
+#endif
+
+    space_flush_tlbent (self, get_current_space_c (), io_bitmap_mapping,
+			page_shift (X86_PGSIZE_4K));
+    space_flush_tlbent (self, get_current_space_c (),
+			addr_offset (io_bitmap_mapping, X86_PAGE_SIZE),
+			page_shift (X86_PGSIZE_4K));
+
+    ASSERT (space_get_io_bitmap
+	    (self, (cpuid_t) self->base.data.reference_ptab) == new_bitmap);
+
+    return new_bitmap;
+}
+
+
+/*
+ * releases the IOPBM of a task and sets the pointers back to the default IOPBM
+ */
+void space_free_io_bitmap (space_t *self)
+{
+    space_t *kspace;
+    addr_t io_bitmap, io_bitmap_mapping;
+    word_t top_idx, size;
+    pgent_t *orig_pgent, *new_pgent;
+    unsigned cpu;
+
+    /* Do not release the default IOPBM */
+    if (space_get_io_bitmap (self, current_cpu) == x86_tss_get_io_bitmap (&tss) ||
+	space_get_io_bitmap (self, current_cpu) == NULL)
+	return;
+
+    kspace = get_kernel_space_c ();
+    io_bitmap = space_get_io_bitmap (self, current_cpu);
+    io_bitmap_mapping = x86_tss_get_io_bitmap (&tss);
+
+    top_idx = page_table_index (PGENT_SIZE_MAX, io_bitmap_mapping);
+    size = PGENT_SIZE_MAX;
+
+    orig_pgent = pgent_subtree (space_pgent (kspace, top_idx), kspace, size);
+    new_pgent = pgent_subtree (space_pgent (self, top_idx), self, size);
+
+    /* Restore original page entry: insert the default PGT */
+    for (cpu = 0; cpu < CONFIG_SMP_MAX_CPUS; cpu++)
+	if (self->base.data.cpu_ptab[cpu].top_pdir)
+	    pgent_set_entry (space_pgent_cpu (self, top_idx, cpu), self, size,
+			     virt_to_phys ((addr_t) orig_pgent), 6, 0, true);
+
+    /* Release private lower level pagetables. */
+    while (size-- > PGSIZE_KERNEL)
+    {
+	addr_t subtree = (addr_t) new_pgent;
+	new_pgent = pgent_next (new_pgent, self, size + 1,
+				page_table_index (size, io_bitmap_mapping));
+	new_pgent = pgent_subtree (new_pgent, self, size);
+
+	/* Release the Pagetable */
+	kmem_free (&kmem, kmem_iofp, subtree, X86_PTAB_BYTES);
+    }
+
+    /* Release the IOPBM */
+    kmem_free (&kmem, kmem_iofp, io_bitmap, IOPERMBITMAP_SIZE);
+
+    /* Flush the corresponding TLB entries */
+    space_flush_tlbent (self, get_current_space_c (), io_bitmap_mapping,
+			page_shift (X86_PGSIZE_4K));
+    space_flush_tlbent (self, get_current_space_c (),
+			addr_offset (io_bitmap_mapping, 4096),
+			page_shift (X86_PGSIZE_4K));
+}
+
+/*
+ * synchronize IOPBM across processors
+ */
+bool space_sync_io_bitmap (space_t *self)
+{
+#if defined(CONFIG_SMP)
+    /* May be that we've already created a bitmap on a different cpu */
+
+    if (get_current_cpu () == self->base.data.reference_ptab)
+	return false;
+
+    if (space_get_io_bitmap (self, current_cpu) !=
+	space_get_io_bitmap (self, (cpuid_t) self->base.data.reference_ptab))
+    {
+	space_install_io_bitmap (self, false);
+	ASSERT (space_get_io_bitmap (self, current_cpu) ==
+		space_get_io_bitmap (self, (cpuid_t) self->base.data.reference_ptab));
+	return true;
+    }
+#else
+    (void) self;
+#endif
+    return false;
+}
+#endif /* CONFIG_X86_IO_FLEXPAGES */

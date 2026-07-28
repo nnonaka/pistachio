@@ -29,8 +29,6 @@
  * $Id: io_fpage.h,v 1.5 2006/02/21 08:43:57 stoess Exp $
  *                
  ********************************************************************/
-
-
 #ifndef __PLATFORM__PC99__IO_FPAGE_H__
 #define __PLATFORM__PC99__IO_FPAGE_H__
 
@@ -43,20 +41,18 @@
 
 #include INC_API(config.h)
 
-class space_t;
-class fpage_t;
-class tcb_t;
+struct space_t; typedef struct space_t space_t;
+struct fpage_t;
+struct tcb_t;
 
 /**
- * Flexpages are size-aligned memory objects and can cover 
- * multiple hardware pages. fpage_t implements the V4 specific
- * flexpage type, having read, write and execute bits.
+ * Flexpages are size-aligned memory objects and can cover
+ * multiple hardware pages.  arch_fpage_t implements the IO-port flexpage
+ * type.  Access rights are implicit: an IO fpage is always rwx.
  */
-class arch_fpage_t
+struct arch_fpage_t
 {
-    /* data members */
-public:
-    union{
+    union {
 	struct {
 	    BITFIELD5(word_t,
 		      reserved          : 4,
@@ -68,116 +64,77 @@ public:
 	} io __attribute__((packed));
 	word_t raw;
     } x;
-    /* member functions */
-public:
-
-    /**
-     * sets the flexpage
-     */
-    void set(word_t base, word_t log2size, bool read, bool write, bool exec)
-	{
-	    x.raw = 0;
-	    x.io.two = 2;
-	    /* I/O ports are 16 bit wide, so cutting the base down to the
-	       16 bit base field is the intended encoding */
-	    x.io.base = (u16_t) (base & (~0UL << log2size));
-	    x.io.size = log2size & 0x3f;
-	}
-
-    /**
-     * @return true if the flexpage is a nil fpage
-     */
-    bool is_valid_page (void)
-	{ return x.io.two == 2; }
-
-    /**
-     * @return true if flexpage covers the whole I/O address space
-     */
-    bool is_complete_page() 
-	{ return (x.io.size == 16 && x.io.base == 0);}
-
-    /**
-     * @return port of the IO fpage
-     */
-    u16_t get_port() 
-	{ return  (x.io.base); }
-
-    /**
-     * @return base address of the fpage
-     * get_base does not size-align the address
-     */
-    addr_t get_base()
-	{ return (addr_t) (word_t) (x.io.base); }
-
-    /**
-     * @return size aligned address of the fpage
-     */
-    addr_t get_address()
-	{ 
-	    return (addr_t)(x.io.base & (~0UL << x.io.size));
-	}
-    
-    /**
-     * @return size of the flexpage
-     */
-    word_t get_size() 
-	{ return (1UL << x.io.size); }
-
-    /**
-     * @return log2 size of the fpage
-     */
-    word_t get_size_log2() 
-	{ return x.io.size; }
-    
-    /**
-     * @return true if the read bit is set
-     */
-    bool is_read() 
-	{ return true; }
-
-    /** 
-     * @return true if the write bit is set
-     */
-    bool is_write() 
-	{ return true; }
-
-    /**
-     * @return true if the execute bit is set
-     */
-    bool is_execute() 
-	{ return true; }
-
-    /**
-     * @return true if read, write and execute bits are set
-     */
-    bool is_rwx()
-	{ return true; }
-
-    /**
-     * sets all permission bits in the fpage
-     */
-    void set_rwx() { }
-
-    void set_rwx(word_t rwx) { }
-
-    /**
-     * @return access rights of fpage
-     */
-    word_t get_rwx() 	{ return true; }
-
-    /**
-     * @return delivers an fpage covering the complete IO address space
-     */
-    static arch_fpage_t complete()
-	{
-	    arch_fpage_t ret;
-	    ret.x.raw = 0;
-	    ret.x.io.two = 2;
-	    ret.x.io.size = 16;
-	    return ret;
-	}
-
 };
+typedef struct arch_fpage_t arch_fpage_t;
+
+
+/**
+ * sets the flexpage
+ */
+INLINE void arch_fpage_set (arch_fpage_t *self, word_t base, word_t log2size,
+			    bool read, bool write, bool exec)
+{
+    (void) read; (void) write; (void) exec;
+    self->x.raw = 0;
+    self->x.io.two = 2;
+    /* I/O ports are 16 bit wide, so cutting the base down to the
+       16 bit base field is the intended encoding */
+    self->x.io.base = (u16_t) (base & (~0UL << log2size));
+    self->x.io.size = log2size & 0x3f;
+}
+
+/** @return true if the flexpage is a nil fpage */
+INLINE bool arch_fpage_is_valid_page (arch_fpage_t *self)
+{ return self->x.io.two == 2; }
+
+/** @return true if flexpage covers the whole I/O address space */
+INLINE bool arch_fpage_is_complete_page (arch_fpage_t *self)
+{ return (self->x.io.size == 16 && self->x.io.base == 0); }
+
+/** @return port of the IO fpage */
+INLINE u16_t arch_fpage_get_port (arch_fpage_t *self)
+{ return (u16_t) self->x.io.base; }
+
+/** @return base address of the fpage (not size-aligned) */
+INLINE addr_t arch_fpage_get_base (arch_fpage_t *self)
+{ return (addr_t) (word_t) (self->x.io.base); }
+
+/** @return size aligned address of the fpage */
+INLINE addr_t arch_fpage_get_address (arch_fpage_t *self)
+{ return (addr_t) (word_t) (self->x.io.base & (~0UL << self->x.io.size)); }
+
+/** @return size of the flexpage */
+INLINE word_t arch_fpage_get_size (arch_fpage_t *self)
+{ return (1UL << self->x.io.size); }
+
+/** @return log2 size of the fpage */
+INLINE word_t arch_fpage_get_size_log2 (arch_fpage_t *self)
+{ return self->x.io.size; }
+
+/*
+ * An IO fpage carries no permission bits -- the C++ methods returned true
+ * unconditionally and the setters were empty.  Transcribed as they were.
+ */
+INLINE bool arch_fpage_is_read (arch_fpage_t *self)	{ (void) self; return true; }
+INLINE bool arch_fpage_is_write (arch_fpage_t *self)	{ (void) self; return true; }
+INLINE bool arch_fpage_is_execute (arch_fpage_t *self)	{ (void) self; return true; }
+INLINE bool arch_fpage_is_rwx (arch_fpage_t *self)	{ (void) self; return true; }
+INLINE void arch_fpage_set_rwx_all (arch_fpage_t *self)	{ (void) self; }
+INLINE void arch_fpage_set_rwx (arch_fpage_t *self, word_t rwx)
+{ (void) self; (void) rwx; }
+/* NB: get_rwx returned `true', i.e. 1, not a full rwx mask.  Kept. */
+INLINE word_t arch_fpage_get_rwx (arch_fpage_t *self)	{ (void) self; return true; }
+
+/** @return an fpage covering the complete IO address space */
+INLINE arch_fpage_t arch_fpage_complete (void)
+{
+    arch_fpage_t ret;
+    ret.x.raw = 0;
+    ret.x.io.two = 2;
+    ret.x.io.size = 16;
+    return ret;
+}
+
 #endif /* !defined(CONFIG_X86_IO_FLEXPAGES) */
 
 #endif /* !__PLATFORM__PC99__IO_FPAGE_H__ */

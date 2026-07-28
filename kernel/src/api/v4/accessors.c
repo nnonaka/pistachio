@@ -54,8 +54,12 @@ extern spinlock_t present_list_lock;
 #endif
 
 /* ---- from glue/v4-x86/space.c ---- */
+/* The IO-flexpage build overrides this with a complete-arch window; that
+   version lives in glue/v4-x86/io_space.c (notes §116). */
+#if !defined(CONFIG_X86_IO_FLEXPAGES)
 fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, tcb_t *dest)
 { (void) self; (void) dest; fpage_t fp; fp.raw = 0; return fp; }
+#endif
 
 addr_t fpage_address (fpage_t fp, word_t size)
 { return (addr_t) ((word_t) fpage_get_base (&fp) & ~((1UL << size) - 1)); }

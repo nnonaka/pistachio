@@ -59,6 +59,12 @@ struct x86_x64_tss_t
 } __attribute__((packed));
 typedef struct x86_x64_tss_t x86_x64_tss_t;
 
+/* C form of x86_x64_tss_t::get_io_bitmap. */
+INLINE addr_t x86_tss_get_io_bitmap (x86_x64_tss_t *self)
+{
+    return (addr_t) self->io_bitmap;
+}
+
 /* C form of x86_x64_tss_t::setup (ss0 is ignored, as in the C++ method). */
 INLINE void x86_tss_setup (x86_x64_tss_t *self, u16_t ss0)
 {

@@ -86,6 +86,26 @@ void      space_add_mapping (space_t *self, addr_t vaddr, addr_t paddr, word_t s
 bool      space_readmem (space_t *self, addr_t vaddr, word_t *contents);
 bool      space_is_copy_area (addr_t addr);
 /* tcb reference-counting / utcb allocation for api/v4/thread.c. */
+/*
+ * IO permission bitmap and IO space.  These were members of space_t, removed
+ * from this header by 312b160 along with the rest of the __cplusplus block;
+ * their definitions went from space.cc in 49fab2d.  Both passes verified
+ * against a config with CONFIG_X86_IO_FLEXPAGES off, which compiles none of
+ * this.  Restored in C -- see notes §116.
+ *
+ * get_io_bitmap's `cpuid_t cpu = current_cpu' default is dropped, as it was
+ * for space_add_tcb/space_remove_tcb above; callers pass current_cpu.
+ */
+#if defined(CONFIG_X86_IO_FLEXPAGES)
+addr_t      space_install_io_bitmap (space_t *self, bool create);
+void        space_free_io_bitmap (space_t *self);
+bool        space_sync_io_bitmap (space_t *self);
+addr_t      space_get_io_bitmap (space_t *self, cpuid_t cpu);
+void        space_set_io_space (space_t *self, io_space_t *n);
+io_space_t * space_get_io_space (space_t *self);
+void        init_io_space (void);
+#endif
+
 void      space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
 bool      space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu);
 void      space_move_tcb (space_t *self, tcb_t *tcb, cpuid_t src_cpu, cpuid_t dst_cpu);

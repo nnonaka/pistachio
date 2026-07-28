@@ -29,7 +29,6 @@
  * $Id: io_space.h,v 1.3 2005/05/19 08:43:48 stoess Exp $
  *                
  ********************************************************************/
-
 #ifndef __PLATFORM__PC99__IO_SPACE_H__
 #define __PLATFORM__PC99__IO_SPACE_H__
 
@@ -49,22 +48,33 @@
 
 #define IPC_MR0_IO_PAGEFAULT                ((-8UL) << 4)
 
+BEGIN_DECLS
 void arch_map_fpage (tcb_t * src, fpage_t snd_fpage, word_t snd_base,
 		     tcb_t * dst, fpage_t rcv_fpage, bool grant);
 
 void arch_unmap_fpage (tcb_t * from, fpage_t fpage, bool flush);
 
-INLINE fpage_t acceptor_t::get_arch_specific_rcvwindow(tcb_t *dest)
+/*
+ * was the INLINE acceptor_t::get_arch_specific_rcvwindow specialisation.  It
+ * cannot stay inline here: fpage_complete_arch needs a complete fpage_t, and
+ * api/v4/accessors.c supplies the generic (nil-window) version, so the two are
+ * mutually exclusive -- see notes §116.  Defined in io_space.c.
+ */
+fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, struct tcb_t *dest);
+
+bool handle_io_pagefault (tcb_t *tcb, u16_t port, u16_t size, addr_t ip);
+void zero_io_bitmap (space_t *space, word_t port, word_t log2size);
+void set_io_bitmap (space_t *space, word_t port, word_t log2size);
+END_DECLS
+
+/* was fpage_t::complete_arch () */
+INLINE fpage_t fpage_complete_arch (void)
 {
-    return fpage_t::complete_arch();
+    fpage_t fp;
+    fp.arch = arch_fpage_complete ();
+    return fp;
 }
 
-bool handle_io_pagefault(tcb_t *tcb, u16_t port, u16_t size, addr_t ip);
-void zero_io_bitmap(space_t *space, word_t port, word_t log2size);
-void set_io_bitmap(space_t *space, word_t port, word_t log2size);
-
 #endif /* !defined(CONFIG_X86_IO_FLEXPAGES) */
-
-
 
 #endif /* !__PLATFORM__PC99__IO_SPACE_H__ */

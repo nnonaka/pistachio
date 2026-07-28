@@ -4823,6 +4823,13 @@ dropped the ~200 lines that defined `install_io_bitmap`, `free_io_bitmap` and
 `sync_io_bitmap`, because they sit inside `#if defined(CONFIG_X86_IO_FLEXPAGES)`
 and the gate config does not set it.
 
+**Correction (§116):** that second half was *not* silent. `49fab2d` left an
+explicit `#error "CONFIG_X86_IO_FLEXPAGES: space.c io_bitmap methods need
+translation"` in place of the bodies, so any IO-flexpage build stopped there
+loudly. The deletion in `space.h` (312b160) was silent; the one in `space.cc`
+was a marked deferral. The rule below still holds, but this instance was half
+as bad as stated.
+
 This is the **third** occurrence of one mistake:
 
     §99   api/v4/thread.cc      CONFIG_STATIC_TCBS, CONFIG_X_CTRLXFER_MSG blocks
@@ -4859,3 +4866,69 @@ front of me — it is recovery from `49fab2d^` followed by conversion, exactly a
 rather than tacked onto the end of a long session.
 
 Nothing was changed for this section.
+
+
+## §116 — The io layer converted; the vrt/mdb stack is C
+
+    glue/v4-x86/io_fpage.h    183 -> 140    arch_fpage_t
+    glue/v4-x86/io_space.h     70 ->  80
+    glue/v4-x86/io_space.c    314 -> 254
+    glue/v4-x86/mdb_io.h       75 ->  54
+    glue/v4-x86/mdb_io.c      306 -> 282
+    glue/v4-x86/space.c       +212            recovered from 49fab2d^
+    glue/v4-x86/space.h        +9             recovered from 312b160^
+    arch/x86/x64/tss.h         +5             x86_tss_get_io_bitmap
+
+`x86-x64-p4-iofp` goes from **15 objects to 62**, and every file of the mdb,
+vrt and io stack now compiles: `mdb.o`, `mdb_mem.o`, `kdb/generic/mdb.o`,
+`vrt.o`, `vrt_io.o`, `kdb/generic/vrt.o`, `mdb_io.o`, `io_space.o` — with **no
+implicit declarations**.
+
+### The recovery half
+
+`space_install_io_bitmap`, `space_free_io_bitmap` and `space_sync_io_bitmap`
+came back from `49fab2d^` and were converted; `space_get_io_bitmap`,
+`space_get_io_space`, `space_set_io_space` were inline members recovered from
+`312b160^`. `space_arch_free`'s IO block — unmap the io space, free the bitmap
+— was restored too; the C stub had `(void) self;` and a comment saying there was
+nothing to do.
+
+`space_get_io_bitmap`'s `cpuid_t cpu = current_cpu` default is dropped and
+callers pass `current_cpu`, matching what `space_add_tcb`/`space_remove_tcb`
+already do in this header.
+
+### Two traps in the conversion half
+
+**`min` is not the C++ `min`.** `generic/lib.h` defines `INLINE int min (int, int)`.
+The C++ used a template, and `zero_io_bitmap`/`set_io_bitmap` call it on
+`word_t` operands — so the obvious transcription silently narrows 64-bit values
+to `int`. A file-local `min_word` keeps the original width. Worth checking
+wherever else the C `min` was substituted for the template.
+
+**Two definitions of one function under opposite guards.**
+`acceptor_t::get_arch_specific_rcvwindow` was an INLINE specialisation in
+`io_space.h` returning the complete IO window, while `api/v4/accessors.c`
+defines the generic nil-window version unconditionally. In C++ the header
+inline shadowed nothing — the two never met, because `accessors.c` did not exist
+yet when that pattern was written. In C they collide at link time, so
+`accessors.c`'s copy is now under `#if !defined(CONFIG_X86_IO_FLEXPAGES)` and
+`io_space.c` supplies the other.
+
+### Preserved as found
+
+`arch_fpage_t::get_rwx()` returned `true` — i.e. 1, not an rwx mask — while its
+siblings `is_read`/`is_write`/`is_execute` all return true unconditionally. An
+IO fpage has no permission bits, so this is consistent with the type's intent
+even though the value looks wrong; transcribed verbatim.
+
+### What is left in this configuration
+
+    intctrl-pic.cc/h, 8259.h, glue/v4-x86/intctrl.h, kdb/platform/pc99/intctrl.c
+                                       the PIC path -- §95's blocker for 7 configs
+    glue/v4-x86/timer.cc
+    glue/v4-x86/space.c                active_cpu_space, and the mapnode_t
+                                       identity conflict of §113
+    generic/linear_ptab_walker.c, api/v4/generic-archmap.h, generic/types.h
+
+None of it is mdb, vrt or io. Gate unaffected: 0 errors, 709 symbols with
+identical bodies, boots to userland.
