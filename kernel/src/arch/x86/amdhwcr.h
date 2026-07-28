@@ -68,6 +68,24 @@ INLINE bool amdhwcr_is_invd_wbinvd (void)
 { return (x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_INVD_WBINVD) != 0; }
 INLINE bool amdhwcr_is_flushfilter_enabled (void)
 { return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_FFDIS); }
+
+/*
+ * The two flush-filter setters.  They were static members of
+ * class x86_amdhwcr_t, removed by 4b5e3a0 with the rest of the C++ half; the C
+ * half never had them because their only caller sits under
+ * CONFIG_CPU_X86_K8, which the gate config does not set.  Notes §119.
+ */
+INLINE void amdhwcr_enable_flushfilter (void)
+{
+    u64_t hwcr = x86_rdmsr (X86_AMDHWCR_MSR);
+    x86_wrmsr (X86_AMDHWCR_MSR, hwcr & ~(u64_t) X86_AMDHWCR_FFDIS);
+}
+
+INLINE void amdhwcr_disable_flushfilter (void)
+{
+    u64_t hwcr = x86_rdmsr (X86_AMDHWCR_MSR);
+    x86_wrmsr (X86_AMDHWCR_MSR, hwcr | X86_AMDHWCR_FFDIS);
+}
 INLINE bool amdhwcr_is_lockprefix_enabled (void)
 { return !(x86_rdmsr (X86_AMDHWCR_MSR) & X86_AMDHWCR_DISLOCK); }
 INLINE bool amdhwcr_is_ignne_emulation_enabled (void)

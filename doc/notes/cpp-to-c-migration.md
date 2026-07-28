@@ -5071,3 +5071,42 @@ newly-building configs produce images; `x86-x64-p4` boots to the test suite.
     x86-x64-p4-cm       99  -- compatibility mode, glue/v4-x86/utcb.h (§95)
     x86-x64-p4-iofp          the mapnode_t identity conflict (§113)
     x86-x64-p4-newmdb        same
+
+
+## §119 — k8: two flush-filter setters, and the pattern's fifth appearance
+
+`x86-x64-k8` failed on one line:
+
+    glue/v4-x86/init.c:359: x86_amdhwcr_t::disable_flushfilter();
+
+`arch/x86/amdhwcr.h` had been converted to C — fourteen `amdhwcr_is_*`
+predicates and a `dump_hwcr` — but **not** `enable_flushfilter` /
+`disable_flushfilter`. They were static members of `class x86_amdhwcr_t`,
+removed by `4b5e3a0` with the rest of the C++ half, and the C half never had
+them because their only caller sits under `CONFIG_CPU_X86_K8`, which the gate
+does not set.
+
+That is the same shape as §99, §109, §115, §117 and §118 — the fifth
+appearance, and by now the diagnosis is mechanical: a header converted while
+building a config that compiles only part of it, verified by a check that
+cannot see the rest.
+
+Both are one-liners over `x86_rdmsr`/`x86_wrmsr` on `X86_AMDHWCR_FFDIS`, and
+the naming is worth care in passing: `enable_flushfilter` *clears* FFDIS and
+`disable_flushfilter` *sets* it, matching the fourteen predicates already in the
+file, seven of which negate a `*DIS*` bit.
+
+**`x86-x64-k8` builds (243448 bytes) and boots to userland.** Seven of eleven
+x64 configs now build:
+
+    x86-x64-p4-smp  x86-x64-p4  x86-x64-p3  x86-x64-p4-nokdb
+    x86-x64-p4-fp   x86-x64-p4-statictcbs   x86-x64-k8
+
+Gate: 0 errors, 709 symbols with identical bodies.
+
+### The four that remain
+
+    x86-x64-p4-fullkdb   7 errors
+    x86-x64-p4-cm       99  -- compatibility mode, glue/v4-x86/utcb.h (§95)
+    x86-x64-p4-iofp          mapnode_t identity conflict (§113)
+    x86-x64-p4-newmdb        same

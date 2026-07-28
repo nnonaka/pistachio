@@ -353,10 +353,10 @@ static cpuid_t SECTION(".init.cpu") init_cpu_local (void)
 #if defined(CONFIG_CPU_X86_K8)
 #if defined(CONFIG_K8_FLUSHFILTER)
     TRACE_INIT("\tEnabling K8 Flush Filter\n");
-    x86_amdhwcr_t::enable_flushfilter();
+    amdhwcr_enable_flushfilter ();
 #else
     TRACE_INIT("\tDisabling K8 Flush Filter\n");
-    x86_amdhwcr_t::disable_flushfilter();
+    amdhwcr_disable_flushfilter ();
 #endif
 #endif
 
