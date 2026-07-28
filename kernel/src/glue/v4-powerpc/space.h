@@ -63,140 +63,18 @@ extern struct transtable_t {
 	word_t size;
 } transtable[TRANSLATION_TABLE_ENTRIES];
 
-class utcb_t;
-class tcb_t;
+struct utcb_t; typedef struct utcb_t utcb_t;
+struct tcb_t;  typedef struct tcb_t tcb_t;
 
-class space_t
+/* space_t's access_e becomes the SPACE_ACCESS_* constants the shared
+   api/v4/space.c already uses; it passes them as a plain int. */
+#define SPACE_ACCESS_READ	0
+#define SPACE_ACCESS_WRITE	1
+#define SPACE_ACCESS_READWRITE	-1
+#define SPACE_ACCESS_EXECUTE	2
+
+struct space_t
 {
-public:
-    enum access_e {
-	read		= 0,
-	write		= 1,
-	readwrite	= -1,
-	execute		= 2
-    };
-
-    void init(fpage_t utcb_area, fpage_t kip_area);		// glue
-    void free();						// api
-    void arch_free();
-    bool sync_kernel_space(addr_t addr);			// glue
-    static void switch_to_kernel_space(cpuid_t cpu) {}
-    void handle_pagefault(addr_t addr, addr_t ip, access_e access, bool kernel); // api
-    bool is_initialized();
-
-    /* sigma0 handling */
-    void map_sigma0(addr_t addr);				// glue
-    void map_fpage(fpage_t snd_fp, word_t base,
-	space_t * t_space, fpage_t rcv_fp, bool grant);
-    fpage_t unmap_fpage(fpage_t fpage, bool flush, bool unmap_all );
-    fpage_t mapctrl (fpage_t fpage, mdb_t::ctrl_t ctrl,
-		     word_t attribute, bool unmap_all);
-    
-    /* tcb management */
-    void allocate_tcb(addr_t addr);				// glue
-    void map_dummy_tcb(addr_t addr);				// glue
-    utcb_t * allocate_utcb(tcb_t * tcb);
-
-    /* address ranges */
-    static bool is_user_area(addr_t addr);
-    static bool is_user_area(fpage_t fpage);
-    static bool is_kernel_area(addr_t addr);
-    static bool is_tcb_area(addr_t addr);
-    static  bool is_copy_area (addr_t addr);
-
-    bool is_mappable(addr_t addr);
-    bool is_mappable(fpage_t fpage);
-    static const bool is_arch_mappable(addr_t addr, size_t size) { return true; }
-    static const addr_t sign_extend(addr_t addr) { return addr; }
-
-    bool is_kernel_paged_area(addr_t addr);
-
-    /* Copy area related methods */
-    word_t get_copy_limit (addr_t addr, word_t limit);
-
-    /* kip and utcb handling */
-    fpage_t get_kip_page_area();
-    fpage_t get_utcb_page_area();
-
-    /* reference counting */
-    void add_tcb(tcb_t * tcb, cpuid_t cpu);
-    bool remove_tcb(tcb_t * tcb, cpuid_t cpu);
-    void move_tcb(tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu);
-
-    /* allocation functions */
-    static space_t * allocate_space();
-    static void free_space(space_t *space);
-
-    /* space control */
-    word_t space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid);
-
-    /* tlb */
-    void flush_tlb( space_t *curspace, addr_t start = (addr_t)0, addr_t end = (addr_t)~0U );
-    void flush_tlbent( space_t *curspace, addr_t addr, word_t log2size );
-    static bool does_tlbflush_pay( word_t log2size )
-	{ return log2size != POWERPC_PAGE_BITS; }
-#ifdef CONFIG_X_PPC_SOFTHVM
-    void flush_tlb_hvm( space_t *curspace, word_t start = 0, word_t end = ~0U );
-#endif
-
-    /* update hooks */
-    static void begin_update() {}
-    static void end_update() {}
-
-    /* sigma0 translation hooks */
-    static paddr_t sigma0_translate(addr_t addr, word_t size);
-    static word_t sigma0_attributes(pgent_t *pg, paddr_t addr, word_t size);
-
-public:
-    /* powerpc specific functions */
-    static void init_kernel_space();
-
-    void init_kernel_mappings();
-    void init_cpu_mappings(cpuid_t cpu);
-    addr_t map_device( paddr_t paddr, word_t size, bool kernel, word_t attrib );
-
-#ifdef CONFIG_PPC_MMU_SEGMENTS
-    bool handle_hash_miss( addr_t vaddr );
-    ppc_segment_t get_segment_id();
-#endif
-
-#ifdef CONFIG_PPC_MMU_TLB
-    addr_t map_device_pinned( paddr_t paddr, word_t size, bool kernel, word_t attrib );
-    bool handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vaddr, bool user, bool global = false );
-    bool handle_hvm_tlb_miss( ppc_softhvm_t*, ppc_softhvm_t::tlb_t*, word_t gvaddr, paddr_t &gpaddr );
-    asid_t *get_asid(); // asid of current cpu
-    asid_t *get_asid(cpuid_t cpu);
-    void allocate_asid();
-    void allocate_hw_asid(word_t hw_asid) {}
-    void release_hw_asid(word_t hw_asid)
-	{ flush_tlb(NULL); }
-    static asid_manager_t<space_t,CONFIG_MAX_NUM_ASIDS> *get_asid_manager();
-#endif
-
-    pgent_t *get_pdir();
-    word_t get_vsid( addr_t vaddr );
-
-    pgent_t * page_lookup( addr_t vaddr );
-    word_t get_from_user( addr_t );
-    pgent_t *pgent( word_t num, word_t cpu=0 );
-    bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg,
-			 word_t *r_size, cpuid_t cpu = 0);
-    bool readmem (addr_t vaddr, word_t * contents);
-    static word_t readmem_phys (paddr_t paddr)
-	{ return *phys_to_virt((word_t*)paddr); }
-    void release_kernel_mapping (addr_t vaddr, paddr_t paddr, word_t log2size);
-
-    static space_t *vsid_to_space( word_t vsid )
-    {
-	return (space_t *)( (vsid & 0xfffffff0) << (POWERPC_PAGE_BITS - 4) );
-    }
-
-    void add_mapping( addr_t vaddr, paddr_t paddr, word_t size, 
-		      bool writable, bool kernel, 
-		      word_t attrib = cache_standard );
-    void flush_mapping( addr_t vaddr, word_t size, pgent_t *pgent );
-
-private:
     pgent_t pdir[1024];
     union {
 	word_t raw[1024];
@@ -219,8 +97,70 @@ private:
     };
 
     static word_t pinned_mapping;
-    friend class kdb_t;
 };
+typedef struct space_t space_t;
+
+BEGIN_DECLS
+/* Declarations only; the definitions live in space.c / space-swtlb.c.  The
+   names are fixed by the shared C callers in api/v4 and generic. */
+void      space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
+void      space_free (space_t *self);
+void      space_arch_free (space_t *self);
+bool      space_sync_kernel_space (space_t *self, addr_t addr);
+void      space_switch_to_kernel_space (cpuid_t cpu);
+void      space_handle_pagefault (space_t *self, addr_t addr, addr_t ip, int access, bool kernel);
+bool      space_is_initialized (space_t *self);
+void      space_map_sigma0 (space_t *self, addr_t addr);
+void      space_map_fpage (space_t *self, fpage_t snd_fp, word_t base, space_t *t_space, fpage_t rcv_fp, bool grant);
+fpage_t   space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all);
+fpage_t   space_mapctrl (space_t *self, fpage_t fpage, mdb_ctrl_t ctrl, word_t attribute, bool unmap_all);
+void      space_allocate_tcb (space_t *self, addr_t addr);
+void      space_map_dummy_tcb (space_t *self, addr_t addr);
+utcb_t *  space_allocate_utcb (space_t *self, tcb_t *tcb);
+bool      space_is_user_area_addr (addr_t addr);
+bool      space_is_user_area_fpage (fpage_t fpage);
+bool      space_is_kernel_area (addr_t addr);
+bool      space_is_tcb_area (addr_t addr);
+bool      space_is_copy_area (addr_t addr);
+bool      space_is_mappable_addr (space_t *self, addr_t addr);
+bool      space_is_mappable_fpage (space_t *self, fpage_t fpage);
+word_t    space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid);
+void      space_flush_tlb (space_t *self, space_t *curspace, addr_t start, addr_t end);
+void      space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t log2size);
+paddr_t   space_sigma0_translate (addr_t addr, word_t size);
+word_t    space_sigma0_attributes (pgent_t *pg, paddr_t addr, word_t size);
+void      space_init_kernel_space (void);
+void      space_init_kernel_mappings (space_t *self);
+void      space_init_cpu_mappings (space_t *self, cpuid_t cpu);
+addr_t    space_map_device (space_t *self, paddr_t paddr, word_t size, bool kernel, word_t attrib);
+pgent_t * space_page_lookup (space_t *self, addr_t vaddr);
+bool      space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size, cpuid_t cpu);
+bool      space_readmem (space_t *self, addr_t vaddr, word_t *contents);
+void      space_release_kernel_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t log2size);
+void      space_add_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t size, bool writable, bool kernel, word_t attrib);
+void      space_flush_mapping (space_t *self, addr_t vaddr, word_t size, pgent_t *pgent);
+space_t * space_allocate_space (void);
+void      space_free_space (space_t *space);
+#ifdef CONFIG_PPC_MMU_TLB
+addr_t    space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool kernel, word_t attrib);
+bool      space_handle_tlb_miss (space_t *self, addr_t lookup_vaddr, addr_t install_vaddr, bool user, bool global);
+void      space_allocate_asid (space_t *self);
+#endif
+END_DECLS
+
+/* Trivial statics, formerly inline in the class body. */
+INLINE bool   space_is_arch_mappable (addr_t addr, size_t size)	{ return true; }
+INLINE addr_t space_sign_extend (addr_t addr)			{ return addr; }
+INLINE bool   space_does_tlbflush_pay (word_t log2size)		{ return log2size != POWERPC_PAGE_BITS; }
+INLINE void   space_begin_update (void)				{ }
+INLINE void   space_end_update (void)				{ }
+INLINE word_t space_readmem_phys (paddr_t paddr)		{ return *phys_to_virt((word_t*)paddr); }
+
+INLINE space_t * space_vsid_to_space (word_t vsid)
+{
+    return (space_t *)( (vsid & 0xfffffff0) << (POWERPC_PAGE_BITS - 4) );
+}
+
 
 /**********************************************************************
  *
@@ -242,35 +182,36 @@ INLINE space_t *get_kernel_space()
  *
  ***********************************************************************/
 
-INLINE pgent_t * space_t::pgent( word_t num, word_t cpu )
+INLINE pgent_t * space_get_pdir (space_t *self)
 {
-    return (get_pdir())->next( this, size_4m, num );
+    return self->pdir;
 }
 
-INLINE pgent_t * space_t::get_pdir()
+INLINE pgent_t * space_pgent (space_t *self, word_t num, word_t cpu)
 {
-    return this->pdir;
+    return pgent_next (space_get_pdir (self), self, size_4m, num);
 }
 
-INLINE bool space_t::is_kernel_paged_area(addr_t addr)
+INLINE bool space_is_kernel_paged_area (addr_t addr)
 {
     return (addr > (addr_t)DEVICE_AREA_START &&
 	    addr < (addr_t)DEVICE_AREA_END);
 }
 
-INLINE word_t space_t::get_copy_limit (addr_t addr, word_t len)
+INLINE word_t space_get_copy_limit (space_t *self, addr_t addr, word_t len)
 {
     word_t end = (word_t)addr + len;
 
-    if( is_user_area(addr) )
+    if( space_is_user_area_addr(addr) )
     {
 	if( end >= USER_AREA_END )
 	    return (USER_AREA_END - (word_t)addr);
     }
     else
     {
-	ASSERT( is_copy_area(addr) );
-	word_t max = COPY_AREA_SIZE - ((word_t)addr - COPY_AREA_START);
+	ASSERT( space_is_copy_area(addr) );
+	word_t max;
+	max = COPY_AREA_SIZE - ((word_t)addr - COPY_AREA_START);
 	if( len > max )
 	    return max;
     }
@@ -278,52 +219,52 @@ INLINE word_t space_t::get_copy_limit (addr_t addr, word_t len)
     return len;
 }
 
-INLINE fpage_t space_t::get_kip_page_area()
+INLINE fpage_t space_get_kip_page_area (space_t *self)
 {
-    return this->kip_area;
+    return self->kip_area;
 }
 
-INLINE fpage_t space_t::get_utcb_page_area()
+INLINE fpage_t space_get_utcb_page_area (space_t *self)
 {
-    return this->utcb_area;
+    return self->utcb_area;
 }
 
-INLINE word_t space_t::get_from_user(addr_t addr)
+INLINE word_t space_get_from_user (space_t *self, addr_t addr)
 {
     return *(word_t *)(addr);
 }
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
-INLINE word_t space_t::get_vsid( addr_t addr )
+INLINE word_t space_get_vsid (space_t *self, addr_t addr)
 {
     // TODO: get_vsid() needs optimisation
     ppc_segment_t seg;
     if( (word_t)addr > KERNEL_OFFSET )
-	seg = get_kernel_space()->get_segment_id();
+	seg = space_get_segment_id (get_kernel_space());
     else
-	seg = this->get_segment_id();
+	seg = space_get_segment_id (self);
     return seg.raw | ((word_t)addr >> 28);
 }
 
-INLINE ppc_segment_t space_t::get_segment_id()
+INLINE ppc_segment_t space_get_segment_id (space_t *self)
 {
     ppc_segment_t seg;
-    seg.raw = ((word_t)this >> POWERPC_PAGE_BITS) << 4;
+    seg.raw = ((word_t)self >> POWERPC_PAGE_BITS) << 4;
     return seg;
 }
 #elif defined(CONFIG_PPC_MMU_TLB)
-INLINE asid_manager_t<space_t, CONFIG_MAX_NUM_ASIDS> *get_asid_manager()
+INLINE asid_manager_t *get_asid_manager (void)
 {
-    extern asid_manager_t<space_t, CONFIG_MAX_NUM_ASIDS> asid_manager;
+    extern asid_manager_t asid_manager;
     return &asid_manager;
 }
 
-INLINE asid_t *space_t::get_asid(cpuid_t cpu)
+INLINE asid_t *space_get_asid_cpu (space_t *self, cpuid_t cpu)
 {
 #if defined(CONFIG_X_PPC_SOFTHVM)
-    return hvm_mode ? NULL : &this->cpu[cpu].asid;
+    return self->hvm_mode ? NULL : &self->cpu[cpu].asid;
 #else
-    return &this->cpu[cpu].asid;
+    return &self->cpu[cpu].asid;
 #endif
 }
 #endif
@@ -332,11 +273,11 @@ INLINE asid_t *space_t::get_asid(cpuid_t cpu)
  * add a thread to the space
  * @param tcb	pointer to thread control block
  */
-INLINE void space_t::add_tcb(tcb_t * tcb, cpuid_t cpu)
+INLINE void space_add_tcb (space_t *self, tcb_t * tcb, cpuid_t cpu)
 {
-    thread_count++;
+    atomic_inc (&self->thread_count);
 #ifdef CONFIG_SMP
-    this->cpu[cpu].thread_count++;
+    atomic_inc (&self->cpu[cpu].thread_count);
 #endif
 }
 
@@ -345,20 +286,20 @@ INLINE void space_t::add_tcb(tcb_t * tcb, cpuid_t cpu)
  * @param tcb	thread control block
  * @return	true if it was the last thread
  */
-INLINE bool space_t::remove_tcb(tcb_t * tcb, cpuid_t cpu)
+INLINE bool space_remove_tcb (space_t *self, tcb_t * tcb, cpuid_t cpu)
 {
-    ASSERT (thread_count !=  0);
+    ASSERT (atomic_read (&self->thread_count) != 0);
 #ifdef CONFIG_SMP
-    this->cpu[cpu].thread_count--;
+    atomic_dec (&self->cpu[cpu].thread_count);
 #endif
-    thread_count--;
-    return thread_count == 0;
+    atomic_dec (&self->thread_count);
+    return atomic_read (&self->thread_count) == 0;
 }
 
-INLINE void space_t::move_tcb(tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu)
+INLINE void space_move_tcb (space_t *self, tcb_t * tcb, cpuid_t src_cpu, cpuid_t dst_cpu)
 {
-    cpu[dst_cpu].thread_count++;
-    cpu[src_cpu].thread_count--;
+    atomic_inc (&self->cpu[dst_cpu].thread_count);
+    atomic_dec (&self->cpu[src_cpu].thread_count);
 }
 
 #if defined(CONFIG_PPC_MMU_TLB)

@@ -32,61 +32,45 @@
  ********************************************************************/
 #pragma once
 
-class atomic_t {
-public:
-    int operator ++ (int) 
-	{
-	    int tmp;
-	    sync();
-	    __asm__ __volatile__(
-		"1:	lwarx	%0,0,%1\n"
-		"	addic	%0,%0,1\n"
-		"	stwcx.	%0,0,%1 \n"
-		"	bne-	1b"
-		: "=&r" (tmp)
-		: "r" (&val)
-		: "cc");
-	    isync();
-	    return tmp;
-	}
-
-    int operator -- (int) 
-	{
-	    int tmp;
-	    sync();
-	    __asm__ __volatile__(
-		"1:	lwarx	%0,0,%1\n"
-		"	addic	%0,%0,-1\n"
-		"	stwcx.	%0,0,%1 \n"
-		"	bne-	1b"
-		: "=&r" (tmp)
-		: "r" (&val)
-		: "cc");
-	    isync();
-	    return tmp;
-	}
-
-    int operator = (word_t val) 
-	{ return this->val = val; }
-
-    int operator = (int val) 
-	{ return this->val = val; }
-
-    bool operator == (word_t val) 
-	{ return (this->val == val); }
-    
-    bool operator == (int val) 
-	{ return (this->val == (word_t) val); }
-
-    bool operator != (word_t val) 
-	{ return (this->val != val); }
-
-    bool operator != (int val) 
-	{ return (this->val != (word_t) val); }
-
-    operator word_t (void) 
-	{ return val; }
-
-private:
+/* Was a class whose operators (++/--/=/==/!=/word_t) hid the ll/sc loops.
+   The C form matches arch/x86/atomic.h: a struct plus atomic_* functions, so
+   generic code spells atomic access the same way on both architectures. */
+struct atomic_t {
     word_t val;
 };
+typedef struct atomic_t atomic_t;
+
+INLINE word_t atomic_inc (atomic_t *self)
+{
+    word_t tmp;
+    sync();
+    __asm__ __volatile__(
+	"1:	lwarx	%0,0,%1\n"
+	"	addic	%0,%0,1\n"
+	"	stwcx.	%0,0,%1 \n"
+	"	bne-	1b"
+	: "=&r" (tmp)
+	: "r" (&self->val)
+	: "cc");
+    isync();
+    return tmp;
+}
+
+INLINE word_t atomic_dec (atomic_t *self)
+{
+    word_t tmp;
+    sync();
+    __asm__ __volatile__(
+	"1:	lwarx	%0,0,%1\n"
+	"	addic	%0,%0,-1\n"
+	"	stwcx.	%0,0,%1 \n"
+	"	bne-	1b"
+	: "=&r" (tmp)
+	: "r" (&self->val)
+	: "cc");
+    isync();
+    return tmp;
+}
+
+INLINE word_t atomic_read (const atomic_t *self)	{ return self->val; }
+INLINE word_t atomic_set (atomic_t *self, word_t val)	{ return self->val = val; }

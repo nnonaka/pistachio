@@ -39,34 +39,23 @@
 #include <config.h>      /* CONFIG_MAX_NUM_ASIDS, CONFIG_PREEMPT_ASIDS */
 #include INC_API(types.h)
 
-class asid_t
+struct space_t; typedef struct space_t space_t;
+
+#define ASID_INVALID	(~0U)
+
+struct asid_t
 {
-public:
-    enum {
-	invalid = ~0U,
-    };
-
-    void init()
-	{ asid = invalid; }
-
-    void init_kernel(word_t kernel_asid)
-	{ asid = kernel_asid; }
-
-    word_t get()
-	{ return this->asid; }
-    
-    void set(word_t asid)
-	{ this->asid = asid; }
-
-    bool is_valid()
-	{ return asid != invalid; }
-
-    void release()
-	{ asid = invalid; }
-
     word_t asid;
     word_t timestamp;
 };
+typedef struct asid_t asid_t;
+
+INLINE void   asid_init (asid_t *self)			{ self->asid = ASID_INVALID; }
+INLINE void   asid_init_kernel (asid_t *self, word_t a)	{ self->asid = a; }
+INLINE word_t asid_get (asid_t *self)			{ return self->asid; }
+INLINE void   asid_set (asid_t *self, word_t a)		{ self->asid = a; }
+INLINE bool   asid_is_valid (asid_t *self)		{ return self->asid != ASID_INVALID; }
+INLINE void   asid_release (asid_t *self)		{ self->asid = ASID_INVALID; }
 
 /*
  * We use the ASID ref array for (1) referencing the address space
@@ -76,70 +65,83 @@ public:
  * not.
  */
 
-template <class T, int SIZE>
-class asid_manager_t
+/* Was template <class T, int SIZE> class asid_manager_t.  It is instantiated
+   exactly once, as asid_manager_t<space_t, CONFIG_MAX_NUM_ASIDS>, so the C form
+   is that one instantiation spelled out.  The space_* operations it drives are
+   declared here because space.h includes this header, not the other way round. */
+#define ASID_MANAGER_SIZE	CONFIG_MAX_NUM_ASIDS
+
+struct asid_manager_t
 {
-public:
-
-    void init(word_t start, word_t end)
-	{
-	    free_list = NULL;
-	    timestamp = 0;
-
-	    for (word_t asid = 0; asid <= SIZE; asid++)
-		asid_user[asid] = NULL;
-
-	    for (word_t asid = start; asid <= end; asid++)
-		free_asid(asid);
-	}
-
-    void free_asid(word_t asid)
-	{
-	    list_entry[asid] = free_list;
-            word_t **fl = &list_entry[asid];                
-            free_list = (word_t *) fl;
-	}
-
-    void allocate_asid(T* space)
-	{
-	    if (EXPECT_FALSE(!free_list))
-		recycle_asid();
-	    ASSERT(free_list);
-	    word_t *head = free_list;
-	    free_list = (word_t*)*head;
-	    word_t asid = ((word_t)head - (word_t)&list_entry) / sizeof(word_t);
-	    space->allocate_hw_asid(asid);
-	    space->get_asid()->set(asid);
-	}
-
-    void recycle_asid()
-	{
-	    word_t oldest;
-	    for (word_t idx = oldest = start; idx < end; idx++)
-		if (asid_user[idx]->get_asid()->timestamp < 
-		    asid_user[oldest]->get_asid()->timestamp)
-		    oldest = idx;
-	    printf("recycling ASID %x used by %p\n", oldest, asid_user[oldest]);
-	    asid_user[oldest]->release_hw_asid(oldest);
-	    asid_user[oldest]->get_asid()->release();
-	    free_asid(oldest);
-	}
-
-    word_t reference(asid_t *asid)
-	{
-	    asid->timestamp = ++timestamp;
-	    return asid->asid;
-	}
-
-private:
     word_t *free_list;
     union {
-	T* asid_user[SIZE];
-	word_t *list_entry[SIZE];
+	space_t * asid_user[ASID_MANAGER_SIZE];
+	word_t *  list_entry[ASID_MANAGER_SIZE];
     };
 
     word_t start, end;
     word_t timestamp;
 };
+typedef struct asid_manager_t asid_manager_t;
+
+void    space_allocate_hw_asid (space_t *self, word_t hw_asid);
+void    space_release_hw_asid (space_t *self, word_t hw_asid);
+asid_t *space_get_asid (space_t *self);
+
+INLINE void asid_manager_free_asid (asid_manager_t *self, word_t asid)
+{
+    self->list_entry[asid] = self->free_list;
+    word_t **fl = &self->list_entry[asid];
+    self->free_list = (word_t *) fl;
+}
+
+INLINE void asid_manager_init (asid_manager_t *self, word_t start, word_t end)
+{
+    word_t asid;
+
+    self->free_list = NULL;
+    self->timestamp = 0;
+
+    for (asid = 0; asid <= ASID_MANAGER_SIZE; asid++)
+	self->asid_user[asid] = NULL;
+
+    for (asid = start; asid <= end; asid++)
+	asid_manager_free_asid (self, asid);
+}
+
+INLINE void asid_manager_recycle_asid (asid_manager_t *self)
+{
+    word_t idx, oldest;
+
+    for (idx = oldest = self->start; idx < self->end; idx++)
+	if (space_get_asid (self->asid_user[idx])->timestamp <
+	    space_get_asid (self->asid_user[oldest])->timestamp)
+	    oldest = idx;
+    printf("recycling ASID %x used by %p\n", oldest, self->asid_user[oldest]);
+    space_release_hw_asid (self->asid_user[oldest], oldest);
+    asid_release (space_get_asid (self->asid_user[oldest]));
+    asid_manager_free_asid (self, oldest);
+}
+
+INLINE void asid_manager_allocate_asid (asid_manager_t *self, space_t *space)
+{
+    word_t *head;
+    word_t asid;
+
+    if (EXPECT_FALSE(!self->free_list))
+	asid_manager_recycle_asid (self);
+    ASSERT(self->free_list);
+    head = self->free_list;
+    self->free_list = (word_t*)*head;
+    asid = ((word_t)head - (word_t)&self->list_entry) / sizeof(word_t);
+    space_allocate_hw_asid (space, asid);
+    asid_set (space_get_asid (space), asid);
+}
+
+INLINE word_t asid_manager_reference (asid_manager_t *self, asid_t *asid)
+{
+    asid->timestamp = ++self->timestamp;
+    return asid->asid;
+}
 
 #endif /* !__ASID_H__ */
