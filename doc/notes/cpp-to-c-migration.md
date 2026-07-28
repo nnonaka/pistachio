@@ -3524,3 +3524,60 @@ collapse had silently dropped a live declaration, because the image is padded
 and rounded. The disassembly diff is barely more work, distinguishes "identical"
 from "identical except six asserts", and is the reason this pass can say what
 changed rather than that nothing appeared to.
+
+## §97 — powerpc, now actually compiled: §93 confirmed, and unchanged by §96
+
+A `powerpc64-linux-gnu` cross toolchain was installed, so the question §93 had
+to settle by static evidence can now be settled by building. It configures and
+compiles; the conclusion does not change.
+
+**Getting it to run at all took two workarounds worth recording.** The toolchain
+search in `Mk/Makeconf` fishes for `$(ARCH)-gcc`, `$(ARCH)-linux-gcc`,
+`$(ARCH)-linux-gnu-gcc` and friends — with `ARCH=powerpc` that never matches a
+compiler named `powerpc64-linux-gnu-gcc`, so `TOOLPREFIX` comes out empty and
+the build silently uses the host x86 gcc. And the only powerpc configuration in
+`contrib/configs` is 32-bit (PPC440/ppc44x), while this compiler defaults to
+64-bit, where `-meabi`, `-mno-toc` and `-mcpu=440` are all rejected. Both are
+fixed from the command line:
+
+    make -k TOOLPREFIX=powerpc64-linux-gnu- CC='powerpc64-linux-gnu-gcc -m32'
+
+With `-m32` every flag the ppc44x config passes is supported.
+
+### The result
+
+    objects built     1
+    failing TUs      61
+    errors         3913
+
+Two independent causes:
+
+  - **3913 C parse errors.** The powerpc arch and glue headers are still C++ —
+    `class` declarations in `arch/powerpc/bat.h`, `swtlb.h`, `ppc_registers.h`,
+    `pgent-swtlb_functions.h` and the whole `glue/v4-powerpc/` set — and they
+    are now included from the shared files that were migrated to C. The clearest
+    single case is `arch/powerpc/types.h:64`, which defines
+    `addr_offset(paddr_t, word_t)` as an **overload** of the generic
+    `addr_offset(addr_t, word_t)` in `generic/types.h`. That is legal C++ and a
+    redefinition in C. The largest error counts land in `api/v4/tcb.h` (1056)
+    and `glue/v4-powerpc/tcb.h` (440), which is cascade from those headers, not
+    a fault in the shared ones.
+  - **26 translation units cannot be compiled at all.** The installed package
+    has no `cc1plus`, so every remaining `.cc` file fails with
+    "cannot execute 'cc1plus'". Installing `g++-powerpc64-linux-gnu` would fix
+    that specific error and change nothing else: those files include the shared
+    headers, which after §96 have no C++ branch left to offer them.
+
+### It is not this session's doing
+
+Built the same configuration at `e7bcbae`, before any of §94-§96, with the same
+toolchain and flags. **Identical: 1 object, 61 failing TUs, 3913 errors.** The
+header collapse neither helped nor hurt powerpc, which is what §93 predicted
+when it argued powerpc was already broken and no test here could distinguish
+degrees of that. Now there is a test, and the numbers are the same on both
+sides of it.
+
+So the §93 policy stands unchanged: powerpc is not a constraint on x86 work, and
+reviving it means migrating its arch and glue headers and its 53 `.cc` files as
+a project of its own. The difference is that the baseline is now a number
+someone can work against rather than an argument.
