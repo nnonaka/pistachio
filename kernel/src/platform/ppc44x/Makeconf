@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/platform/ppc44x/, startup.S init.cc fdt.cc)
+SOURCES += $(addprefix src/platform/ppc44x/, startup.S init.c fdt.c)
 
 ifeq ("$(CONFIG_SUBPLAT_440_BGP)","y")
 SOURCES += $(addprefix src/platform/ppc44x/,bic.cc)

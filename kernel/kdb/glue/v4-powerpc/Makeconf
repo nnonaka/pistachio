@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/glue/v4-powerpc/, code.cc addr.cc prepost.cc thread.cc)
+SOURCES += $(addprefix kdb/glue/v4-powerpc/, code.c addr.c prepost.c thread.c)
 SOURCES += kdb/generic/linear_ptab_dump.c
 
 ifeq ("$(CONFIG_X_CTRLXFER_MSG)","y")

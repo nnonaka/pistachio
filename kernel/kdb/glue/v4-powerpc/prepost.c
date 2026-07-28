@@ -47,7 +47,7 @@ static spinlock_t kdb_lock;
 static bool user_io = true;
 static bool user_kdb_enter = true;
 
-bool kdb_t::pre() 
+bool kdb_pre (void)
 { 
     bool enter_kdb = false;
     kdb_lock.lock();
@@ -200,7 +200,7 @@ bool kdb_t::pre()
     return enter_kdb; 
 }
 
-void kdb_t::post() 
+void kdb_post (void)
 { 
     kdb_lock.unlock();
 }

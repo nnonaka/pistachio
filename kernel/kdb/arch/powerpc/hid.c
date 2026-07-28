@@ -39,7 +39,7 @@ DECLARE_CMD( cmd_ppc750_hid0, arch, 'h', "hid0", "Dump HID0" );
 
 CMD( cmd_ppc750_hid0, cg )
 {
-    class ppc750_hid0_t hid0;
+    ppc750_hid0_t hid0;
 
     hid0.read();
 

@@ -136,7 +136,7 @@ CMD(cmd_disasm, cg)
     int i;
 
     // Ask for the start address.
-    addr = get_hex( "Disassemble address", addr );
+    addr = get_hex( "Disassemble address", addr, "" );
 
     // Until requested to quit, dump a page of disassembled code.
     do {

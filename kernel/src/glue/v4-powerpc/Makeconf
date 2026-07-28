@@ -31,7 +31,7 @@
 ##                
 ######################################################################
 SOURCES += $(addprefix src/glue/v4-powerpc/, thread.c except_handlers.cc \
-	init.cc kip_sc.S resources.cc ctors.cc cpu.cc space.cc except.S)
+	init.cc kip_sc.S resources.cc ctors.c cpu.cc space.cc except.S)
 
 ifeq ("$(CONFIG_PPC_MMU_SEGMENTS)","y")
 SOURCES += src/glue/v4-powerpc/pghash.cc src/glue/v4-powerpc/space-pghash.cc
