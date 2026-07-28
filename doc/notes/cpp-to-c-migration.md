@@ -3313,3 +3313,77 @@ from less. The honest gate for the remaining headers is therefore:
 Reviving powerpc would mean migrating its 53 `.cc` files as a project of its own,
 with a cross-compiler in the loop. That is a decision for whoever owns those
 ports, not something to infer from an x86-only tree.
+
+## §94 — Collapse step 4: tracebuffer.h, and a dual-rep that was never dual
+
+The last two guarded kdb-side headers, `src/kdb/tracebuffer.h` and
+`src/arch/x86/tracebuffer.h`, were the ones §92 deferred. Running the gate on
+them turned up something the earlier passes had not: **the C++ branch of
+`kdb/tracebuffer.h` has not compiled since §90 created it.**
+
+`__tbuf_record_event()` sits *outside* the guards and calls
+`tracebuffer_next_record`, `tracebuffer_store_string` and
+`tracebuffer_store_data` — the C free functions, which exist only in the `#else`
+branch. So every C++ translation unit that includes the header gets three
+"not declared in this scope" errors before any of its own code is looked at.
+The dual-rep advertised C++ support it did not have.
+
+Establishing that took compiling each candidate as C++ against the scratch
+(`CONFIG_TRACEBUFFER=y`) config. All eleven `.cc` files still reachable from an
+x86 build pull the header in, and all eleven fail:
+
+    3 errors   src/arch/x86/x64/init.cc      <- header only
+    3 errors   src/generic/mdb.cc            <- header only
+    3 errors   src/generic/vrt.cc            <- header only
+    5 errors   src/glue/v4-x86/timer.cc       (+ redefinition of timer_t methods)
+    6 errors   src/glue/v4-x86/ipc.cc         (+ ctrlxfer_item_t undeclared)
+    6 errors   src/glue/v4-x86/vrt_io.cc
+    4 errors   src/glue/v4-x86/mdb_io.cc      (+ set_io_bitmap undeclared)
+    8 errors   src/generic/mdb_mem.cc         (+ mdb_node_t/mapnode_t mismatch)
+    22 errors  src/glue/v4-x86/io_space.cc
+    25 errors  src/glue/v4-x86/hvm-space.cc
+    71 errors  src/api/v4/sched-hs/schedule.cc
+
+The three marked "header only" are worth recording precisely, because they are
+the honest cost of this collapse: `mdb.cc` (CONFIG_NEW_MDB), `vrt.cc`
+(CONFIG_X86_IO_FLEXPAGES) and `x64/init.cc` (in no Makeconf at all — an orphan)
+would each compile as C++ if not for these three errors. Collapsing the header
+does not break them; §90 already did. It only makes that permanent, and the fix
+for all three is the same migration everything else has had.
+
+Collapsed both headers: the `tracerecord_t` and `tracebuffer_t` classes, the
+default arguments on `tbuf_dump`, and the `store_arch`/`initialize` member
+definitions in the x86 arch header. **`src/kdb/*.h` and `src/arch/x86/
+tracebuffer.h` are now free of `__cplusplus` guards entirely.**
+`src/arch/powerpc/tracebuffer.h` still defines `tracerecord_t::store_arch` and
+`tracebuffer_t::initialize` as member functions with no C branch, so powerpc's
+tracebuffer has been broken since §90 as well — recorded here per §93 rather
+than fixed.
+
+### Verification, and what running it added over §91
+
+Main config byte-identical at 332136 with boottest PASS; scratch config
+byte-identical at 417920. The header change is entirely inside
+`#if defined(CONFIG_TRACEBUFFER)`, so the main config could not have moved —
+which is exactly why the scratch build has to be the one that carries the proof.
+
+Booted the scratch kernel and drove both groups by keystroke: `tracebuffer`
+help (14 entries), `showfilters`, `counters`, `dump`, then `tracepoints` help
+and `list`. Two things are better than at §91:
+
+  - `showfilters` reports `ffffffffffffffff` for both CPU and typemask, so the
+    §91 init hook is still wired up — this is now a standing regression check
+    for that fix, not a one-off.
+  - `dump` returns **32 real records** where §91 saw `0 entries`: live IPC,
+    map_fpage, mdb_map and thread-switch traces with formatted event text, and
+    `list` shows non-zero per-tracepoint counters (IPC_DETAILS 80, KMEM_ALLOC
+    41, PAGEFAULT_USER 9). The recording path — the `TBUF_REC_TRACEPOINT` macros
+    scattered through the migrated C files, `tracerecord_store_record`,
+    `tracerecord_store_arch`, the ring-buffer wrap — is exercised end to end,
+    not just the display side.
+
+**Lesson: a dual-rep is only dual if both branches are compiled.** Nothing in
+this tree ever built `kdb/tracebuffer.h` as C++ after §90, so the C++ branch
+rotted immediately and silently, and the guard went on claiming otherwise for
+four sections. Where a guard is kept for a consumer that no build touches, it
+is not compatibility — it is unverified code with a comment on it.

@@ -74,74 +74,6 @@
 #define X86_PMC_MR                         (13)          
 #define X86_PMC_LDM                        (14)
 
-#if defined(__cplusplus)
-INLINE void tracerecord_t::store_arch(const traceconfig_t config)
-{
-    tsc = x86_rdtsc();
-    
-    if (config.pmon)
-    {
-        switch (config.pmon_cpu)
-        {
-        case 0:
-            // P2/P3/K8
-            pmc0 = x86_rdpmc(0);
-            pmc1 = x86_rdpmc(1);
-            break;
-        case 1:
-            // P4
-            if (config.pmon_e)
-            {
-                u64_t pmce =
-                    X86_PMC_TSC_WEIGHT *  x86_rdtsc() +
-                    X86_PMC_UC_WEIGHT  *  x86_rdpmc(X86_PMC_UC)  +
-                    X86_PMC_MLR_WEIGHT *  x86_rdpmc(X86_PMC_MLR) +
-                    X86_PMC_MQW_WEIGHT *  x86_rdpmc(X86_PMC_MQW) +
-                    X86_PMC_RB_WEIGHT  *  x86_rdpmc(X86_PMC_RB)  +
-                    X86_PMC_MB_WEIGHT  *  x86_rdpmc(X86_PMC_MB)  +
-                    X86_PMC_MR_WEIGHT  *  x86_rdpmc(X86_PMC_MR)  +
-                    X86_PMC_LDM_WEIGHT *  x86_rdpmc(X86_PMC_LDM);
-                
-                pmc0 = (word_t) pmce;
-                pmc1 = (word_t) (pmce >> 32);
-            }
-            else
-            {
-                pmc0 = (word_t) x86_rdpmc(12);
-                pmc1 = (word_t) x86_rdpmc(14);
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
-}
-   
-INLINE void tracebuffer_t::initialize()
-{
-    magic = TRACEBUFFER_MAGIC;
-    current = 0;
-    mask = TBUF_DEFAULT_MASK;
-    max = (TRACEBUFFER_SIZE/sizeof(tracerecord_t))-1;
-    config.raw = 0;
-#if defined(CONFIG_SMP)
-    config.smp = 1;
-#endif
-#if defined(CONFIG_TBUF_PERFMON)
-    config.pmon = 1;
-#endif
-#if defined(CONFIG_TBUF_PERFMON_ENERGY)
-    config.pmon_e = 1;
-#endif
-#if defined(CONFIG_CPU_X86_P4)
-    config.pmon_cpu = 1;
-#endif
-
-    printf("sz %d rec %d max %d\n", TRACEBUFFER_SIZE, sizeof(tracerecord_t), max);
-}
-#else
-
 INLINE void tracerecord_store_arch (tracerecord_t *self, const traceconfig_t config)
 {
     self->tsc = x86_rdtsc();
@@ -207,6 +139,5 @@ INLINE void tracebuffer_initialize (tracebuffer_t *self)
 
     printf("sz %d rec %d max %d\n", TRACEBUFFER_SIZE, sizeof(tracerecord_t), self->max);
 }
-#endif /* __cplusplus */
 
 #endif /* !__ARCH__X86__TRACEBUFFER_H__ */

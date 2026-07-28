@@ -69,53 +69,9 @@ typedef union traceconfig_t traceconfig_t;
  */
 #define TRACERECORD_NUM_ARGS 9
 
-#if defined(__cplusplus)
-class tracerecord_t
-{
-public:
-    static const word_t num_args = TRACERECORD_NUM_ARGS;
-
-    struct {
-        word_t          utype   : 16;
-        word_t          ktype   : 16;
-        word_t                  : BITS_WORD-32;
-        word_t          cpu     : 16;
-        word_t          id      : 16;
-        word_t                  : BITS_WORD-32;
-    };
-    word_t              tsc;
-    word_t              thread;
-    word_t              pmc0;
-    word_t              pmc1;
-    const char *        str;
-    word_t              arg[num_args];
-
-    bool is_kernel_event (void) { return ktype && ! utype; }
-    word_t get_type (void) { return (utype == 0) ? ktype : utype; }
-
-    friend class kdb_t;
-    
-    void store_arch(const traceconfig_t config);
-
-public:
-    
-    void store_record(const traceconfig_t config, word_t type, word_t id)
-        {
-            /* Store type, cpu, id, thread, counters */
-            ktype = type & 0xffff;
-            utype = 0;
-            /* "id = id" only assigned the parameter to itself, leaving the
-               record's id field unset -- the parameter shadows it. */
-            this->id = id & 0xffff;
-            cpu = get_current_cpu();
-            thread = (word_t) __builtin_frame_address(0);
-            store_arch(config);
-        }
-};
-#else
-/* C rep of tracerecord_t: data members in declaration order (the methods are
-   free functions below; store_arch is arch-specific and comes with the arch
-   header included at the bottom of this file). */
+/* The operations on a record are free functions below; tracerecord_store_arch
+   is arch-specific and comes with the arch header included at the bottom of
+   this file. */
 struct tracerecord_t
 {
     struct {
@@ -139,7 +95,6 @@ INLINE bool tracerecord_is_kernel_event (tracerecord_t *self)
 { return self->ktype && ! self->utype; }
 INLINE word_t tracerecord_get_type (tracerecord_t *self)
 { return (self->utype == 0) ? self->ktype : self->utype; }
-#endif
 
 
 /**
@@ -149,62 +104,8 @@ INLINE word_t tracerecord_get_type (tracerecord_t *self)
  * The remaining part of the region hold the counters and the
  * tracebuffer records.
  */
-#if defined(__cplusplus)
-class tracebuffer_t
-{
-    word_t        magic;
-    atomic_t      current;
-    word_t        mask;
-    word_t        max;
-    traceconfig_t config;
-    word_t        __pad[3];
-    word_t        counters[8];
-    tracerecord_t tracerecords[];
-
-public:
-    friend class tbuf_handler_t;
-    
-    enum offset_e
-    {
-        ofs_counters    = sizeof(word_t) * 8,
-    };
-
-    void initialize();
-
-    bool is_valid (void) { return magic == TRACEBUFFER_MAGIC; }
-
-    bool next_record(word_t type, word_t id)
-        {
-            /* Check wheter to filter the event */
-            if ((mask & ((type & 0xffff) << 16)) == 0)         
-                return false;                                             
-            
-            current++;
-            if (current == max)
-                current = 0;
-
-            /* Store type, cpu, id, thread, counters */
-            tracerecords[current].store_record(config, type, id);
-     
-            return true;
-        }
-    
-    void  increase_counter(word_t ctr)
-        {
-            counters[ctr & 0x7]++;
-        }
-    
-    void store_string(const char *str)
-        { tracerecords[current].str = str; }
-    
-    void store_data(word_t offset, word_t item)
-        { tracerecords[current].arg[offset] = item; }
-
-};
-#else
-/* C rep of tracebuffer_t: same layout; the members are private in C++ but the
-   layout is identical.  next_record/initialize need store_arch, so their C
-   forms live after the arch include at the bottom of this file. */
+/* tracebuffer_next_record and tracebuffer_initialize need store_arch, so they
+   live after the arch include at the bottom of this file. */
 struct tracebuffer_t
 {
     word_t        magic;
@@ -231,7 +132,6 @@ INLINE void tracebuffer_store_string (tracebuffer_t *self, const char *str)
 
 INLINE void tracebuffer_store_data (tracebuffer_t *self, word_t offset, word_t item)
 { self->tracerecords[atomic_read (&self->current)].arg[offset] = item; }
-#endif
 
 INLINE tracebuffer_t * get_tracebuffer (void)
 {
@@ -243,11 +143,7 @@ INLINE tracebuffer_t * get_tracebuffer (void)
  * Wrap tracepoint events with event type arguments
  */
 
-#if defined(__cplusplus)
-extern void tbuf_dump (word_t count, word_t usec, word_t tp_id = 0, word_t cpumask=~0UL);
-#else
 extern void tbuf_dump (word_t count, word_t usec, word_t tp_id, word_t cpumask);
-#endif
 
 #define DEBUG_KERNEL_DETAILS
 #if defined(DEBUG_KERNEL_DETAILS)
@@ -258,7 +154,6 @@ extern void tbuf_dump (word_t count, word_t usec, word_t tp_id, word_t cpumask);
 
 #include INC_ARCH(tracebuffer.h)
 
-#if !defined(__cplusplus)
 /* These need tracerecord_store_arch, defined by the arch header above. */
 INLINE void tracerecord_store_record (tracerecord_t *self, traceconfig_t config,
 				      word_t type, word_t id)
@@ -288,7 +183,7 @@ INLINE bool tracebuffer_next_record (tracebuffer_t *self, word_t type, word_t id
 
     return true;
 }
-#endif
+
 #include <stdarg.h>	/* for va_list, ... comes with gcc */
 
 #define tbuf_record_event(type, tpid, str, args...)			\
