@@ -71,7 +71,10 @@ public:
 	} map;
     };
 
-    enum pgsize_e {
+    /* The neutral spelling kdb/generic/linear_ptab_dump.c asks every port for. */
+#define PGENT_SIZE_MAX	size_max
+
+enum pgsize_e {
 	size_4k = 0,
 	size_4m = 1,
 	size_4g = 2,

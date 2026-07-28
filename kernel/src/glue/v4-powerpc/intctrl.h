@@ -35,11 +35,9 @@
 #include <intctrl.h>
 #include INC_PLAT(intctrl.h)
 
-INLINE intctrl_t *get_interrupt_ctrl()
-{
-    extern intctrl_t intctrl;
-    return &intctrl;
-}
+/* get_interrupt_ctrl is defined by the platform interrupt-controller header
+   included above (bic.h / uic.h), which needs it for its own inline entry
+   points. */
 
 #if defined(CONFIG_SMP)
 void handle_smp_ipi( int vector );

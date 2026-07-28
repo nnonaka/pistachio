@@ -53,6 +53,8 @@
 #define X86_PGSIZE_SYNC		X86_PGSIZE_1G
 #define X86_PGSIZE_SUPERPAGE	X86_PGSIZE_2M
 #define X86_PGSIZE_MAX		X86_PGSIZE_512G
+/* neutral spelling used by kdb/generic/linear_ptab_dump.c */
+#define PGENT_SIZE_MAX		X86_PGSIZE_MAX
 
 #define X86_PGSIZES		{ size_4k = X86_PGSIZE_4K, size_2m = X86_PGSIZE_2M,	\
 				  size_1g = X86_PGSIZE_1G, size_512g = X86_PGSIZE_512G,	\

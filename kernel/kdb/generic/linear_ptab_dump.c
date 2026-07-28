@@ -67,7 +67,7 @@ CMD(cmd_dump_ptab, cg)
 {
     static char spaces[] = "                                ";
     char * spcptr = spaces + sizeof (spaces) - 1;
-    char * spcpad = spcptr - X86_PGSIZE_MAX * 2;
+    char * spcpad = spcptr - PGENT_SIZE_MAX * 2;
 
     space_t * space;
     addr_t vaddr;
@@ -76,18 +76,18 @@ CMD(cmd_dump_ptab, cg)
     int size, max_size;
 
     // Arrays to implement recursion
-    pgent_t * r_pg[X86_PGSIZE_MAX];
-    word_t r_num[X86_PGSIZE_MAX];
+    pgent_t * r_pg[PGENT_SIZE_MAX];
+    word_t r_num[PGENT_SIZE_MAX];
 
     // Get dump arguments
     space = get_space ("Space");
-    size = X86_PGSIZE_MAX;
+    size = PGENT_SIZE_MAX;
     
     word_t cpu = get_dec("CPU id", get_current_cpu(), NULL);
     if (cpu >= CONFIG_SMP_MAX_CPUS) cpu = get_current_cpu();
     
     get_ptab_dump_ranges (&vaddr, &num, &max_size);
-    pg = space_pgent_cpu (space, page_table_index (X86_PGSIZE_MAX, vaddr), cpu);
+    pg = space_pgent_cpu (space, page_table_index (PGENT_SIZE_MAX, vaddr), cpu);
 
     if (!pg)
     {

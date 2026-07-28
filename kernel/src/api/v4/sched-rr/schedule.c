@@ -822,10 +822,14 @@ bool sched_schedule_requests_pending (cpuid_t cpu)
     return !schedule_request_queue_is_empty (&schedule_request_queue[cpu]);
 }
 
+/* xcpu_handler_t only exists under CONFIG_SMP, and every caller of this is
+   itself inside a CONFIG_SMP block. */
+#if defined(CONFIG_SMP)
 void xcpu_request_c (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t *tcb, word_t param0)
 {
     xcpu_request_many (dstcpu, handler, tcb, param0, 0, 0, 0);
 }
+#endif
 
 void sched_ktcb_sys_thread_switch (sched_ktcb_t *self)
 {

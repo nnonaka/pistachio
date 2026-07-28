@@ -80,6 +80,9 @@ enum cache_e {
     cache_subtree	= 7,
 };
 
+/* The neutral spelling kdb/generic/linear_ptab_dump.c asks every port for. */
+#define PGENT_SIZE_MAX	size_max
+
 enum pgsize_e {
     size_4k	= 0,
     size_4m	= 1,
