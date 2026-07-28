@@ -94,14 +94,14 @@ MDB_INIT_FUNCTION (3, init_mdb_mem)
     // permissions.
 
     extern space_t * sigma0_space;
-    sigma0_pgent.update_rights (sigma0_space, pgent_t::size_max + 1, ~0UL);
+    sigma0_pgent.update_rights (sigma0_space, size_max + 1, ~0UL);
 
     // Sanity checking of page size arrays.
 
-    pgent_t::pgsize_e i;
+    word_t i;
     word_t j;
 
-    for (i = (pgent_t::pgsize_e) 0; i < pgent_t::size_max; i++)
+    for (i = (word_t) 0; i < size_max; i++)
     {
 	if (! is_page_size_valid (i))
 	    continue;
@@ -120,10 +120,10 @@ MDB_INIT_FUNCTION (3, init_mdb_mem)
  */
 
 
-INLINE pgent_t::pgsize_e pgsize (mdb_node_t * node)
+INLINE word_t pgsize (mdb_node_t * node)
 {
     mdb_mem_misc_t misc (node->get_misc ());
-    return (pgent_t::pgsize_e) misc.pgsize;
+    return (word_t) misc.pgsize;
 }
 
 INLINE word_t purged_status (mdb_node_t * node)
@@ -354,7 +354,7 @@ void SECTION(SEC_KDEBUG) mdb_mem_t::dump (mdb_node_t * node)
 
     pgent_t * pg = (pgent_t *) node->get_object ();
     space_t * spc = space (node);
-    pgent_t::pgsize_e psz =  pgsize (node);
+    word_t psz =  pgsize (node);
     addr_t vaddr = pg->vaddr (spc, psz, node);
  
     printf ("vaddr: %p  spc: %p  ", vaddr, spc);

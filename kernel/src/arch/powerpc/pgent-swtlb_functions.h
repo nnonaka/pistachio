@@ -10,9 +10,9 @@
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ *    notice, self list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
+ *    notice, self list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
@@ -39,207 +39,201 @@ EXTERN_KMEM_GROUP (kmem_pgtab);
 
 // Linknode access 
 
-inline word_t pgent_t::get_linknode( void )
+INLINE word_t pgent_get_linknode_raw (pgent_t *self)
 { 
-    return *(word_t *) ((word_t) this + POWERPC_PAGE_SIZE); 
+    return *(word_t *) ((word_t) self + POWERPC_PAGE_SIZE); 
 }
 
-inline void pgent_t::set_linknode( word_t val )
+INLINE void pgent_set_linknode_raw (pgent_t *self, word_t val)
 { 
-    *(word_t *) ((word_t) this + POWERPC_PAGE_SIZE) = val; 
+    *(word_t *) ((word_t) self + POWERPC_PAGE_SIZE) = val; 
 }
 
 
 // Predicates
 
-inline bool pgent_t::is_valid( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_valid (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return this->tree.valid != 0;
+    return self->tree.valid != 0;
 }
 
-inline bool pgent_t::is_writable( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_writable (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return this->map.write;
+    return self->map.write;
 }
 
-inline bool pgent_t::is_readable( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_readable (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return this->map.read;
+    return self->map.read;
 }
 
-inline bool pgent_t::is_executable( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_executable (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return this->map.execute;
+    return self->map.execute;
 }
 
-inline bool pgent_t::is_subtree( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_subtree (pgent_t *self, space_t * s, word_t pgsize)
 {
     return pgsize == size_4m && 
-	this->tree.is_subtree == cache_subtree;
+	self->tree.is_subtree == cache_subtree;
 }
 
-inline bool pgent_t::is_kernel( space_t * s, pgsize_e pgsize )
+INLINE bool  pgent_is_kernel (pgent_t *self, space_t * s, word_t pgsize)
 {
     return s == get_kernel_space();
 }
 
 // Retrieval
-inline paddr_t pgent_t::address( space_t * s, pgsize_e pgsize )
+INLINE paddr_t  pgent_address (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return (paddr_t)(this->raw & POWERPC_PAGE_MASK) + 
-	((paddr_t)this->map.erpn << 32);
+    return (paddr_t)(self->raw & POWERPC_PAGE_MASK) + 
+	((paddr_t)self->map.erpn << 32);
 }
 
-inline pgent_t * pgent_t::subtree( space_t * s, pgsize_e pgsize )
+INLINE pgent_t * pgent_subtree (pgent_t *self, space_t * s, word_t pgsize)
 { 
-    return (pgent_t *) this->address(s, pgsize); 
+    return (pgent_t *) pgent_address(self, s, pgsize); 
 }
 
-inline mapnode_t * pgent_t::mapnode( space_t * s, pgsize_e pgsize, addr_t vaddr )
+INLINE mapnode_t * pgent_mapnode (pgent_t *self, space_t * s, word_t pgsize, addr_t vaddr)
 { 
-    return (mapnode_t *) (this->get_linknode() ^ (word_t) vaddr); 
+    return (mapnode_t *) (pgent_get_linknode_raw(self) ^ (word_t) vaddr); 
 }
 
-inline addr_t pgent_t::vaddr( space_t * s, pgsize_e pgsize, mapnode_t * map )
+INLINE addr_t  pgent_vaddr (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map)
 { 
-    return (addr_t) (this->get_linknode() ^ (word_t) map); 
+    return (addr_t) (pgent_get_linknode_raw(self) ^ (word_t) map); 
 }
 
-inline word_t pgent_t::rights (space_t * s, pgsize_e pgsize)
+INLINE word_t  pgent_rights (pgent_t *self, space_t * s, word_t pgsize)
 { 
     return ((is_readable(s, pgsize) ? (1<<2) : 0) | 
 	    (is_writable(s, pgsize) ? (1<<1) : 0) |
 	    (is_executable(s, pgsize) ? (1<<0) : 0));
 }
 
-inline word_t pgent_t::attributes ( space_t * s, pgsize_e pgsize )
+INLINE word_t  pgent_attributes (pgent_t *self, space_t * s, word_t pgsize)
 {
     return (raw & PPC_PAGE_CACHE_INHIBIT) ? 1 : 0;
 }
 
-inline word_t pgent_t::reference_bits( space_t *s, pgsize_e pgsize, 
-	addr_t vaddr )
+INLINE word_t  pgent_reference_bits (pgent_t *self, space_t *s, word_t pgsize, addr_t vaddr)
 {
     word_t rwx = 0;
-    if( this->map.referenced ) rwx = 5;
-    if( this->map.changed )    rwx |= 6;
+    if( self->map.referenced ) rwx = 5;
+    if( self->map.changed )    rwx |= 6;
     return rwx;
 }
 
-inline void pgent_t::update_reference_bits( space_t *s, pgsize_e pgsize,
-					    word_t rwx )
+INLINE void  pgent_update_reference_bits (pgent_t *self, space_t *s, word_t pgsize, word_t rwx)
 {
-    if (rwx) this->map.referenced = 1;
-    if (rwx & 0x2) this->map.changed = 1;
+    if (rwx) self->map.referenced = 1;
+    if (rwx & 0x2) self->map.changed = 1;
 }
 
 // Modification
 
-inline void pgent_t::flush( space_t *s, pgsize_e pgsize, bool kernel, 
-	addr_t vaddr )
+INLINE void  pgent_flush (pgent_t *self, space_t *s, word_t pgsize, bool kernel, addr_t vaddr)
 {
 
 }
 
-inline void pgent_t::clear( space_t * s, pgsize_e pgsize, bool kernel, 
-	addr_t vaddr )
+INLINE void  pgent_clear (pgent_t *self, space_t * s, word_t pgsize, bool kernel, addr_t vaddr)
 { 
     pgent_t tmp;
-    tmp.raw = this->raw;
+    tmp.raw = self->raw;
 
-    this->raw = 0;
+    self->raw = 0;
     if( !kernel )
-	this->set_linknode(0);
+	pgent_set_linknode_raw(self, 0);
 }
 
-inline void pgent_t::make_subtree( space_t * s, pgsize_e pgsize, bool kernel )
+INLINE void  pgent_make_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel)
 {
-    this->raw = (word_t)kmem_alloc(&kmem,  kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
+    self->raw = (word_t)kmem_alloc(&kmem,  kmem_pgtab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 
     /* the following is a no-op */
-    this->tree.is_subtree = cache_subtree;
+    self->tree.is_subtree = cache_subtree;
 
-    if( this->raw )
-	this->tree.valid = 1;
+    if( self->raw )
+	self->tree.valid = 1;
 }
 
-inline void pgent_t::remove_subtree( space_t * s, pgsize_e pgsize, bool kernel )
+INLINE void  pgent_remove_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel)
 {
-    addr_t ptab = (addr_t) this->address( s, pgsize );
-    this->raw = 0;
+    addr_t ptab = (addr_t) pgent_address(self, s, pgsize);
+    self->raw = 0;
 
     kmem_free(&kmem,  kmem_pgtab, ptab, POWERPC_PAGE_SIZE * (kernel ? 1:2) );
 }
 
-inline void pgent_t::set_entry( space_t * s, pgsize_e pgsize, paddr_t paddr,
-				word_t rwx, word_t attrib, bool kernel )
+INLINE void  pgent_set_entry (pgent_t *self, space_t * s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel)
 {
-    this->raw = paddr & POWERPC_PAGE_MASK;
-    this->map.erpn = (paddr >> 32) & 0xf;
-    this->map.read = rwx >> 2 & 1;
-    this->map.write = rwx >> 1 & 1;
-    this->map.execute = rwx >> 0 & 1;
-    this->map.caching = attrib;
+    self->raw = paddr & POWERPC_PAGE_MASK;
+    self->map.erpn = (paddr >> 32) & 0xf;
+    self->map.read = rwx >> 2 & 1;
+    self->map.write = rwx >> 1 & 1;
+    self->map.execute = rwx >> 0 & 1;
+    self->map.caching = attrib;
 }
 
 
-inline void pgent_t::update_rights( space_t *s, pgsize_e pgsize, word_t rwx )
+INLINE void  pgent_update_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx)
 { 
-    if (rwx & 4) this->map.read = 1;
-    if (rwx & 2) this->map.write = 1;
-    if (rwx & 1) this->map.execute = 1;
+    if (rwx & 4) self->map.read = 1;
+    if (rwx & 2) self->map.write = 1;
+    if (rwx & 1) self->map.execute = 1;
 }
 
-inline void pgent_t::revoke_rights( space_t *s, pgsize_e pgsize, word_t rwx )
+INLINE void  pgent_revoke_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx)
 { 
-    if (rwx & 4) this->map.read = 0;
-    if (rwx & 2) this->map.write = 0;
-    if (rwx & 1) this->map.execute = 0;
+    if (rwx & 4) self->map.read = 0;
+    if (rwx & 2) self->map.write = 0;
+    if (rwx & 1) self->map.execute = 0;
 }
 
-inline void pgent_t::set_rights( space_t *s, pgsize_e pgsize, word_t rwx )
+INLINE void  pgent_set_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx)
 {
-    this->map.read = rwx & 4 ? 1 : 0;
-    this->map.write = rwx & 2 ? 1 : 0;
-    this->map.execute = rwx & 1;
+    self->map.read = rwx & 4 ? 1 : 0;
+    self->map.write = rwx & 2 ? 1 : 0;
+    self->map.execute = rwx & 1;
 }
 
-inline void pgent_t::set_attributes ( space_t * s, pgsize_e pgsize, word_t attrib )
+INLINE void  pgent_set_attributes (pgent_t *self, space_t * s, word_t pgsize, word_t attrib)
 {
 }
 
-inline void pgent_t::reset_reference_bits( space_t *s, pgsize_e pgsize )
+INLINE void  pgent_reset_reference_bits (pgent_t *self, space_t *s, word_t pgsize)
 { 
-    this->map.referenced = 0;
-    this->map.changed = 0;
+    self->map.referenced = 0;
+    self->map.changed = 0;
 }
 
-inline void pgent_t::set_accessed( space_t *s, pgsize_e pgsize, word_t flag )
+INLINE void  pgent_set_accessed (pgent_t *self, space_t *s, word_t pgsize, word_t flag)
 {
-    this->map.referenced |= flag;
+    self->map.referenced |= flag;
 }
 
-inline void pgent_t::set_dirty( space_t *s, pgsize_e pgsize, word_t flag )
+INLINE void  pgent_set_dirty (pgent_t *self, space_t *s, word_t pgsize, word_t flag)
 {
-    this->map.changed |= flag;
+    self->map.changed |= flag;
 }
 
-inline void pgent_t::set_linknode( space_t * s, pgsize_e pgsize,
-	mapnode_t * map, addr_t vaddr )
+INLINE void  pgent_set_linknode (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map, addr_t vaddr)
 { 
-    this->set_linknode ((word_t) map ^ (word_t) vaddr); 
+    pgent_set_linknode_raw (self, (word_t) map ^ (word_t) vaddr); 
 }
 
 // Movement
 
-inline pgent_t * pgent_t::next( space_t * s, pgsize_e pgsize, word_t num )
+INLINE pgent_t * pgent_next (pgent_t *self, space_t * s, word_t pgsize, word_t num)
 { 
-    return this + num; 
+    return self + num; 
 }
 
 // Debug
 
-inline void pgent_t::dump_misc (space_t * s, pgsize_e pgsize)
+INLINE void  pgent_dump_misc (pgent_t *self, space_t * s, word_t pgsize)
 {
     printf("%s",
 	   map.caching == 1 ? "inhibit " : 

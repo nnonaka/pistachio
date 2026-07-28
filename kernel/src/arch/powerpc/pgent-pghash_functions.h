@@ -80,7 +80,7 @@ inline void pgent_t::set_linknode( word_t val )
 
 inline bool pgent_t::is_valid( space_t * s, pgsize_e pgsize )
 { 
-    if( pgsize == pgent_t::size_4m )
+    if( pgsize == size_4m )
 	return this->tree.valid;
     else
 	return this->raw != 0;

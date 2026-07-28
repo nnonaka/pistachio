@@ -244,7 +244,7 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
     TRACE_EMUL("GVA:%lx GPA:%lx.%lx\n", gvaddr, static_cast<word_t>(gpaddr >> 32), static_cast<word_t>(gpaddr));
 
     pgent_t *pg;
-    pgent_t::pgsize_e pgsize;
+    word_t pgsize;
     if (!this->lookup_mapping ((addr_t) gpaddr, &pg, &pgsize))
 	return false;
     

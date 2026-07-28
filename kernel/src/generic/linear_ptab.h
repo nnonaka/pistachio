@@ -40,7 +40,7 @@
 /**
  * Array containing the actual page sizes (as bit-shifts) for the
  * various page table numbers.  Array is indexed by page size number
- * (i.e., pgent_t::pgsize_e).  Last entry must be the bit-shift for the
+ * (i.e., word_t).  Last entry must be the bit-shift for the
  * complete address space.
  */
 extern word_t hw_pgshifts[];
@@ -113,7 +113,7 @@ INLINE bool readmem_word (space_t * space, addr_t vaddr, word_t * v)
 }
 
 /* C reimplementations of the page-geometry helpers. The C++ versions above
-   take pgent_t::pgsize_e; C passes a word_t holding an X86_PGSIZE_* value. */
+   take word_t; C passes a word_t holding an X86_PGSIZE_* value. */
 INLINE word_t page_size (word_t pgsize)
 { return 1UL << hw_pgshifts[pgsize]; }
 

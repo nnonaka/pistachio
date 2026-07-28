@@ -68,15 +68,15 @@ void space_t::allocate_tcb(addr_t addr)
      * calls
      */
     pgent_t *pgent = kernel_space->page_lookup( addr );
-    if( pgent && pgent->is_valid(this, pgent_t::size_4k) )
-	kernel_space->flush_mapping( addr, pgent_t::size_4k, pgent );
+    if( pgent && pgent->is_valid(this, size_4k) )
+	kernel_space->flush_mapping( addr, size_4k, pgent );
 
     addr_t page = kmem_alloc(&kmem,  kmem_tcb, POWERPC_PAGE_SIZE );
     ASSERT(page);
 
     TRACE_SPACE( "new tcb, kmem virt %p, phys %p, tcb virt %p\n", page, 
 	         virt_to_phys(page), addr);
-    kernel_space->add_mapping( addr, virt_to_phys(page), pgent_t::size_4k, true, true);
+    kernel_space->add_mapping( addr, virt_to_phys(page), size_4k, true, true);
 
     sync_kernel_space( addr );
 #endif
@@ -85,15 +85,15 @@ void space_t::allocate_tcb(addr_t addr)
 void space_t::map_dummy_tcb(addr_t addr)
 {
 #if !defined(CONFIG_STATIC_TCBS)
-    add_mapping( addr, (addr_t)virt_to_phys(get_dummy_tcb()), pgent_t::size_4k, false, true );
+    add_mapping( addr, (addr_t)virt_to_phys(get_dummy_tcb()), size_4k, false, true );
 #endif
 }
 
-void space_t::add_mapping( addr_t vaddr, paddr_t paddr, pgent_t::pgsize_e size, 
+void space_t::add_mapping( addr_t vaddr, paddr_t paddr, word_t size, 
 			   bool writable, bool kernel, word_t attrib )
 {
-    pgent_t * pg = this->pgent (page_table_index (pgent_t::size_max, vaddr), 0);
-    pgent_t::pgsize_e pgsize = pgent_t::size_max;
+    pgent_t * pg = this->pgent (page_table_index (size_max, vaddr), 0);
+    word_t pgsize = size_max;
 
     ASSERT(is_page_size_valid(size));
 
@@ -116,7 +116,7 @@ void space_t::add_mapping( addr_t vaddr, paddr_t paddr, pgent_t::pgsize_e size,
     pg->set_entry( this, pgsize, paddr, writable ? 7 : 5, attrib, kernel);
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
-    ASSERT(pgsize == pgent_t::size_4k);
+    ASSERT(pgsize == size_4k);
     get_pghash()->insert_4k_mapping( this, vaddr, pgent);
 #endif
 }
@@ -125,14 +125,14 @@ void space_t::add_mapping( addr_t vaddr, paddr_t paddr, pgent_t::pgsize_e size,
 void space_t::add_4k_mapping( addr_t vaddr, paddr_t paddr, 
 	bool writable, bool kernel, word_t attrib )
 {
-    pgent_t *pgent = this->pgent( page_table_index(pgent_t::size_4m, vaddr) );
-    if( !pgent->is_valid(this, pgent_t::size_4m))
-	pgent->make_subtree( this, pgent_t::size_4m, kernel );
+    pgent_t *pgent = this->pgent( page_table_index(size_4m, vaddr) );
+    if( !pgent->is_valid(this, size_4m))
+	pgent->make_subtree( this, size_4m, kernel );
 
-    pgent = pgent->subtree( this, pgent_t::size_4m )->next( this, 
-	    pgent_t::size_4k, page_table_index(pgent_t::size_4k, vaddr) );
+    pgent = pgent->subtree( this, size_4m )->next( this, 
+	    size_4k, page_table_index(size_4k, vaddr) );
 
-    pgent->set_entry( this, pgent_t::size_4k, paddr, writable ? 7 : 5, 
+    pgent->set_entry( this, size_4k, paddr, writable ? 7 : 5, 
 		      attrib, kernel);
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
@@ -141,10 +141,10 @@ void space_t::add_4k_mapping( addr_t vaddr, paddr_t paddr,
 }
 #endif
 
-void space_t::flush_mapping( addr_t vaddr, pgent_t::pgsize_e pgsize, pgent_t *pgent )
+void space_t::flush_mapping( addr_t vaddr, word_t pgsize, pgent_t *pgent )
 {
 #ifdef CONFIG_PPC_MMU_SEGMENT
-    ASSERT(pgsize == pgent_t::size_4k);
+    ASSERT(pgsize == size_4k);
     get_pghash()->flush_4k_mapping( this, vaddr, pgent );
 #endif
     ppc_invalidate_tlbe( vaddr );
@@ -152,13 +152,13 @@ void space_t::flush_mapping( addr_t vaddr, pgent_t::pgsize_e pgsize, pgent_t *pg
 
 pgent_t * space_t::page_lookup( addr_t vaddr )
 {
-    pgent_t *pgent = this->pgent( page_table_index(pgent_t::size_4m, vaddr) );
-    if( !pgent->is_valid(this, pgent_t::size_4m) )
+    pgent_t *pgent = this->pgent( page_table_index(size_4m, vaddr) );
+    if( !pgent->is_valid(this, size_4m) )
 	return NULL;
 
-    pgent = pgent->subtree( this, pgent_t::size_4m );
-    pgent = pgent->next( this, pgent_t::size_4k, 
-	    page_table_index(pgent_t::size_4k, vaddr) );
+    pgent = pgent->subtree( this, size_4m );
+    pgent = pgent->next( this, size_4k, 
+	    page_table_index(size_4k, vaddr) );
     return pgent;
 }
 
@@ -207,19 +207,19 @@ addr_t space_t::map_device( paddr_t paddr, word_t size, bool kernel, word_t attr
     while( 1 )
     {
 	// Look for a 2nd level page table.
-	word_t pdir_idx = page_table_index( pgent_t::size_4m, start_addr );
+	word_t pdir_idx = page_table_index( size_4m, start_addr );
 	pgent_t *pgent = this->pgent( pdir_idx );
-	if( !pgent->is_valid(this, pgent_t::size_4m) )
+	if( !pgent->is_valid(this, size_4m) )
 	    goto found;
 
 	// Move to the starting position in the 2nd level page table.
-	pgent = pgent->subtree( this, pgent_t::size_4m );
-	word_t ptab_idx = page_table_index( pgent_t::size_4k, start_addr );
-	pgent = pgent->next( this, pgent_t::size_4k, ptab_idx );
+	pgent = pgent->subtree( this, size_4m );
+	word_t ptab_idx = page_table_index( size_4k, start_addr );
+	pgent = pgent->next( this, size_4k, ptab_idx );
 
 	// Search the page table for an unused entry.
 	do {
-	    if( !pgent->is_valid(this, pgent_t::size_4k) )
+	    if( !pgent->is_valid(this, size_4k) )
 		goto found;
 
 	    // Increment the address to the next page.
@@ -228,7 +228,7 @@ addr_t space_t::map_device( paddr_t paddr, word_t size, bool kernel, word_t attr
 		return NULL;
 
 	    // Move to the next page table entry.
-	    pgent = pgent->next( this, pgent_t::size_4k, 1 );
+	    pgent = pgent->next( this, size_4k, 1 );
 	    ptab_idx++;
 	} while( ptab_idx < POWERPC_PAGE_SIZE/sizeof(pgent_t) );
     }
@@ -245,7 +245,7 @@ found:
     for( word_t page = 0; page < size; page += POWERPC_PAGE_SIZE ) 
     {
 	this->add_mapping( addr_offset(start_addr, page),
-		paddr + page, pgent_t::size_4k, true, kernel, attrib );
+		paddr + page, size_4k, true, kernel, attrib );
     }
 
     return start_addr;
@@ -273,9 +273,9 @@ utcb_t *space_t::allocate_utcb( tcb_t *tcb )
     addr_t page;
 
     pgent_t *pgent = this->page_lookup( utcb );
-    if( pgent && pgent->is_valid(this, pgent_t::size_4k) )
+    if( pgent && pgent->is_valid(this, size_4k) )
 	// Already a valid page mapped at the UTCB address.
-	page = (addr_t) phys_to_virt( pgent->address(this, pgent_t::size_4k) );
+	page = (addr_t) phys_to_virt( pgent->address(this, size_4k) );
     else
     {
 	// Allocate a new UTCB page.
@@ -285,7 +285,7 @@ utcb_t *space_t::allocate_utcb( tcb_t *tcb )
 	    WARNING( "out of memory!\n" );
 	    return NULL;
 	}
-	add_mapping( utcb, (paddr_t)virt_to_phys(page), pgent_t::size_4k, true, false );
+	add_mapping( utcb, (paddr_t)virt_to_phys(page), size_4k, true, false );
     }
 
     return (utcb_t *)addr_offset( page, (word_t)utcb & ~POWERPC_PAGE_MASK );
@@ -301,7 +301,7 @@ void space_t::map_sigma0(addr_t addr)
 	     || (addr >= get_kip()->reserved_mem1.high)) 
 	    );
 
-    add_mapping( addr, (paddr_t)addr, pgent_t::size_4k, true, false );
+    add_mapping( addr, (paddr_t)addr, size_4k, true, false );
 }
 
 word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)

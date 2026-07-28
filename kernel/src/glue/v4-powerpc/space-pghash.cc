@@ -36,7 +36,7 @@ bool space_t::handle_hash_miss( addr_t vaddr )
     TRACEPOINT(hash_miss_cnt);
 
     pgent_t *pgent = this->page_lookup( vaddr );
-    if( !pgent || !pgent->is_valid(this, pgent_t::size_4k) )
+    if( !pgent || !pgent->is_valid(this, size_4k) )
 	return false;
 
     TRACEPOINT(hash_insert_cnt);
@@ -66,7 +66,7 @@ void SECTION(".init.memory") space_t::init_kernel_mappings()
     addr_t page = syscall_region.low;
     while( page < syscall_region.high ) 
     {
-	add_mapping( page, virt_to_phys(page), pgent_t::size_4k, false, true, true );
+	add_mapping( page, virt_to_phys(page), size_4k, false, true, true );
 	page = addr_offset( page, POWERPC_PAGE_SIZE );
     }
 #endif
@@ -80,7 +80,7 @@ void SECTION(".init.memory") space_t::init_kernel_mappings()
 	    page != ofppc_kip_end();
 	    page = addr_offset(page, POWERPC_PAGE_SIZE) )
     {
-	add_mapping( page, virt_to_phys(page), pgent_t::size_4k, false, true, true );
+	add_mapping( page, virt_to_phys(page), size_4k, false, true, true );
     }
 }
 
@@ -104,7 +104,7 @@ bool space_t::sync_kernel_space(addr_t addr)
     if( this == kernel_space )
 	return false;
 
-    word_t pdir_idx = page_table_index( pgent_t::size_4m, addr );
+    word_t pdir_idx = page_table_index( size_4m, addr );
     pgent_t *our_pgent = this->pgent( pdir_idx );
     pgent_t *kernel_pgent = get_kernel_space()->pgent( pdir_idx );
 
@@ -112,8 +112,8 @@ bool space_t::sync_kernel_space(addr_t addr)
      * or if it is an invalid kernel page description, then
      * return false.
      */
-    if( our_pgent->is_valid(this, pgent_t::size_4m) || 
-	    !kernel_pgent->is_valid(get_kernel_space(), pgent_t::size_4m) )
+    if( our_pgent->is_valid(this, size_4m) || 
+	    !kernel_pgent->is_valid(get_kernel_space(), size_4m) )
 	return false;
 
     /* Copy the kernel mapping to the target space.
@@ -142,7 +142,7 @@ void space_t::init(fpage_t utcb_area, fpage_t kip_area)
     this->x.utcb_area = utcb_area;
     this->x.kip_area = kip_area;
     this->add_mapping( kip_area.get_base(), virt_to_phys(get_kip()), 
-		       pgent_t::size_4k, false, false );
+		       size_4k, false, false );
 }
 
 void space_t::flush_tlb( space_t *curspace )

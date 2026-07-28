@@ -113,7 +113,7 @@ void space_t::init(fpage_t utcb_area, fpage_t kip_area)
     this->kip_area = kip_area;
 
     this->add_mapping( kip_area.get_base(), (paddr_t)virt_to_phys(get_kip()), 
-		       pgent_t::size_4k, false, false );
+		       size_4k, false, false );
 
     // XXX: do upon migration!
     for (i = 0; i < CONFIG_SMP_MAX_CPUS; i++)
@@ -203,7 +203,7 @@ NOINLINE bool space_t::handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vadd
 					bool user, bool global )
 {
     pgent_t * pg;
-    pgent_t::pgsize_e pgsize;
+    word_t pgsize;
 
     /* check kernel fault for device mappings */
     TRACE_TLB("handle_tlb_miss %p, %p, %s\n", 
@@ -234,9 +234,9 @@ NOINLINE bool space_t::handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vadd
 
     switch (pg->map.caching)
     {
-    case pgent_t::cache_standard:  tlb2.init_shared_smp(); break;
-    case pgent_t::cache_inhibited: tlb2.init_device(); break;
-    case pgent_t::cache_guarded: tlb2.init_guarded(); break;
+    case cache_standard:  tlb2.init_shared_smp(); break;
+    case cache_inhibited: tlb2.init_device(); break;
+    case cache_guarded: tlb2.init_guarded(); break;
     default: UNIMPLEMENTED();
     }
     if (user)
@@ -361,7 +361,7 @@ void space_t::arch_free()
 #define RELOC(s0addr, physaddr, size) \
     case s0addr ... s0addr + size - 1: paddr = physaddr + reinterpret_cast<paddr_t>(addr_offset(addr, -s0addr)); break;
 
-paddr_t space_t::sigma0_translate(addr_t addr, pgent_t::pgsize_e size)
+paddr_t space_t::sigma0_translate(addr_t addr, word_t size)
 {
 	word_t i;
 	paddr_t paddr = (paddr_t)addr;
@@ -375,14 +375,14 @@ paddr_t space_t::sigma0_translate(addr_t addr, pgent_t::pgsize_e size)
     return paddr;
 }
 
-word_t space_t::sigma0_attributes(pgent_t *pg, paddr_t addr, pgent_t::pgsize_e size)
+word_t space_t::sigma0_attributes(pgent_t *pg, paddr_t addr, word_t size)
 {
     /* device memory is guarded */
     //if (sigma0_translate(addr, size) >= 0x100000000ULL)
 	if (addr >= 0x100000000ULL)
-	return pgent_t::cache_inhibited;
+	return cache_inhibited;
     else
-	return pgent_t::cache_standard;
+	return cache_standard;
 }
 
 /**********************************************************************
@@ -477,7 +477,7 @@ void setup_tracebuffer (void)
         return;
     
     addr_t vaddr = get_kernel_space()->map_device_pinned(virt_to_phys((paddr_t)tracebuffer), 
-                                                         TRACEBUFFER_SIZE, false, pgent_t::cache_standard );
+                                                         TRACEBUFFER_SIZE, false, cache_standard );
     get_kip()->memory_info.insert(memdesc_t::reserved, true, vaddr,
                                   addr_offset(vaddr, TRACEBUFFER_SIZE -1));
 

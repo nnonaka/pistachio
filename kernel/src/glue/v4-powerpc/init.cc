@@ -134,7 +134,7 @@ SECTION(SEC_INIT) void dtree_remap( kernel_interface_page_t *kip )
     dtree_t *dtreemapping;
     paddr_t pdtree = (paddr_t) dtree;
     //TRACEF("dtree %p %d\n", dtree, dtree_size);
-    addr_t page = get_kernel_space()->map_device( pdtree, dtree_size, true, pgent_t::cache_standard );
+    addr_t page = get_kernel_space()->map_device( pdtree, dtree_size, true, cache_standard );
     dtreemapping = (dtree_t*)addr_offset(page, pdtree & (KERNEL_PAGE_SIZE - 1));
 
     if (!dtreemapping->is_valid())

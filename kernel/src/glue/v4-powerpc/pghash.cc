@@ -50,7 +50,7 @@ void pghash_t::update_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
     if( pte && pte->x.v )
     {
     	pte->create( (word_t)vaddr, 
-		pgent->get_translation(s, pgent_t::size_4k), pte->x.vsid );
+		pgent->get_translation(s, size_4k), pte->x.vsid );
     }
 }
 
@@ -85,16 +85,16 @@ void pghash_t::insert_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
 
 	// Update the page table's dirty + referenced bits.
 	evict_pgent = evict_space->page_lookup( evict_addr );
-	ASSERT( evict_pgent && evict_pgent->is_valid(evict_space, pgent_t::size_4k) );
-	evict_pgent->set_accessed( evict_space, pgent_t::size_4k, pte->x.r );
-	evict_pgent->set_dirty( evict_space, pgent_t::size_4k, pte->x.c );
+	ASSERT( evict_pgent && evict_pgent->is_valid(evict_space, size_4k) );
+	evict_pgent->set_accessed( evict_space, size_4k, pte->x.r );
+	evict_pgent->set_dirty( evict_space, size_4k, pte->x.c );
 	pte->x.v = 0;
 
 	ppc_invalidate_tlbe( evict_addr );
     }
 
     // Insert a new translation.
-    pte->create( (word_t)vaddr, pgent->get_translation(s, pgent_t::size_4k), 
+    pte->create( (word_t)vaddr, pgent->get_translation(s, size_4k), 
 	    vsid );
     pgent->map.pteg_slot = pteg_slot;
     pgent->map.second_hash = is_second_hash;

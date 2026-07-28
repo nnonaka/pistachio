@@ -144,8 +144,8 @@ public:
     static void end_update() {}
 
     /* sigma0 translation hooks */
-    static paddr_t sigma0_translate(addr_t addr, pgent_t::pgsize_e size);
-    static word_t sigma0_attributes(pgent_t *pg, paddr_t addr, pgent_t::pgsize_e size);
+    static paddr_t sigma0_translate(addr_t addr, word_t size);
+    static word_t sigma0_attributes(pgent_t *pg, paddr_t addr, word_t size);
 
 public:
     /* powerpc specific functions */
@@ -180,7 +180,7 @@ public:
     word_t get_from_user( addr_t );
     pgent_t *pgent( word_t num, word_t cpu=0 );
     bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg,
-			 pgent_t::pgsize_e *r_size, cpuid_t cpu = 0);
+			 word_t *r_size, cpuid_t cpu = 0);
     bool readmem (addr_t vaddr, word_t * contents);
     static word_t readmem_phys (paddr_t paddr)
 	{ return *phys_to_virt((word_t*)paddr); }
@@ -191,10 +191,10 @@ public:
 	return (space_t *)( (vsid & 0xfffffff0) << (POWERPC_PAGE_BITS - 4) );
     }
 
-    void add_mapping( addr_t vaddr, paddr_t paddr, pgent_t::pgsize_e size, 
+    void add_mapping( addr_t vaddr, paddr_t paddr, word_t size, 
 		      bool writable, bool kernel, 
-		      word_t attrib = pgent_t::cache_standard );
-    void flush_mapping( addr_t vaddr, pgent_t::pgsize_e size, pgent_t *pgent );
+		      word_t attrib = cache_standard );
+    void flush_mapping( addr_t vaddr, word_t size, pgent_t *pgent );
 
 private:
     pgent_t pdir[1024];
@@ -244,7 +244,7 @@ INLINE space_t *get_kernel_space()
 
 INLINE pgent_t * space_t::pgent( word_t num, word_t cpu )
 {
-    return (get_pdir())->next( this, pgent_t::size_4m, num );
+    return (get_pdir())->next( this, size_4m, num );
 }
 
 INLINE pgent_t * space_t::get_pdir()

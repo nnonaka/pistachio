@@ -34,8 +34,8 @@
 #define __ARCH__POWERPC__PGENT_SWTLB_H__
 
 
-class space_t;
-class mapnode_t;
+struct space_t;   typedef struct space_t space_t;
+struct mapnode_t; typedef struct mapnode_t mapnode_t;
 
 #define HW_PGSHIFTS		{ 12, 22, 32 }
 
@@ -43,9 +43,8 @@ class mapnode_t;
 #define MDB_PGSHIFTS		{ 12, 22, 32 }
 #define MDB_NUM_PGSIZES		(2)
 
-class pgent_t
+struct pgent_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -69,79 +68,61 @@ public:
 	    word_t read		: 1;	// SR 31
 	} map;
     } __attribute__((packed));
-
-    enum cache_e {
-	cache_standard = 0,
-	cache_inhibited = 1,
-	cache_coherent = 2,
-	cache_guarded = 3,
-	cache_write_through = 4,
-	cache_subtree = 7,
-    };
-
-    enum pgsize_e {
-	size_4k = 0,
-	size_4m = 1,
-	size_4g = 2,
-	size_max = size_4m
-    };
-private:
-
-    // Linknode access 
-
-    word_t get_linknode( );
-    void set_linknode( word_t val );
-
-public:
-
-    // Predicates
-
-    bool is_valid( space_t * s, pgsize_e pgsize );
-    bool is_writable( space_t * s, pgsize_e pgsize );
-    bool is_readable( space_t * s, pgsize_e pgsize );
-    bool is_executable( space_t * s, pgsize_e pgsize );
-    bool is_subtree( space_t * s, pgsize_e pgsize );
-    bool is_kernel( space_t * s, pgsize_e pgsize );
-
-    // Retrieval
-
-    paddr_t address( space_t * s, pgsize_e pgsize );
-    pgent_t * subtree( space_t * s, pgsize_e pgsize );
-    mapnode_t * mapnode( space_t * s, pgsize_e pgsize, addr_t vaddr );
-    addr_t vaddr( space_t * s, pgsize_e pgsize, mapnode_t * map );
-    word_t rights (space_t * s, pgsize_e pgsize);
-    word_t reference_bits( space_t *s, pgsize_e pgsize, addr_t vaddr );
-    word_t attributes ( space_t * s, pgsize_e pgsize );
-
-    // Modification
-
-    void flush( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    void clear( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    void make_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    void remove_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    void set_entry( space_t * s, pgsize_e pgsize, paddr_t paddr,
-			   word_t rwx, word_t attrib, bool kernel );
-    void set_writable( space_t * s, pgsize_e pgsize );
-    void set_readonly( space_t * s, pgsize_e pgsize );
-    void update_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    void revoke_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    void set_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    void reset_reference_bits( space_t *s, pgsize_e pgsize );
-    void update_reference_bits( space_t *s, pgsize_e pgsz, word_t rwx );
-    void set_accessed( space_t *s, pgsize_e pgsize, word_t flag );
-    void set_dirty( space_t *s, pgsize_e pgsize, word_t flag );
-    void set_attributes ( space_t * s, pgsize_e pgsize, word_t attr );
-    void set_linknode( space_t * s, pgsize_e pgsize,
-		       mapnode_t * map, addr_t vaddr );
-
-    // Movement
-
-    pgent_t * next( space_t * s, pgsize_e pgsize, word_t num );
-
-    // Debug
-
-    void dump_misc (space_t * s, pgsize_e pgsize);
 };
+typedef struct pgent_t pgent_t;
+
+enum cache_e {
+    cache_standard	= 0,
+    cache_inhibited	= 1,
+    cache_coherent	= 2,
+    cache_guarded	= 3,
+    cache_write_through	= 4,
+    cache_subtree	= 7,
+};
+
+enum pgsize_e {
+    size_4k	= 0,
+    size_4m	= 1,
+    size_4g	= 2,
+    size_max	= size_4m
+};
+
+/* Was the private linknode pair.  The public four-argument set_linknode below
+   keeps the plain name -- that is the one generic/linear_ptab_walker.c calls --
+   so these raw word accessors take a suffix rather than overloading it. */
+word_t     pgent_get_linknode_raw (pgent_t *self);
+void       pgent_set_linknode_raw (pgent_t *self, word_t val);
+bool       pgent_is_valid (pgent_t *self, space_t * s, word_t pgsize);
+bool       pgent_is_writable (pgent_t *self, space_t * s, word_t pgsize);
+bool       pgent_is_readable (pgent_t *self, space_t * s, word_t pgsize);
+bool       pgent_is_executable (pgent_t *self, space_t * s, word_t pgsize);
+bool       pgent_is_subtree (pgent_t *self, space_t * s, word_t pgsize);
+bool       pgent_is_kernel (pgent_t *self, space_t * s, word_t pgsize);
+paddr_t    pgent_address (pgent_t *self, space_t * s, word_t pgsize);
+pgent_t *  pgent_subtree (pgent_t *self, space_t * s, word_t pgsize);
+mapnode_t * pgent_mapnode (pgent_t *self, space_t * s, word_t pgsize, addr_t vaddr);
+addr_t     pgent_vaddr (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map);
+word_t     pgent_rights (pgent_t *self, space_t * s, word_t pgsize);
+word_t     pgent_reference_bits (pgent_t *self, space_t *s, word_t pgsize, addr_t vaddr);
+word_t     pgent_attributes (pgent_t *self, space_t * s, word_t pgsize);
+void       pgent_flush (pgent_t *self, space_t * s, word_t pgsize, bool kernel, addr_t vaddr);
+void       pgent_clear (pgent_t *self, space_t * s, word_t pgsize, bool kernel, addr_t vaddr);
+void       pgent_make_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel);
+void       pgent_remove_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel);
+void       pgent_set_entry (pgent_t *self, space_t * s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel);
+void       pgent_set_writable (pgent_t *self, space_t * s, word_t pgsize);
+void       pgent_set_readonly (pgent_t *self, space_t * s, word_t pgsize);
+void       pgent_update_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
+void       pgent_revoke_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
+void       pgent_set_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
+void       pgent_reset_reference_bits (pgent_t *self, space_t *s, word_t pgsize);
+void       pgent_update_reference_bits (pgent_t *self, space_t *s, word_t pgsz, word_t rwx);
+void       pgent_set_accessed (pgent_t *self, space_t *s, word_t pgsize, word_t flag);
+void       pgent_set_dirty (pgent_t *self, space_t *s, word_t pgsize, word_t flag);
+void       pgent_set_attributes (pgent_t *self, space_t * s, word_t pgsize, word_t attr);
+void       pgent_set_linknode (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map, addr_t vaddr);
+pgent_t *  pgent_next (pgent_t *self, space_t * s, word_t pgsize, word_t num);
+void       pgent_dump_misc (pgent_t *self, space_t * s, word_t pgsize);
 
 
 #endif /* !__ARCH__POWERPC__PGENT_SWTLB_H__ */
