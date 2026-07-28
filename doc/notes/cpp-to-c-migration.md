@@ -5256,3 +5256,52 @@ kind of thing that suggests the feature was never finished rather than that the
 migration broke it.
 
 Instrumentation reverted; tree clean.
+
+
+## §122 — NEW_MDB: abandoned
+
+Work on the `CONFIG_NEW_MDB` hang stops here. This section is the record so a
+later sweep does not mistake the state for a regression, or re-derive §121.
+
+### Status of the two configs
+
+`x86-x64-p4-newmdb` and `x86-x64-p4-iofp` **build and link** and are **known not
+to boot**. They are not regressions: neither had built since `f3d2a88`, and
+§121 found no evidence the new mapping database ever ran in this tree. Treat
+them as *expected-fail* in any build sweep, distinct from `x86-x64-p4-fullkdb`
+and `x86-x64-p4-cm`, which still fail to compile.
+
+Final tally for the x64 configs:
+
+    build and boot (7)   p4-smp  p4  p3  k8  p4-nokdb  p4-fp  p4-statictcbs
+    build, known hang (2) p4-newmdb  p4-iofp
+    do not build (2)     p4-fullkdb  p4-cm
+
+### What is kept, and why
+
+The code stays. `generic/mdb.h`, `mdb.c`, `mdb_mem.h`, `mdb_mem.c`,
+`kdb/generic/mdb.c`, the vrt component and the io layer are all C now, compile
+clean, and cost the seven working configurations nothing — `CONFIG_NEW_MDB` is
+off in every one of them, so not a byte of it is linked. Deleting it would
+throw away a working conversion of ~4000 lines to remove a feature that is
+merely unfinished, and would also take the vrt and io-space layers with it,
+since they exist only under these options.
+
+It also, incidentally, closed a real regression: `f3d2a88` had deleted
+`generic/mdb.h`'s entire contents, which left `mdb.cc` unable to compile at all.
+That is repaired regardless of whether the runtime path is ever fixed.
+
+### If it is picked up again
+
+§121 has the localisation: init completes, the ready queue is empty,
+`mdb_tree_map` succeeds exactly twice (two 4 KB mappings for roottask at
+0x1000000 and 0x1012000) and then the third fault never resolves. The suspect
+is the mapping-tree growth path — sub-table creation and reuse — inside
+`mdb_tree_map`'s `for (;;)`. The next probe is one `printf` per arm of that
+loop.
+
+And the standing caution from §111: `mdb_t::map`'s C++ declaration and
+definition disagreed on parameter order, silently, so the fifth argument is the
+*outbound* rights and `vrt.c`'s only call site leaves inbound rights wide open.
+Whether that is intended is a question about the feature's design, and it is
+unanswered.
