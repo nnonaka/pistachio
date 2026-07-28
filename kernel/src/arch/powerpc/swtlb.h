@@ -359,7 +359,8 @@ INLINE word_t ppc_mmucr_get_search_id (ppc_mmucr_t *self)	     { return self->se
 
 INLINE void ppc_mmucr_write (ppc_mmucr_t *self) { ppc_set_spr(SPR_MMUCR, self->raw); }
 
-/* read() returned *this by value; no caller used the result, so it is void. */
+/* read() returned *this by value so it could be chained; kdb/arch/powerpc/regs.c
+   does exactly that.  The C form mutates and the callers read the struct after. */
 INLINE void ppc_mmucr_read (ppc_mmucr_t *self)	{ self->raw = ppc_get_spr(SPR_MMUCR); }
 
 /* space defaulted to 0 */

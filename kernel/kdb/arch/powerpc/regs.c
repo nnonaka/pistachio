@@ -73,9 +73,11 @@ static void dbg_print_sysregs( void )
 #ifdef CONFIG_PPC_BOOKE
     printf( "sprg4: 0x%08x sprg5: 0x%08x sprg6: 0x%08x sprg7: 0x%08x\n",
 	    ppc_get_sprg(4), ppc_get_sprg(5), ppc_get_sprg(6), ppc_get_sprg(7));
-    ppc_mmucr_t mmucr; mmucr.read();
-    printf( "  pid: 0x%08x mmucr: 0x%08x [sid: 0x%02x, spc=%d]\n", 
-	    ppc_get_pid(), mmucr.read().raw, mmucr.search_id, 
+    ppc_mmucr_t mmucr;
+
+    ppc_mmucr_read (&mmucr);
+    printf( "  pid: 0x%08x mmucr: 0x%08x [sid: 0x%02x, spc=%d]\n",
+	    ppc_get_pid(), mmucr.raw, mmucr.search_id,
 	    mmucr.search_translation_space);
 #endif
     printf( "  tbl: 0x%08x   tbu: 0x%08x\n", ppc_get_tbl(), ppc_get_tbu() );
@@ -147,14 +149,15 @@ CMD(cmd_print_tlb, cg)
 	ppc_tlb1_t tlb1;
 	ppc_tlb2_t tlb2;
 	ppc_mmucr_t mmucr;
-	tlb0.read(i);
-	tlb1.read(i);
-	tlb2.read(i);
+	ppc_tlb0_read (&tlb0, i);
+	ppc_tlb1_read (&tlb1, i);
+	ppc_tlb2_read (&tlb2, i);
+	ppc_mmucr_read (&mmucr);
 
 	printf("%02d: %c [%02x:%d] %08x sz:%08x [%04x:%08x] U:%c%c%c S:%c%c%c C:[%c%c%c%c%c U:%c%c%c%c L1:%c%c%c L2:%c%c]\n",
-	       i, tlb0.is_valid() ? 'V' : 'I', mmucr.read().get_search_id(),
-	       tlb0.trans_space, tlb0.get_vaddr(), tlb0.get_size(),
-	       (word_t)(tlb1.get_paddr() >> 32), (word_t)(tlb1.get_paddr()),
+	       i, ppc_tlb0_is_valid (&tlb0) ? 'V' : 'I', ppc_mmucr_get_search_id (&mmucr),
+	       tlb0.trans_space, ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0),
+	       (word_t)(ppc_tlb1_get_paddr (&tlb1) >> 32), (word_t)(ppc_tlb1_get_paddr (&tlb1)),
 	       tlb2.user_execute ? 'X' : '-', tlb2.user_write ? 'W' : '-', 
 	       tlb2.user_read ? 'R' : '-', tlb2.super_execute ? 'X' : '-', 
 	       tlb2.super_write ? 'W' : '-', tlb2.super_read ? 'R' : '-',
@@ -250,7 +253,7 @@ CMD(cmd_print_except_msr, cg)
 DECLARE_CMD (cmd_print_irqctrl, arch, 'i', "printirq", "Print IRQ controller status");
 CMD(cmd_print_irqctrl, cg)
 {
-    get_interrupt_ctrl()->dump();
+    intctrl_dump ();
     return CMD_NOQUIT;
 }
 #endif

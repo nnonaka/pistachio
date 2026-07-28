@@ -30,4 +30,4 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/arch/powerpc/, regs.cc instr.c hid.c perf.c)
+SOURCES += $(addprefix kdb/arch/powerpc/, regs.c instr.c hid.c perf.c)
