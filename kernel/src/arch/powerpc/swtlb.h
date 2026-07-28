@@ -120,8 +120,7 @@ inline void ppc_set_pid(word_t pid)
 }
 
 
-class ppc_tlb0_t {
-public:
+struct ppc_tlb0_t {
     union {
 	word_t raw;
 	struct {
@@ -133,66 +132,58 @@ public:
 	};
     };
 
-    ppc_tlb0_t()
-	{ }
-    ppc_tlb0_t(word_t vaddr, word_t log2size, bool valid=true, int space = 0)
-	{ init_vaddr_size(vaddr, log2size, valid, space); }
+};
+typedef struct ppc_tlb0_t ppc_tlb0_t;
 
-    bool is_valid()
-	{ return valid; }
+/* The C++ class had ppc_tlb0_t() and ppc_tlb0_t(vaddr, log2size, valid, space);
+   the latter just forwarded to init_vaddr_size, which callers now use directly.
+   Its valid/space arguments defaulted to true/0. */
+INLINE void ppc_tlb0_init_vaddr_size (ppc_tlb0_t *self, word_t vaddr, word_t log2size,
+				      bool valid, int space)
+{
+    self->raw = 0;
+    self->epn = vaddr >> 10;
+    self->size = (log2size - 10) / 2;
+    self->trans_space = space;
+    self->valid = valid;
+}
 
-    static ppc_tlb0_t invalid()
-	{ 
-	    ppc_tlb0_t tmp;
-	    tmp.raw = 0;
-	    return tmp;
-	}
+INLINE bool ppc_tlb0_is_valid (ppc_tlb0_t *self)	{ return self->valid; }
 
-    void init_vaddr_size(word_t vaddr, word_t log2size, bool valid = true, int space = 0)
-	{
-	    this->raw = 0;
-	    this->epn = vaddr >> 10;
-	    this->size = (log2size - 10) / 2;
-	    this->trans_space = space;
-	    this->valid = valid;
-	}
+INLINE ppc_tlb0_t ppc_tlb0_invalid (void)
+{
+    ppc_tlb0_t tmp;
+    tmp.raw = 0;
+    return tmp;
+}
 
-    void set_vaddr(word_t vaddr)
-	{ epn = vaddr >> 10; }
+INLINE void   ppc_tlb0_set_vaddr (ppc_tlb0_t *self, word_t vaddr) { self->epn = vaddr >> 10; }
+INLINE word_t ppc_tlb0_get_size (ppc_tlb0_t *self)	{ return (1024 << (self->size * 2)); }
+INLINE word_t ppc_tlb0_get_log2size (ppc_tlb0_t *self)	{ return (self->size * 2) + 10; }
+INLINE word_t ppc_tlb0_get_vaddr (ppc_tlb0_t *self)	{ return self->epn << 10; }
 
-    word_t get_size()
-	{ return (1024 << (size * 2)); }
+INLINE bool ppc_tlb0_is_vaddr_covered (ppc_tlb0_t *self, word_t vaddr)
+{
+    return (vaddr >= ppc_tlb0_get_vaddr (self) &&
+	    vaddr <= ppc_tlb0_get_vaddr (self) + ppc_tlb0_get_size (self) - 1);
+}
 
-    word_t get_log2size()
-	{ return (size * 2) + 10; }
+/* was operator += */
+INLINE void ppc_tlb0_add_offset (ppc_tlb0_t *self, const word_t offset)
+{ self->epn += (offset >> 10); }
 
-    word_t get_vaddr()
-	{ return epn << 10; }
+INLINE bool ppc_tlb0_is_valid_pagesize (word_t log2size)
+{
+    return (KB(1) | KB(4) | KB(16) | KB(64) | KB(256) |
+	    MB(1) | MB(16) | MB(256) | GB(1)) & (1 << log2size);
+}
 
-    bool is_vaddr_covered(word_t vaddr)
-	{ 
-	    return (vaddr >= get_vaddr() && 
-		    vaddr <= get_vaddr() + get_size() - 1); 
-	}
-
-    void operator += (const word_t offset)
-	{ epn += (offset >> 10); }
-
-    static bool is_valid_pagesize(word_t log2size)
-	{ return (KB(1) | KB(4) | KB(16) | KB(64) | KB(256) | 
-		  MB(1) | MB(16) | MB(256) | GB(1)) & (1 << log2size);
-	}
-
-    void write(int index)
-	{ ppc_tlbwe(index, 0, raw); }
-
-    void read(int index)
-	{ raw = ppc_tlbre(index, 0); }
-} __attribute((packed));
+INLINE void ppc_tlb0_write (ppc_tlb0_t *self, int index) { ppc_tlbwe(index, 0, self->raw); }
+INLINE void ppc_tlb0_read (ppc_tlb0_t *self, int index)  { self->raw = ppc_tlbre(index, 0); }
 
 
-class ppc_tlb1_t {
-public:
+
+struct ppc_tlb1_t {
     union {
 	u32_t raw;
 	struct {
@@ -203,42 +194,35 @@ public:
 	};
     };
 
-    ppc_tlb1_t()
-	{ }
-    ppc_tlb1_t(ppc_tlb1_t &tlb1)
-	{ raw = tlb1.raw; }
-    ppc_tlb1_t(u64_t paddr)
-	{ init_paddr(paddr); }
+};
+typedef struct ppc_tlb1_t ppc_tlb1_t;
+
+INLINE void ppc_tlb1_set_paddr (ppc_tlb1_t *self, u64_t paddr)
+{
+    self->page = (paddr & ~0UL) >> 10;
+    self->extpage = (paddr >> 32ULL);
+}
+
+INLINE u64_t ppc_tlb1_get_paddr (ppc_tlb1_t *self)
+{ return ((u64_t)self->extpage << 32) | ((u64_t)self->page << 10); }
+
+/* was the ppc_tlb1_t(u64_t) constructor */
+INLINE void ppc_tlb1_init_paddr (ppc_tlb1_t *self, u64_t paddr)
+{
+    self->raw = 0;
+    ppc_tlb1_set_paddr (self, paddr);
+}
+
+INLINE void ppc_tlb1_write (ppc_tlb1_t *self, word_t index) { ppc_tlbwe(index, 1, self->raw); }
+INLINE void ppc_tlb1_read (ppc_tlb1_t *self, word_t index)  { self->raw = ppc_tlbre(index, 1); }
+
+/* was operator += */
+INLINE void ppc_tlb1_add_offset (ppc_tlb1_t *self, const u64_t offset)
+{ ppc_tlb1_set_paddr (self, ppc_tlb1_get_paddr (self) + offset); }
 
 
-    void write(word_t index)
-	{ ppc_tlbwe(index, 1, raw); }
 
-    void read(word_t index)
-	{ raw = ppc_tlbre(index, 1); }
-
-    void init_paddr(u64_t paddr)
-	{
-	    raw = 0;
-	    set_paddr(paddr);
-	}
-
-    void set_paddr(u64_t paddr)
-	{ 
-	    page = (paddr & ~0UL) >> 10;
-	    extpage = (paddr >> 32ULL);
-	}
-
-    u64_t get_paddr()
-	{ return ((u64_t)extpage << 32) | ((u64_t)page << 10); }
-
-    void operator += (const u64_t offset)
-	{ set_paddr(get_paddr() + offset); }
-} __attribute((packed));
-
-
-class ppc_tlb2_t {
-public:
+struct ppc_tlb2_t {
     union {
 	u32_t raw;
 	struct {
@@ -268,102 +252,85 @@ public:
 	};
     };
 
-    void write(int index)
-	{ ppc_tlbwe(index, 2, raw); }
+};
+typedef struct ppc_tlb2_t ppc_tlb2_t;
 
-    void read(int index)
-	{ raw = ppc_tlbre(index, 2); }
+INLINE void ppc_tlb2_write (ppc_tlb2_t *self, int index) { ppc_tlbwe(index, 2, self->raw); }
+INLINE void ppc_tlb2_read (ppc_tlb2_t *self, int index)  { self->raw = ppc_tlbre(index, 2); }
 
-    void init()
-	{ raw = 0; }
+INLINE void ppc_tlb2_init (ppc_tlb2_t *self) { self->raw = 0; }
 
-    void init_shared_smp()
-	{ 
-	    raw = 0;
-	    mem_coherency = 1;
+INLINE void ppc_tlb2_init_shared_smp (ppc_tlb2_t *self)
+{
+    self->raw = 0;
+    self->mem_coherency = 1;
 #ifdef CONFIG_PPC_CACHE_L1_WRITETHROUGH
-	    wt_l1 = 1;
-	    user2 = 1;
+    self->wt_l1 = 1;
+    self->user2 = 1;
 #endif
-	}
+}
 
-    void init_guarded()
-	{
-	    init_shared_smp();
-	    guarded = 1;
-	}
+INLINE void ppc_tlb2_init_guarded (ppc_tlb2_t *self)
+{
+    ppc_tlb2_init_shared_smp (self);
+    self->guarded = 1;
+}
 
-    void init_cpu_local()
-	{ raw = 0; }
+INLINE void ppc_tlb2_init_cpu_local (ppc_tlb2_t *self) { self->raw = 0; }
 
-    void init_device()
-	{
-	    raw = 0;
-	    inhibit = 1;
-	    guarded = 1;
-	}
+INLINE void ppc_tlb2_init_device (ppc_tlb2_t *self)
+{
+    self->raw = 0;
+    self->inhibit = 1;
+    self->guarded = 1;
+}
 
-    void set_user_perms(bool read, bool write, bool execute)
-	{ 
-	    this->user_read = read;
-	    this->user_write = write;
-	    this->user_execute = execute;
-	}
+INLINE void ppc_tlb2_set_user_perms (ppc_tlb2_t *self, bool read, bool write, bool execute)
+{
+    self->user_read = read;
+    self->user_write = write;
+    self->user_execute = execute;
+}
 
-    void set_kernel_perms(bool read, bool write, bool execute)
-	{ 
-	    this->super_read = read;
-	    this->super_write = write;
-	    this->super_execute = execute;
-	}
+INLINE void ppc_tlb2_set_kernel_perms (ppc_tlb2_t *self, bool read, bool write, bool execute)
+{
+    self->super_read = read;
+    self->super_write = write;
+    self->super_execute = execute;
+}
 
-    void set_cache(bool inhibit, bool write_through, bool guarded)
-	{
-	    this->inhibit = inhibit;
-	    this->write_through = write_through;
-	    this->guarded = guarded;
-	}
+INLINE void ppc_tlb2_set_cache (ppc_tlb2_t *self, bool inhibit, bool write_through, bool guarded)
+{
+    self->inhibit = inhibit;
+    self->write_through = write_through;
+    self->guarded = guarded;
+}
 
-    void set_l1_cache(bool inhibit_l1i, bool inhibit_l1d)
-	{
-	    this->inhibit_l1i = inhibit_l1i;
-	    this->inhibit_l1d = inhibit_l1d;
-	}
+INLINE void ppc_tlb2_set_l1_cache (ppc_tlb2_t *self, bool inhibit_l1i, bool inhibit_l1d)
+{
+    self->inhibit_l1i = inhibit_l1i;
+    self->inhibit_l1d = inhibit_l1d;
+}
 
-    void set_l2_cache(bool inhibit_l2i, bool inhibit_l2d)
-	{
-	    this->inhibit_l2i = inhibit_l2i;
-	    this->inhibit_l2d = inhibit_l2d;
-	}
+INLINE void ppc_tlb2_set_l2_cache (ppc_tlb2_t *self, bool inhibit_l2i, bool inhibit_l2d)
+{
+    self->inhibit_l2i = inhibit_l2i;
+    self->inhibit_l2d = inhibit_l2d;
+}
 
-    void set_user0(bool u0)
-	{ this->user0 = u0; }
+INLINE void ppc_tlb2_set_user0 (ppc_tlb2_t *self, bool u0) { self->user0 = u0; }
+INLINE void ppc_tlb2_set_user1 (ppc_tlb2_t *self, bool u1) { self->user1 = u1; }
+INLINE void ppc_tlb2_set_user2 (ppc_tlb2_t *self, bool u2) { self->user2 = u2; }
+INLINE void ppc_tlb2_set_user3 (ppc_tlb2_t *self, bool u3) { self->user3 = u3; }
+INLINE void ppc_tlb2_set_endian (ppc_tlb2_t *self, bool endian) { self->endian = endian; }
 
-    void set_user1(bool u1)
-	{ this->user1 = u1; }
+INLINE bool ppc_tlb2_is_user_accessible (ppc_tlb2_t *self)   { return self->raw & (7 << 3); }
+INLINE bool ppc_tlb2_is_kernel_accessible (ppc_tlb2_t *self) { return self->raw & 7; }
+INLINE bool ppc_tlb2_is_accessible (ppc_tlb2_t *self)	     { return self->raw & 0x3f; }
 
-    void set_user2(bool u2)
-	{ this->user2 = u2; }
 
-    void set_user3(bool u3)
-	{ this->user3 = u3; }
 
-    void set_endian(bool endian)
-	{ this->endian = endian; }
-
-    bool is_user_accessible()
-	{ return raw & (7 << 3); }
-
-    bool is_kernel_accessible()
-	{ return raw & 7; }
-
-    bool is_accessible()
-	{ return raw & 0x3f; }
-
-} __attribute((packed));
-
-class ppc_mmucr_t {
-public:
+struct ppc_mmucr_t {
     union {
 	word_t raw;
 	struct {
@@ -383,82 +350,86 @@ public:
 	};
     };
 
-    void set_search_id(word_t id)
-	{ search_id = id; }
-    word_t get_search_id()
-	{ return search_id; }
-
-    static void write_search_id(word_t id, int space = 0)
-	{ 
-	    ppc_mmucr_t mmucr;
-	    mmucr.read();
-	    mmucr.set_search_id(id);
-	    mmucr.search_translation_space = space;
-	    mmucr.write();
-	}
-
-    ppc_mmucr_t read()
-	{ 
-	    raw = ppc_get_spr(SPR_MMUCR); 
-	    return *this;
-	}
-    void write()
-	{ ppc_set_spr(SPR_MMUCR, raw); }
 };
+typedef struct ppc_mmucr_t ppc_mmucr_t;
 
+INLINE void   ppc_mmucr_set_search_id (ppc_mmucr_t *self, word_t id) { self->search_id = id; }
+INLINE word_t ppc_mmucr_get_search_id (ppc_mmucr_t *self)	     { return self->search_id; }
 
-class ppc_swtlb_t
+INLINE void ppc_mmucr_write (ppc_mmucr_t *self) { ppc_set_spr(SPR_MMUCR, self->raw); }
+
+/* read() returned *this by value; no caller used the result, so it is void. */
+INLINE void ppc_mmucr_read (ppc_mmucr_t *self)	{ self->raw = ppc_get_spr(SPR_MMUCR); }
+
+/* space defaulted to 0 */
+INLINE void ppc_mmucr_write_search_id (word_t id, int space)
 {
-public:
+    ppc_mmucr_t mmucr;
+    ppc_mmucr_read (&mmucr);
+    ppc_mmucr_set_search_id (&mmucr, id);
+    mmucr.search_translation_space = space;
+    ppc_mmucr_write (&mmucr);
+}
+
+
+
+struct ppc_swtlb_t
+{
     word_t current_index;
     word_t high_water;
     word_t mask[2]; // use hard-coded size for better code below
     
-    void init(word_t high_water)
-	{ 
-	    for (word_t idx = 0; idx < high_water; idx++)
-		set_free(idx);
-	    for (word_t idx = high_water; idx < sizeof(mask) * 8; idx++)
-		set_used(idx);
-	    current_index = 0;
-	    this->high_water = high_water;
-	}
-
-    void set_used(word_t index)
-	{ mask[index / BITS_WORD] &= ~(1 << (BITS_WORD - 1 - (index % BITS_WORD))); }
-
-    void set_free(word_t index)
-	{ mask[index / BITS_WORD] |=  (1 << (BITS_WORD - 1 - (index % BITS_WORD))); }
-
-    word_t allocate()
-	{
-	    word_t idx;
-	    if ((idx = count_leading_zeros( mask[0] )) < sizeof(word_t) * 8)
-	    {
-		set_used(idx);
-		return idx;
-	    }
-	    else if ( (idx += count_leading_zeros( mask[1] ) ) < 2 * sizeof(word_t) * 8)
-	    {
-		set_used(idx);
-		return idx;
-	    }
-	    else
-		return get_replacement();
-	}
-
-    word_t allocate_pinned()
-	{
-	    high_water--;
-	    return high_water + 1;
-	}
-
-    word_t get_replacement()
-	{
-	    current_index = (current_index + 1) % high_water;
-	    return current_index;
-	}
 };
+typedef struct ppc_swtlb_t ppc_swtlb_t;
+
+INLINE void ppc_swtlb_set_used (ppc_swtlb_t *self, word_t index)
+{ self->mask[index / BITS_WORD] &= ~(1 << (BITS_WORD - 1 - (index % BITS_WORD))); }
+
+INLINE void ppc_swtlb_set_free (ppc_swtlb_t *self, word_t index)
+{ self->mask[index / BITS_WORD] |=  (1 << (BITS_WORD - 1 - (index % BITS_WORD))); }
+
+INLINE void ppc_swtlb_init (ppc_swtlb_t *self, word_t high_water)
+{
+    word_t idx;
+
+    for (idx = 0; idx < high_water; idx++)
+	ppc_swtlb_set_free (self, idx);
+    for (idx = high_water; idx < sizeof(self->mask) * 8; idx++)
+	ppc_swtlb_set_used (self, idx);
+    self->current_index = 0;
+    self->high_water = high_water;
+}
+
+INLINE word_t ppc_swtlb_get_replacement (ppc_swtlb_t *self)
+{
+    self->current_index = (self->current_index + 1) % self->high_water;
+    return self->current_index;
+}
+
+INLINE word_t ppc_swtlb_allocate (ppc_swtlb_t *self)
+{
+    word_t idx;
+
+    if ((idx = count_leading_zeros( self->mask[0] )) < sizeof(word_t) * 8)
+    {
+	ppc_swtlb_set_used (self, idx);
+	return idx;
+    }
+    else if ( (idx += count_leading_zeros( self->mask[1] ) ) < 2 * sizeof(word_t) * 8)
+    {
+	ppc_swtlb_set_used (self, idx);
+	return idx;
+    }
+    else
+	return ppc_swtlb_get_replacement (self);
+}
+
+INLINE word_t ppc_swtlb_allocate_pinned (ppc_swtlb_t *self)
+{
+    self->high_water--;
+    return self->high_water + 1;
+}
+
 
 #endif
 

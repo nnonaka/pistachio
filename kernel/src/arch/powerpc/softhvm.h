@@ -38,29 +38,7 @@
 
 #define LAZY_TLB
 
-class ppc_instr_t {
-public:
-    ppc_instr_t()
-	{ }
-    ppc_instr_t(word_t val)
-	{ raw = val; }
-
-    /* acessor functions */
-    int get_primary()
-	{ return this->xform.primary; }
-    int get_secondary()
-	{ return this->xform.xo; }
-    word_t ra() const
-	{ return xform.ra; }
-    word_t rb() const
-	{ return xform.rb; }
-    word_t rt() const
-	{ return xform.rt; }
-    word_t rf() const
-	{ return xform.rb << 5 | xform.ra; }
-    s16_t d() const
-	{ return dform.d; }
-
+struct ppc_instr_t {
     union {
 	word_t raw;
 	struct {
@@ -130,11 +108,54 @@ public:
 	} mform;
     } __attribute((packed));
 };
+typedef struct ppc_instr_t ppc_instr_t;
 
-class ppc_softhvm_t
+/* The ppc_instr_t(word_t) constructor becomes an explicit initialiser; the
+   accessors take the instruction by value, as the const methods did. */
+#define PPC_INSTR(val)	((ppc_instr_t) { .raw = (val) })
+
+INLINE int    ppc_instr_get_primary (ppc_instr_t self)	{ return self.xform.primary; }
+INLINE int    ppc_instr_get_secondary (ppc_instr_t self){ return self.xform.xo; }
+INLINE word_t ppc_instr_ra (ppc_instr_t self)		{ return self.xform.ra; }
+INLINE word_t ppc_instr_rb (ppc_instr_t self)		{ return self.xform.rb; }
+INLINE word_t ppc_instr_rt (ppc_instr_t self)		{ return self.xform.rt; }
+INLINE word_t ppc_instr_rf (ppc_instr_t self)		{ return self.xform.rb << 5 | self.xform.ra; }
+INLINE s16_t  ppc_instr_d (ppc_instr_t self)		{ return self.dform.d; }
+
+
+/* Was ppc_softhvm_t::tlb_t.  C has no nested types, so it is file-scope; the
+   name keeps the owner as a prefix.  Layout is load-bearing -- ctrlxfer_get/set
+   index it as a flat word array. */
+struct ppc_hvm_tlb_t {
+    /* WARNING: If you change this layout, adopt ppc_hvm_tlb_ctrlxfer_{get,set}! */
+    ppc_tlb0_t tlb0;
+    ppc_tlb1_t tlb1;
+    ppc_tlb2_t tlb2;
+    word_t     pid;
+    ppc_tlb1_t phys_tlb1;	/* phys shadow */
+
+    bool       touched;		/* true if entry was ever fetched in host TLB */
+} __attribute__((packed));
+typedef struct ppc_hvm_tlb_t ppc_hvm_tlb_t;
+
+INLINE bool ppc_hvm_tlb_vaddr_in_entry (ppc_hvm_tlb_t *self, word_t vaddr, u8_t searchpid)
 {
-public:
-    enum {
+    return ppc_tlb0_is_valid (&self->tlb0) &&
+	ppc_tlb0_is_vaddr_covered (&self->tlb0, vaddr) &&
+	(self->pid == 0 || self->pid == searchpid);
+}
+
+INLINE void ppc_hvm_tlb_touch (ppc_hvm_tlb_t *self, unsigned index)
+{ self->touched = true; }
+
+INLINE word_t ppc_hvm_tlb_ctrlxfer_get (ppc_hvm_tlb_t *self, word_t reg)
+{ return ((word_t *) &self->tlb0)[reg]; }
+
+INLINE void ppc_hvm_tlb_ctrlxfer_set (ppc_hvm_tlb_t *self, word_t reg, word_t val)
+{ ((word_t *) &self->tlb0)[reg] = val; }
+
+
+enum {
 	exc_critical_input = 0,
 	exc_machine_check = 1,
 	exc_data_storage = 2,
@@ -151,16 +172,17 @@ public:
 	exc_data_tlb = 13,
 	exc_instr_tlb = 14,
 	exc_debug = 15,
-    };
-
-    enum {
+};
+enum {
 	evt_machine_check,
 	evt_debug,
 	evt_critical_input,
 	evt_external_input,
 	evt_last,
-    };
+};
 
+struct ppc_softhvm_t
+{
     /* supervisor */
     word_t msr;		// machine status
     word_t pvr;		// proc version
@@ -199,167 +221,161 @@ public:
     word_t icdbdr;	// instruction cache debug data
     word_t icdbt[2];	// instruction cache debug tag
     word_t dcdbt[2];	// data cache debug tag
-
     word_t event_inject;	// injection of events
-
-    class tlb_t {
-    public:
-        /* WARNING: If you change class layout, adopt ctrlxfer_{get,set} ! */
-        ppc_tlb0_t tlb0;
-        ppc_tlb1_t tlb1;
-        ppc_tlb2_t tlb2;
-        word_t     pid;
-        ppc_tlb1_t phys_tlb1; /* phys shadow */
-        
-        bool       touched;	/* true if entry was ever fetched in host TLB */
-        
-
-	bool vaddr_in_entry(word_t vaddr, u8_t searchpid)
-	    {
-		return tlb0.is_valid() &&
-		    tlb0.is_vaddr_covered(vaddr) &&
-		    (pid == 0 || pid == searchpid);
-	    }
-
-	void touch(unsigned index)
-	    { touched = true; }
-        
-        word_t ctrlxfer_get(word_t reg) { return ((word_t *) &tlb0)[reg]; }
-        void ctrlxfer_set(word_t reg, word_t val) { ((word_t *) &tlb0)[reg] = val; }
-
-    } __attribute__((packed));
-
     /* TLB */
-    tlb_t tlb[PPC_MAX_TLB_ENTRIES];
-    tlb_t shadow_tlb;
+    ppc_hvm_tlb_t tlb[PPC_MAX_TLB_ENTRIES];
+    ppc_hvm_tlb_t shadow_tlb;
     u8_t shadow_ref;
-
     bool htlb_dirty;
     word_t tlb_dirty_start;
     word_t tlb_dirty_end;
-
     /* Timer facilities */
     u64_t dec_base;
     u64_t watchdog_base;
     u64_t fixed_interval_base;
-
-private:
-    bool mfmsr(ppc_instr_t instr, except_regs_t *regs);
-    bool mtmsr(ppc_instr_t instr, except_regs_t *regs);
-    bool mfspr(ppc_instr_t instr, except_regs_t *regs);
-    bool mtspr(ppc_instr_t instr, except_regs_t *regs);
-    bool tlbre(ppc_instr_t instr, except_regs_t *regs);
-    bool tlbsx(ppc_instr_t instr, except_regs_t *regs);
-    bool tlbsync(ppc_instr_t instr, except_regs_t *regs);
-    bool tlbwe(ppc_instr_t instr, except_regs_t *regs);
-    bool tw(ppc_instr_t instr, except_regs_t *regs);
-    bool wrtee(ppc_instr_t instr, except_regs_t *regs);
-    bool wrteei(ppc_instr_t instr, except_regs_t *regs);
-    bool rfi(ppc_instr_t instr, except_regs_t *regs, word_t srr0, word_t srr1);
-    bool twi(ppc_instr_t instr, except_regs_t *regs);
-
-    bool set_esr(word_t val, except_regs_t *regs);
-    void set_msr(word_t val);
-    word_t *get_spr(int spr, bool read);
-
-    void inject_pending_events(except_regs_t *regs);
-    void update_decrementer();
-
-public:
-    bool is_user()
-	{ return msr & (1U << MSR_PR); }
-
     /* emulation functions */
-    bool in_shadow_tlb(word_t vaddr)
+};
+typedef struct ppc_softhvm_t ppc_softhvm_t;
+
+bool ppc_softhvm_mfmsr (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_mtmsr (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_mfspr (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_mtspr (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_tlbre (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_tlbsx (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_tlbsync (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_tlbwe (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_tw (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_wrtee (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_wrteei (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_rfi (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs, word_t srr0, word_t srr1);
+
+bool ppc_softhvm_twi (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *regs);
+
+bool ppc_softhvm_set_esr (ppc_softhvm_t *self, word_t val, except_regs_t *regs);
+
+void ppc_softhvm_set_msr (ppc_softhvm_t *self, word_t val);
+
+word_t * ppc_softhvm_get_spr (ppc_softhvm_t *self, int spr, bool read);
+
+void ppc_softhvm_inject_pending_events (ppc_softhvm_t *self, except_regs_t *regs);
+
+void ppc_softhvm_update_decrementer (ppc_softhvm_t *self);
+
+/* Forward declaration: invalidate_shadow_tlb and replace_shadow_tlb call this
+   before its definition below. */
+INLINE void ppc_softhvm_update_tlb_dirty (ppc_softhvm_t *self, ppc_hvm_tlb_t *entry);
+
+INLINE bool ppc_softhvm_is_user (ppc_softhvm_t *self)
+	{ return self->msr & (1U << MSR_PR); }
+
+INLINE bool ppc_softhvm_in_shadow_tlb (ppc_softhvm_t *self, word_t vaddr)
 	{
-	    return shadow_tlb.vaddr_in_entry(vaddr, pid);
+	    return ppc_hvm_tlb_vaddr_in_entry (&self->shadow_tlb, vaddr, self->pid);
 	}
 
-    void invalidate_shadow_tlb()
+INLINE void ppc_softhvm_invalidate_shadow_tlb (ppc_softhvm_t *self)
 	{
-	    if (!shadow_tlb.tlb0.is_valid())
+	    if (!ppc_tlb0_is_valid (&self->shadow_tlb.tlb0))
 		return;
 
-	    if (tlb[shadow_ref].tlb0.raw != shadow_tlb.tlb0.raw ||
-		tlb[shadow_ref].tlb1.raw != shadow_tlb.tlb1.raw ||
-		tlb[shadow_ref].tlb2.raw != shadow_tlb.tlb2.raw)
+	    if (self->tlb[self->shadow_ref].tlb0.raw != self->shadow_tlb.tlb0.raw ||
+		self->tlb[self->shadow_ref].tlb1.raw != self->shadow_tlb.tlb1.raw ||
+		self->tlb[self->shadow_ref].tlb2.raw != self->shadow_tlb.tlb2.raw)
 	    {
 #if 0
-		if (shadow_tlb.touched)
+		if (self->shadow_tlb.touched)
 		    TRACEF("invalidate shadow TLB and flush (entry: %d, %08x, %08x, %08x, dirty: %d)\n", 
-			   shadow_ref, shadow_tlb.tlb0.raw, shadow_tlb.tlb1.raw, shadow_tlb.tlb2.raw, shadow_tlb.touched);
+			   self->shadow_ref, self->shadow_tlb.tlb0.raw, self->shadow_tlb.tlb1.raw, self->shadow_tlb.tlb2.raw, self->shadow_tlb.touched);
 #endif
-		update_tlb_dirty(&shadow_tlb);
+		ppc_softhvm_update_tlb_dirty (self, &self->shadow_tlb);
 	    }
-	    shadow_tlb.tlb0 = ppc_tlb0_t::invalid();
+	    self->shadow_tlb.tlb0 = ppc_tlb0_invalid ();
 	}
 
-    void replace_shadow_tlb(tlb_t *tlbentry, int idx)
+INLINE void ppc_softhvm_replace_shadow_tlb (ppc_softhvm_t *self, ppc_hvm_tlb_t *tlbentry, int idx)
 	{
-	    update_tlb_dirty(&shadow_tlb);
+	    ppc_softhvm_update_tlb_dirty (self, &self->shadow_tlb);
 #if 0	    
-	    shadow_ref = idx;
-	    shadow_tlb = *tlbentry;
+	    self->shadow_ref = idx;
+	    self->shadow_tlb = *tlbentry;
 #else
-	    shadow_tlb.tlb0 = ppc_tlb0_t::invalid();
+	    self->shadow_tlb.tlb0 = ppc_tlb0_invalid ();
 #endif
-	    shadow_tlb.touched = false;
+	    self->shadow_tlb.touched = false;
 	}
 
-    void update_tlb_dirty(tlb_t *tlb)
+/* The parameter was named `tlb', shadowing the member of the same name. */
+INLINE void ppc_softhvm_update_tlb_dirty (ppc_softhvm_t *self, ppc_hvm_tlb_t *entry)
+{
+    if (entry->touched)
+    {
+	self->htlb_dirty = true;
+	self->tlb_dirty_start = ppc_tlb0_get_vaddr (&entry->tlb0);
+	self->tlb_dirty_end = self->tlb_dirty_start + ppc_tlb0_get_size (&entry->tlb0) - 1;
+	entry->touched = false;
+    }
+}
+
+INLINE void ppc_softhvm_clear_tlb_dirty (ppc_softhvm_t *self)
 	{
-	    if (tlb->touched)
-	    {
-		htlb_dirty = true;
-		tlb_dirty_start = tlb->tlb0.get_vaddr();
-		tlb_dirty_end = tlb_dirty_start + tlb->tlb0.get_size() - 1;
-		tlb->touched = false;
-	    }
-	}
-    
-    void clear_tlb_dirty()
-	{
-	    shadow_tlb.touched = false;
+	    self->shadow_tlb.touched = false;
 	    for (int i = 0; i < PPC_MAX_TLB_ENTRIES; i++)
-		tlb[i].touched = false;
+		self->tlb[i].touched = false;
 	}
 
-    int find_tlb_entry(word_t vaddr)
+INLINE int ppc_softhvm_find_tlb_entry (ppc_softhvm_t *self, word_t vaddr)
 	{
 	    for (int i = 0; i < PPC_MAX_TLB_ENTRIES; i++) 
-		if (tlb[i].vaddr_in_entry(vaddr, pid))
+		if (ppc_hvm_tlb_vaddr_in_entry (&self->tlb[i], vaddr, self->pid))
 		    return i;
 	    return -1;
 	}
 
-    word_t get_ivor_ip(int index)
+INLINE word_t ppc_softhvm_get_ivor_ip (ppc_softhvm_t *self, int index)
 	{
-	    return ivpr | ivor[index];
+	    return self->ivpr | self->ivor[index];
 	}
 
-    void raise_exception(int num, except_regs_t *regs);
-    void raise_noncrit_interrupt(int num, except_regs_t *regs);
-    void raise_crit_interrupt(int num, except_regs_t *regs);
-    void raise_mcheck_interrupt(int num, except_regs_t *regs);
+void ppc_softhvm_raise_exception (ppc_softhvm_t *self, int num, except_regs_t *regs);
 
-    bool emulate_instruction(word_t instr, except_regs_t *regs);
-    void update_timers(u64_t time);
-    void handle_pending_events(except_regs_t *regs)
+void ppc_softhvm_raise_noncrit_interrupt (ppc_softhvm_t *self, int num, except_regs_t *regs);
+
+void ppc_softhvm_raise_crit_interrupt (ppc_softhvm_t *self, int num, except_regs_t *regs);
+
+void ppc_softhvm_raise_mcheck_interrupt (ppc_softhvm_t *self, int num, except_regs_t *regs);
+
+bool ppc_softhvm_emulate_instruction (ppc_softhvm_t *self, word_t instr, except_regs_t *regs);
+
+void ppc_softhvm_update_timers (ppc_softhvm_t *self, u64_t time);
+
+INLINE void ppc_softhvm_handle_pending_events (ppc_softhvm_t *self, except_regs_t *regs)
 	{
-	    if ((event_inject & (1 << evt_last) - 1) || tsr.pending_irqs())
-		inject_pending_events(regs);
+	    if ((self->event_inject & (1 << evt_last) - 1) || ppc_tsr_pending_irqs (&self->tsr))
+		ppc_softhvm_inject_pending_events (self, regs);
 	}
 
-    void load_guest_sprs()
+INLINE void ppc_softhvm_load_guest_sprs (ppc_softhvm_t *self)
 	{
-	    ppc_set_spr(SPR_SPRG4, sprg[4]);
-	    ppc_set_spr(SPR_SPRG5, sprg[5]);
-	    ppc_set_spr(SPR_SPRG6, sprg[6]);
-	    ppc_set_spr(SPR_SPRG7, sprg[7]);
+	    ppc_set_spr(SPR_SPRG4, self->sprg[4]);
+	    ppc_set_spr(SPR_SPRG5, self->sprg[5]);
+	    ppc_set_spr(SPR_SPRG6, self->sprg[6]);
+	    ppc_set_spr(SPR_SPRG7, self->sprg[7]);
 	}
 
-    word_t get_pid_for_msr()
-	{ return ppc_is_kernel_mode(msr) ? 2 : 1; }
+INLINE word_t ppc_softhvm_get_pid_for_msr (ppc_softhvm_t *self)
+	{ return ppc_is_kernel_mode(self->msr) ? 2 : 1; }
 
-    void init();
-};
+void ppc_softhvm_init (ppc_softhvm_t *self);
+

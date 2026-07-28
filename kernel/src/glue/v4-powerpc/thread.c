@@ -299,7 +299,7 @@ word_t arch_ktcb_get_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask,
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         word_t hwreg = (id - id_tlb0) * 4 + reg / 4;
-        word_t val = self->vm->tlb[hwreg].ctrlxfer_get(reg % 4);
+        word_t val = ppc_hvm_tlb_ctrlxfer_get (&self->vm->tlb[hwreg], reg % 4);
         
         TRACE_CTRLXFER_DETAILS( "\t (f%06d/%06d/%8s->m%06d): %08x", 
                                 reg, hwreg, ctrlxfer_get_hwregname(id, reg), 
@@ -320,7 +320,7 @@ word_t arch_ktcb_set_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask,
     for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
     {
         word_t hwreg = (id - id_tlb0) * 4 + reg / 4;
-        self->vm->tlb[hwreg].ctrlxfer_set(reg % 4, tcb_get_mr (src, (*src_mr)++));
+        ppc_hvm_tlb_ctrlxfer_set (&self->vm->tlb[hwreg], reg % 4, tcb_get_mr (src, (*src_mr)++));
         
         TRACE_CTRLXFER_DETAILS( "\t (m%06d->f%06d/%06d/%8s): %08x", 
                                 src_mr, reg, hwreg, ctrlxfer_get_hwregname(id, reg),
