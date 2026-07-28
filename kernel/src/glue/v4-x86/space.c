@@ -53,7 +53,7 @@ void space_free_cpu_top_pdir (space_t *self, cpuid_t cpu);
 fpage_t space_mapctrl (space_t *self, fpage_t fpage, mdb_ctrl_t ctrl, word_t attribute, bool unmap_all);
 void space_handle_pagefault (space_t *self, addr_t addr, addr_t ip, word_t access, bool kernel);
 space_t * space_top_pdir_to_space (word_t ptab);
-bool fpage_is_addr_in_fpage (fpage_t *self, addr_t addr);
+
 space_t * active_cpu_space_get (cpuid_t cpu);
 
 /* sign-extend an address to canonical form (x86_space_t::sign_extend). */
@@ -895,65 +895,8 @@ END_DECLS
 /* C forms of the fpage_t methods: all mem-pages here (CONFIG_X86_IO_FLEXPAGES
    off => arch_fpage always invalid); mem.x / raw are C-visible. */
 BEGIN_DECLS
-bool   fpage_is_nil_fpage (fpage_t *self)			{ return self->raw == 0; }
-/* CONFIG_X86_IO_FLEXPAGES is off, so the arch-page half of the C++
-   is_complete_fpage() is always false and only the mem-page test remains. */
-bool   fpage_is_complete_fpage (fpage_t *self)
-{ return fpage_is_mempage (self) && self->mem.x.size == 1 && self->mem.x.base == 0; }
-word_t fpage_get_size_log2 (fpage_t *self)
-{ return (self->mem.x.size == 1 && self->mem.x.base == 0) ? sizeof (word_t) * 8 : self->mem.x.size; }
-bool   fpage_is_range_overlapping (fpage_t *self, addr_t start, addr_t end)
-{
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t a = (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size));
-    if (start < a) return end > a;
-    return addr_offset (a, 1UL << self->mem.x.size) > start;
-}
-addr_t fpage_get_base (fpage_t *self)				{ return (addr_t) ((word_t) self->mem.x.base << 10); }
-addr_t fpage_get_address (fpage_t *self)			{ return (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size)); }
-word_t fpage_get_rwx (fpage_t *self)				{ return self->raw & 7; }
-void   fpage_set_rwx (fpage_t *self, word_t rwx)		{ self->raw = (self->raw & ~(word_t) 7) | (rwx & 7); }
-bool   fpage_is_read (fpage_t *self)				{ return self->mem.x.read; }
-bool   fpage_is_write (fpage_t *self)				{ return self->mem.x.write; }
-bool   fpage_is_execute (fpage_t *self)				{ return self->mem.x.execute; }
-void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write, bool exec)
-{
-    word_t abase = (base & (~0UL << size)) >> 10;
-    self->raw = 0;
-    self->mem.x.base = abase & (~0UL >> (BITS_WORD - L4_FPAGE_BASE_BITS));
-    self->mem.x.size = size & 0x3f;
-    self->mem.x.read = read;
-    self->mem.x.write = write;
-    self->mem.x.execute = exec;
-}
-word_t fpage_base_mask (fpage_t fp, word_t size)
-{ return ((~0UL) >> ((sizeof (word_t) * 8) - fpage_get_size_log2 (&fp))) &
-	 ((size == 0 ? (~0UL) : ~((~0UL) >> ((sizeof (word_t) * 8) - size)))); }
-addr_t fpage_address (fpage_t fp, word_t size)
-{ return (addr_t) ((word_t) fpage_get_base (&fp) & ~((1UL << size) - 1)); }
-bool   fpage_is_rwx (fpage_t *self)				{ return self->mem.x.read && self->mem.x.write && self->mem.x.execute; }
-bool   fpage_is_mempage (fpage_t *self)				{ (void) self; return true; }
-bool   fpage_is_archpage (fpage_t *self)			{ (void) self; return false; }
-bool   fpage_is_overlapping (fpage_t *self, fpage_t other)
-{
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t sa = (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size));
-    addr_t oa = (addr_t) (((word_t) other.mem.x.base << 10) & (~0UL << other.mem.x.size));
-    if (oa < sa) return addr_offset (oa, 1UL << other.mem.x.size) > sa;
-    return addr_offset (sa, 1UL << self->mem.x.size) > oa;
-}
-word_t fpage_get_size (fpage_t *self)				{ return 1UL << self->mem.x.size; }
-fpage_t fpage_complete_mem (void)				{ fpage_t r; r.raw = 0; r.mem.x.size = 1; return r; }
-void   fpage_set_rwx_all (fpage_t *self)			{ self->mem.x.read = 1; self->mem.x.write = 1; self->mem.x.execute = 1; }
-fpage_t fpage_nilpage (void)					{ fpage_t r; r.raw = 0; return r; }
-bool   fpage_is_addr_in_fpage (fpage_t *self, addr_t addr)
-{ return fpage_is_range_in_fpage (self, addr, (addr_t) ((word_t) addr + sizeof (addr_t))); }
-bool   fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end)
-{
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t a = fpage_get_address (self);
-    return (a <= start && addr_offset (a, fpage_get_size (self)) >= end);
-}
+
+
 END_DECLS
 
 
@@ -975,64 +918,15 @@ fpage_t   space_get_kip_page_area (space_t *self)		{ return self->base.data.kip_
 fpage_t   space_get_utcb_page_area (space_t *self)		{ return self->base.data.utcb_area; }
 word_t    space_sigma0_attributes (pgent_t *pg, addr_t addr, word_t size)	{ (void) pg; (void) addr; (void) size; return 0; }
 
-bool space_is_user_area (addr_t addr)
-{
-#if (USER_AREA_START != 0)
-    return (((word_t) sign_ext (addr)) >= USER_AREA_START &&
-	    ((word_t) sign_ext (addr)) < USER_AREA_END);
-#else
-    return (((word_t) sign_ext (addr)) < USER_AREA_END);
-#endif
-}
-bool space_is_user_area_addr (addr_t addr)			{ return space_is_user_area (addr); }
-bool space_is_user_area_fpage (fpage_t fpage)
-{ return space_is_user_area (fpage_get_address (&fpage)) &&
-	 space_is_user_area (addr_offset (fpage_get_address (&fpage), fpage_get_size (&fpage) - 1)); }
-bool space_is_tcb_area (addr_t addr)
-{
-#if defined(CONFIG_STATIC_TCBS)
-    return false;
-#else
-    return (((word_t) sign_ext (addr)) >= KTCB_AREA_START &&
-	    ((word_t) sign_ext (addr)) < KTCB_AREA_END);
-#endif
-}
+
 bool space_is_copy_area (addr_t addr)
 { return (((word_t) sign_ext (addr)) >= COPY_AREA_START &&
 	  ((word_t) sign_ext (addr)) < COPY_AREA_END); }
 
-bool space_is_mappable_addr (space_t *self, addr_t addr)
-{
-    fpage_t kip = self->base.data.kip_area, utcb = self->base.data.utcb_area;
-    return space_is_user_area (addr) &&
-	!fpage_is_addr_in_fpage (&kip, addr) &&
-	!fpage_is_addr_in_fpage (&utcb, addr);
-}
-bool space_is_mappable_fpage (space_t *self, fpage_t fp)
-{
-    fpage_t kip = self->base.data.kip_area, utcb = self->base.data.utcb_area;
-    return space_is_user_area_fpage (fp) &&
-	!fpage_is_overlapping (&kip, fp) &&
-	!fpage_is_overlapping (&utcb, fp);
-}
-bool space_is_initialized (space_t *self)
-{ fpage_t kip = self->base.data.kip_area; return !fpage_is_nil_fpage (&kip); }
 
 void space_map_sigma0 (space_t *self, addr_t addr)
 { space_add_mapping (self, addr, addr, PGSIZE_SIGMA, true, false, false, true); }
 
-fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool all)
-{
-    mdb_ctrl_t ctrl;
-    ctrl.raw = 0;
-    ctrl.mapctrl_self	= flush;
-    ctrl.unmap		= fpage_is_rwx (&fpage);
-    ctrl.set_rights	= !fpage_is_rwx (&fpage);
-    ctrl.reset_status	= 1;
-    ctrl.deliver_status	= 1;
-    fpage_set_rwx (&fpage, ~fpage_get_rwx (&fpage));
-    return space_mapctrl (self, fpage, ctrl, 0, all);
-}
 
 word_t space_get_copy_limit (space_t *self, addr_t addr, word_t limit)
 {
@@ -1081,57 +975,14 @@ bool space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)
 space_t * space_top_pdir_to_space (word_t ptab)
 { return phys_to_virt ((x86_top_pdir_t *) ptab)->space; }
 
-bool space_is_sigma0 (space_t *space)				{ return is_sigma0_space (space); }
-space_t * get_current_space_c (void)				{ return tcb_get_space (get_current_tcb ()); }
-space_t * get_kernel_space_c (void)				{ return kernel_space; }
+
 END_DECLS
 
 
 /* space_t::lookup_mapping (its out-param is a word_t X86_PGSIZE_*). */
 BEGIN_DECLS
-/* r_size is a pgent_t::pgsize_e* on the C++ side (asm "space_lookup_mapping"):
-   a 4-byte write, so the out-param is int* here (not word_t*). */
-bool space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t ** r_pg, int * r_size, cpuid_t cpu)
-{
-    pgent_t *pg = space_pgent_cpu (self, page_table_index (X86_PGSIZE_MAX, vaddr), cpu);
-    word_t pgsize = X86_PGSIZE_MAX;
 
-    for (;;)
-    {
-	if (!pg)
-	    return false;
-	else if (pgent_is_valid (pg, self, pgsize))
-	{
-	    if (pgent_is_subtree (pg, self, pgsize))
-	    {
-		if (pgsize == 0)
-		    return false;
 
-		pg = pgent_next (pgent_subtree (pg, self, pgsize), self, pgsize - 1, page_table_index (pgsize - 1, vaddr));
-		pgsize--;
-	    }
-	    else
-	    {
-		if (r_pg)
-		    *r_pg = pg;
-		if (r_size)
-		    *r_size = (int) pgsize;
-		return true;
-	    }
-	}
-	else
-	    return false;
-    }
-    return false;
-}
-
-bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size)
-{
-    int sz;
-    bool r = space_lookup_mapping (self, vaddr, r_pg, &sz, (cpuid_t) self->base.data.reference_ptab);
-    if (r_size) *r_size = (word_t) sz;
-    return r;
-}
 END_DECLS
 
 
@@ -1146,7 +997,7 @@ word_t  space_readmem_phys (addr_t paddr)			{ return space_t_readmem_phys (paddr
 word_t  space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redir)
 { return space_t_space_control (self, ctrl, kip_area, utcb_area, redir); }
 
-bool mem_region_is_empty (mem_region_t *self)			{ return self->high == 0; }
+
 void align_memregion (mem_region_t *region, word_t size)
 {
     region->low = (addr_t) ((word_t) region->low & ~(size - 1));
@@ -1195,44 +1046,104 @@ void reload_user_segregs_c (void)
 	: "r" (X86_UDS), "r" (X86_UTCBS));
 }
 
-void   tcb_sched_set_timeout (tcb_t *self, time_t t)
-{
-    if ((t.time.type == 1))
-	UNIMPLEMENTED ();
-    sched_ktcb_set_timeout_abs (&self->sched_state,
-				sched_get_current_time () + time_get_microseconds (&t), true);
-}
-void   tcb_init_saved_state (tcb_t *self)
-{
-    for (int l = 0; l < IPC_NESTING_LEVEL; l++)
-    {
-	self->misc.saved_state[l].state = THREAD_STATE_ABORTED;
-	self->misc.saved_state[l].partner = threadid_nilthread ();
-    }
-}
-bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
-fpage_t acceptor_get_arch_specific_rcvwindow (acceptor_t *self, tcb_t *dest)
-{ (void) self; (void) dest; fpage_t fp; fp.raw = 0; return fp; }
 
-bool   time_lt (time_t a, time_t b)
-{
-    u64_t curtime = sched_get_current_time ();
-    u64_t l_to, r_to;
-
-    if ((a.time.type == 1))
-	UNIMPLEMENTED ();
-    else if (time_is_never (&a))
-	l_to = ~0UL;
-    else
-	l_to = curtime + time_get_microseconds (&a);
-
-    if ((b.time.type == 1))
-	UNIMPLEMENTED ();
-    else if (time_is_never (&b))
-	r_to = ~0UL;
-    else
-	r_to = curtime + time_get_microseconds (&b);
-
-    return l_to < r_to;
-}
 END_DECLS
+space_t * get_kernel_space_c (void)				{ return kernel_space; }
+
+space_t * get_current_space_c (void)				{ return tcb_get_space (get_current_tcb ()); }
+
+bool   is_privileged_space_c (space_t *space)			{ return is_privileged_space (space); }
+
+fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool all)
+{
+    mdb_ctrl_t ctrl;
+    ctrl.raw = 0;
+    ctrl.mapctrl_self	= flush;
+    ctrl.unmap		= fpage_is_rwx (&fpage);
+    ctrl.set_rights	= !fpage_is_rwx (&fpage);
+    ctrl.reset_status	= 1;
+    ctrl.deliver_status	= 1;
+    fpage_set_rwx (&fpage, ~fpage_get_rwx (&fpage));
+    return space_mapctrl (self, fpage, ctrl, 0, all);
+}
+bool space_is_tcb_area (addr_t addr)
+{
+#if defined(CONFIG_STATIC_TCBS)
+    return false;
+#else
+    return (((word_t) sign_ext (addr)) >= KTCB_AREA_START &&
+	    ((word_t) sign_ext (addr)) < KTCB_AREA_END);
+#endif
+}
+
+bool space_is_user_area (addr_t addr)
+{
+#if (USER_AREA_START != 0)
+    return (((word_t) sign_ext (addr)) >= USER_AREA_START &&
+	    ((word_t) sign_ext (addr)) < USER_AREA_END);
+#else
+    return (((word_t) sign_ext (addr)) < USER_AREA_END);
+#endif
+}
+bool space_is_initialized (space_t *self)
+{ fpage_t kip = self->base.data.kip_area; return !fpage_is_nil_fpage (&kip); }
+
+bool space_is_mappable_addr (space_t *self, addr_t addr)
+{
+    fpage_t kip = self->base.data.kip_area, utcb = self->base.data.utcb_area;
+    return space_is_user_area (addr) &&
+	!fpage_is_addr_in_fpage (&kip, addr) &&
+	!fpage_is_addr_in_fpage (&utcb, addr);
+}
+
+bool space_is_mappable_fpage (space_t *self, fpage_t fp)
+{
+    fpage_t kip = self->base.data.kip_area, utcb = self->base.data.utcb_area;
+    return space_is_user_area_fpage (fp) &&
+	!fpage_is_overlapping (&kip, fp) &&
+	!fpage_is_overlapping (&utcb, fp);
+}
+
+/* r_size is a pgent_t::pgsize_e* on the C++ side (asm "space_lookup_mapping"):
+   a 4-byte write, so the out-param is int* here (not word_t*). */
+bool space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t ** r_pg, int * r_size, cpuid_t cpu)
+{
+    pgent_t *pg = space_pgent_cpu (self, page_table_index (X86_PGSIZE_MAX, vaddr), cpu);
+    word_t pgsize = X86_PGSIZE_MAX;
+
+    for (;;)
+    {
+	if (!pg)
+	    return false;
+	else if (pgent_is_valid (pg, self, pgsize))
+	{
+	    if (pgent_is_subtree (pg, self, pgsize))
+	    {
+		if (pgsize == 0)
+		    return false;
+
+		pg = pgent_next (pgent_subtree (pg, self, pgsize), self, pgsize - 1, page_table_index (pgsize - 1, vaddr));
+		pgsize--;
+	    }
+	    else
+	    {
+		if (r_pg)
+		    *r_pg = pg;
+		if (r_size)
+		    *r_size = (int) pgsize;
+		return true;
+	    }
+	}
+	else
+	    return false;
+    }
+    return false;
+}
+
+bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, word_t *r_size)
+{
+    int sz;
+    bool r = space_lookup_mapping (self, vaddr, r_pg, &sz, (cpuid_t) self->base.data.reference_ptab);
+    if (r_size) *r_size = (word_t) sz;
+    return r;
+}

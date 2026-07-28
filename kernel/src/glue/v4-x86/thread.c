@@ -152,25 +152,6 @@ word_t tcb_get_utcb_location (tcb_t *self)
 void   tcb_set_utcb_location (tcb_t *self, word_t loc)
 { utcb_t *dummy = (utcb_t *) 0; threadid_set_raw (&self->myself_local, loc + ((word_t) &dummy->mr[0])); }
 
-threadid_t tcb_get_pager (tcb_t *self)			{ return self->utcb->pager; }
-void   tcb_set_pager (tcb_t *self, threadid_t tid)	{ self->utcb->pager = tid; }
-void   tcb_set_exception_handler (tcb_t *self, threadid_t tid) { self->utcb->exception_handler = tid; }
-threadid_t tcb_get_exception_handler (tcb_t *self)	{ return self->utcb->exception_handler; }
-threadid_t tcb_get_virtual_sender (tcb_t *self)		{ return self->utcb->virtual_sender; }
-void   tcb_set_actual_sender (tcb_t *self, threadid_t tid) { self->utcb->virtual_sender = tid; }
-word_t tcb_get_user_handle (tcb_t *self)		{ return self->utcb->user_defined_handle; }
-void   tcb_set_user_handle (tcb_t *self, word_t handle)	{ self->utcb->user_defined_handle = handle; }
-word_t tcb_get_error_code (tcb_t *self)			{ return self->utcb->error_code; }
-void   tcb_set_error_code (tcb_t *self, word_t err)	{ self->utcb->error_code = err; }
-
-msg_tag_t tcb_get_tag (tcb_t *self)			{ msg_tag_t tag; tag.raw = self->utcb->mr[0]; return tag; }
-void   tcb_set_tag (tcb_t *self, msg_tag_t tag)		{ self->utcb->mr[0] = tag.raw; }
-
-time_t tcb_get_xfer_timeout_snd (tcb_t *self)		{ timeout_t t = self->utcb->xfer_timeout; return timeout_get_snd (&t); }
-time_t tcb_get_xfer_timeout_rcv (tcb_t *self)		{ timeout_t t = self->utcb->xfer_timeout; return timeout_get_rcv (&t); }
-
-void   tcb_set_global_id (tcb_t *self, threadid_t tid)
-{ self->myself_global = tid; ASSERT (self->utcb); self->utcb->my_global_id = tid; }
 
 void   tcb_set_cpu (tcb_t *self, cpuid_t cpu)
 {
@@ -197,46 +178,14 @@ void   tcb_init_tcbs (void)				{ /* Nothing to do (CONFIG_STATIC_TCBS off). */ }
 
 word_t * tcb_get_stack_top (tcb_t *self)		{ return (word_t *) addr_offset (self, KTCB_SIZE); }
 
-threadid_t tcb_get_saved_partner (tcb_t *self)		{ return self->misc.saved_state[0].partner; }
 
 void   tcb_arch_init_root_server (tcb_t *self, space_t *space, word_t ip, word_t sp)
 { (void) self; (void) ip; space_space_control (space, sp, fpage_nilpage (), fpage_nilpage (), threadid_nilthread ()); }
 
-bool   tcb_is_local_cpu (tcb_t *self)			{ return get_current_cpu () == tcb_get_cpu (self); }
 
 void   tcb_release_copy_area (tcb_t *self)		{ tcb_resources_release_copy_area (&self->resources, self, true); }
 
 
-/* Queue / present-list / lock wrappers. */
-void tcb_enqueue_send (tcb_t *self, tcb_t *t)
-{
-    ASSERT (!queue_state_is_set (&self->queue_state, QUEUE_STATE_SEND));
-    ENQUEUE_LIST_TAIL (t->send_head, self, send_list);
-    queue_state_set (&self->queue_state, QUEUE_STATE_SEND);
-}
-void tcb_dequeue_send (tcb_t *self, tcb_t *t)
-{
-    ASSERT (queue_state_is_set (&self->queue_state, QUEUE_STATE_SEND));
-    DEQUEUE_LIST (t->send_head, self, send_list);
-    queue_state_clear (&self->queue_state, QUEUE_STATE_SEND);
-}
-void tcb_enqueue_present (tcb_t *self)
-{
-#if defined(CONFIG_DEBUG)
-    spinlock_lock (&present_list_lock);
-    ENQUEUE_LIST_TAIL (global_present_list, self, present_list);
-    spinlock_unlock (&present_list_lock);
-#endif
-}
-void tcb_dequeue_present (tcb_t *self)
-{
-#if defined(CONFIG_DEBUG)
-    spinlock_lock (&present_list_lock);
-    DEQUEUE_LIST (global_present_list, self, present_list);
-    spinlock_unlock (&present_list_lock);
-#endif
-}
-void tcb_lock_init (tcb_t *self)			{ spinlock_init (&self->tcb_lock, 0); }
 void tcb_lock_state_init (tcb_t *self)
 {
 #if defined(CONFIG_SMP)
@@ -244,8 +193,6 @@ void tcb_lock_state_init (tcb_t *self)
     self->lock_state.flags.X.enabled = true;
 #endif
 }
-void tcb_lock (tcb_t *self)				{ spinlock_lock (&self->tcb_lock); }
-void tcb_unlock (tcb_t *self)				{ spinlock_unlock (&self->tcb_lock); }
 
 
 /* IPC / thread-switch / notify -- the arch bodies translated from x64/tcb.h. */
@@ -383,24 +330,9 @@ void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t arg1, w
 }
 
 
-/* Free-function C wrappers used by the C api/v4 files. */
-bool thread_control_interrupt_c (threadid_t irq_tid, threadid_t handler_tid)
-{ return thread_control_interrupt (irq_tid, handler_tid); }
-
-tcb_t * get_idle_tcb_c (void)			{ extern tcb_t *__idle_tcb; return __idle_tcb; }
 tcb_t * get_dummy_tcb_c (void)			{ extern tcb_t *__dummy_tcb; return __dummy_tcb; }
-void   handle_ipc_timeout_c (word_t state)	{ handle_ipc_timeout (state); }
-void   spin_forever_c (int pos)
-{
-#if defined(CONFIG_SPIN_WHEELS)
-    while (1)
-	((u16_t *) (DEBUG_SCREEN))[pos] += 1;
-#else
-    int dummy = 0;
-    while (1)
-	dummy = (dummy + 1) % 32;
-#endif
-}
+
+
 void   initial_switch_to_c (tcb_t *tcb)
 {
     __asm__ ("movq %0, %%rsp\n"
@@ -409,11 +341,8 @@ void   initial_switch_to_c (tcb_t *tcb)
 	     : "r" (tcb->stack));
     while (1);
 }
-void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush)	{ (void) from; (void) fpage; (void) flush; }
-void   arch_map_fpage_c (tcb_t *src, fpage_t snd_fpage, word_t snd_base, tcb_t *dst, fpage_t rcv_fpage, bool grant)
-{ (void) src; (void) snd_fpage; (void) snd_base; (void) dst; (void) rcv_fpage; (void) grant; }
+
+
 void   migrate_interrupt_start_c (tcb_t *tcb)	{ migrate_interrupt_start (tcb); }
 
-/* time_t helper (time_t is C-visible; time_lt lives in space.cc as it needs
-   the scheduler clock). */
-u64_t  time_get_microseconds (time_t *self)	{ return (1 << self->time.exponent) * self->time.mantissa; }
+

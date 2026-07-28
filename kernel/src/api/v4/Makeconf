@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/api/v4/, exregs.c ipc.c ipcx.c kernelinterface.c thread.c schedule.c space.c interrupt.c smp.c processor.c)
+SOURCES += $(addprefix src/api/v4/, accessors.c exregs.c ipc.c ipcx.c kernelinterface.c thread.c schedule.c space.c interrupt.c smp.c processor.c)
 
 SOURCES += $(addprefix src/api/v4/sched-$(SCHED)/, schedule.c)
 
