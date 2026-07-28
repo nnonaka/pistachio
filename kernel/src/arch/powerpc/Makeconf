@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/arch/powerpc/, string.c pghash.cc)
+SOURCES += $(addprefix src/arch/powerpc/, string.c pghash.c)
 
 ifeq ("$(CONFIG_X_PPC_SOFTHVM)","y")
 SOURCES += src/arch/powerpc/softhvm.c

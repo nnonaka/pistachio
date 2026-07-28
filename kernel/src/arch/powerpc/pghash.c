@@ -44,8 +44,8 @@
 #include INC_GLUE(bat.h)
 
 
-ppc_translation_t * ppc_htab_t::find_insertion( word_t virt, word_t vsid, 
-	word_t *slot, word_t *is_second_hash )
+ppc_translation_t * ppc_htab_find_insertion (ppc_htab_t *self, word_t virt, word_t vsid,
+					      word_t *slot, word_t *is_second_hash)
 {
     ppc_translation_t *groups[2];
     word_t hash;
@@ -56,10 +56,10 @@ ppc_translation_t * ppc_htab_t::find_insertion( word_t virt, word_t vsid,
     clean_slot = -1;
 
     /* Locate the primary and secondary PTEGs. */
-    hash = this->primary_hash( virt, vsid );
-    groups[0] = this->get_pteg( hash );
-    hash = this->secondary_hash( hash );
-    groups[1] = this->get_pteg( hash );
+    hash = ppc_htab_primary_hash (self,  virt, vsid );
+    groups[0] = ppc_htab_get_pteg (self,  hash );
+    hash = ppc_htab_secondary_hash (self,  hash );
+    groups[1] = ppc_htab_get_pteg (self,  hash );
 
     /* Search for an invalid pte, and while searching, keep track of 
      * unreferenced pages.
@@ -87,16 +87,16 @@ ppc_translation_t * ppc_htab_t::find_insertion( word_t virt, word_t vsid,
     return &groups[ clean_hash ][ clean_slot ];
 }
 
-SECTION(".init.memory") void ppc_htab_t::bat_map( void )
+SECTION(".init.memory") void ppc_htab_bat_map (ppc_htab_t *self)
 {
     ppc_bat_t bat;
     
     /*  Map with a bat register. */
     bat.raw.upper = bat.raw.lower = 0;
-    bat.x.bepi = (word_t)this->base >> BAT_BEPI;
-    bat.x.bl = (this->size-1) >> 17;
+    bat.x.bepi = (word_t)self->base >> BAT_BEPI;
+    bat.x.bl = (self->size-1) >> 17;
     bat.x.vs = 1;
-    bat.x.brpn = this->phys_base >> BAT_BRPN;
+    bat.x.brpn = self->phys_base >> BAT_BRPN;
     bat.x.m = 1;
     bat.x.pp = BAT_PP_READ_WRITE;
 
@@ -105,26 +105,25 @@ SECTION(".init.memory") void ppc_htab_t::bat_map( void )
     isync();
 }
 
-SECTION(".init.memory") void ppc_htab_t::init( word_t phys_base, 
-	word_t virt_start, word_t size )
+SECTION(".init.memory") void ppc_htab_init (ppc_htab_t *self, word_t phys_base, word_t virt_start, word_t size)
 {
-    this->base = (ppc_translation_t *)virt_start;
-    this->size = size;
-    this->phys_base = phys_base;
-    this->htab_mask = (size-1) >> 16;
-    this->hash_mask = (this->htab_mask << 10) | ((1 << 10) - 1);
+    self->base = (ppc_translation_t *)virt_start;
+    self->size = size;
+    self->phys_base = phys_base;
+    self->htab_mask = (size-1) >> 16;
+    self->hash_mask = (self->htab_mask << 10) | ((1 << 10) - 1);
 
     /* Activate the bat register, and zero the memory region (which invalidates
      * all PTE's.
      */
-    this->bat_map();
+    ppc_htab_bat_map (self);
     zero_block( (word_t *)virt_start, size );
 }
 
 
 /* Locations in the inlined assembler in ppc_htab_install() */
-extern "C" void ppc_htab_install_real( void );
-extern "C" void ppc_htab_install_real_exit( void );
+EXTERN_C void ppc_htab_install_real( void );
+EXTERN_C void ppc_htab_install_real_exit( void );
 
 static inline void ppc_htab_install( ppc_sdr1_t sdr1, ppc_segment_t segment_val )
 {
@@ -187,12 +186,12 @@ static inline void ppc_htab_install( ppc_sdr1_t sdr1, ppc_segment_t segment_val 
 	    : "ctr", "10" );
 }
 
-SECTION(".init.memory") void ppc_htab_t::activate( ppc_segment_t segment_val )
+SECTION(".init.memory") void ppc_htab_activate (ppc_htab_t *self, ppc_segment_t segment_val)
 {
     ppc_sdr1_t sdr1;
 
-    sdr1.x.htaborg = (word_t)this->phys_base >> POWERPC_HTABORG_SHIFT;
-    sdr1.x.htabmask = this->htab_mask;
+    sdr1.x.htaborg = (word_t)self->phys_base >> POWERPC_HTABORG_SHIFT;
+    sdr1.x.htabmask = self->htab_mask;
 
     ppc_htab_install( sdr1, segment_val );
 }
