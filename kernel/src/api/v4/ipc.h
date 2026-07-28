@@ -156,6 +156,14 @@ INLINE word_t msg_item_get_string_length (const msg_item_t *self)   { return sel
 INLINE word_t msg_item_get_string_ptr_count (const msg_item_t *self){ return self->num_ptrs + 1; }
 INLINE bool   msg_item_is_string_compound (const msg_item_t *self)  { return self->continuation; }
 INLINE word_t msg_item_get_string_cache_hints (const msg_item_t *self) { return self->type & 3; }
+#if defined(CONFIG_X_CTRLXFER_MSG)
+INLINE bool   msg_item_is_ctrlxfer_item (const msg_item_t *self)  { return self->type == 6; }
+INLINE word_t msg_item_get_ctrlxfer_id (const msg_item_t *self)
+{ ASSERT (msg_item_is_ctrlxfer_item (self)); return self->id; }
+INLINE word_t msg_item_get_ctrlxfer_mask (const msg_item_t *self)
+{ ASSERT (msg_item_is_ctrlxfer_item (self)); return self->mask; }
+INLINE bool   msg_item_more_ctrlxfer_items (const msg_item_t *self) { return self->continued; }
+#endif
 INLINE word_t msg_item_get_snd_base (const msg_item_t *self)	{ return self->raw & (~0x3ffUL); }
 
 struct acceptor_t
@@ -179,6 +187,9 @@ INLINE void acceptor_set_rcv_window (acceptor_t *self, fpage_t fpage)
 { word_t window = fpage.raw >> 4; self->x.rcv_window = window & (~0UL >> 4); }
 INLINE bool   acceptor_accept_strings (const acceptor_t *self)	{ return self->x.strings; }
 INLINE word_t acceptor_get_rcv_window (const acceptor_t *self)	{ return self->x.rcv_window << 4; }
+#if defined(CONFIG_X_CTRLXFER_MSG)
+INLINE bool   acceptor_accept_ctrlxfer (const acceptor_t *self)	{ return self->x.ctrlxfer; }
+#endif
 
 /* get_arch_specific_rcvwindow calls into the arch mapping layer, so it is a
    real wrapper (defined in glue thread.cc with the map.h chain in scope). */

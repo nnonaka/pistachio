@@ -144,18 +144,19 @@ msg_tag_t extended_transfer(tcb_t * src, tcb_t * dst, msg_tag_t msgtag)
 	src_item.raw = tcb_get_mr (src, src_idx);
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-	if (src_item.is_ctrlxfer_item())
+	if (msg_item_is_ctrlxfer_item (&src_item))
 	{
-	    bool src_mr = !src->flags.is_set(tcb_t::kernel_ctrlxfer_msg);
-	    bool dst_mr = !acceptor.accept_ctrlxfer();
+	    bool src_mr = !tcb_flags_is_set (src, TCB_FLAG_KERNEL_CTRLXFER_MSG);
+	    bool dst_mr = !acceptor_accept_ctrlxfer (&acceptor);
 	    word_t cxfer_regs;
 
 	    TRACEPOINT(IPC_CTRLXFER_ITEM,
 		       "ctrlxfer item: ipc %t->%t id=%d, mask=%x %c->%c",
-		       src, dst, src_item.get_ctrlxfer_id(), src_item.get_ctrlxfer_mask(),
+		       src, dst, msg_item_get_ctrlxfer_id (&src_item), msg_item_get_ctrlxfer_mask (&src_item),
 		       src_mr ? 'm' : 'f', dst_mr ? 'm' : 'f');
 
-	    cxfer_regs = src->ctrlxfer(dst, src_item, src_idx, msgtag.x.untyped+1+total_cxfer_mrs, src_mr, dst_mr);
+	    cxfer_regs = tcb_ctrlxfer (src, dst, src_item, src_idx,
+				       msgtag.x.untyped+1+total_cxfer_mrs, src_mr, dst_mr);
 
 	    src_idx += src_mr ? cxfer_regs : 1;
 	    msgtag.x.typed += src_mr ? 0 : cxfer_regs - 1;

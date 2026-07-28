@@ -552,12 +552,12 @@ word_t tcb_get_user_flags (tcb_t *self)
  */
 addr_t tcb_get_user_ip (tcb_t *self)
 {
-    return addr_t(get_user_syscall_regs(self)->srr0_ip);
+    return (addr_t) get_user_syscall_regs(self)->srr0_ip;
 }
 
 addr_t tcb_get_user_sp (tcb_t *self)
 {
-    return addr_t(get_user_syscall_regs(self)->r1_stack);
+    return (addr_t) get_user_syscall_regs(self)->r1_stack;
 }
 
 word_t tcb_get_utcb_location (tcb_t *self)
@@ -580,12 +580,12 @@ void tcb_init_stack (tcb_t *self)
  **********************************************************************/
 void tcb_notify (tcb_t *self, void (*func)(void))
 {
-    self->notify( (void (*)(word_t, word_t))func, 0, 0 );
+    tcb_notify_word2 (self, (void (*)(word_t, word_t))func, 0, 0);
 }
 
 void tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg1)
 {
-    self->notify( (void (*)(word_t, word_t))func, arg1, 0 );
+    tcb_notify_word2 (self, (void (*)(word_t, word_t))func, arg1, 0);
 }
 
 /**********************************************************************
@@ -618,7 +618,7 @@ void tcb_return_from_user_interruption (tcb_t *self)
     // exit path.  So we jump to the point in assembler code which
     // starts restoring the user's full exception context.
 
-    return_stack = (word_t)self->get_stack_top() - 
+    return_stack = (word_t) tcb_get_stack_top (self) - 
 	(sizeof(except_regs_t) + EABI_STACK_SIZE);
 
     // Install the stack, and jump to the context store code.
@@ -697,12 +697,12 @@ void tcb_set_user_flags (tcb_t *self, const word_t flags)
 
 void tcb_set_user_ip (tcb_t *self, addr_t ip)
 {
-    get_user_syscall_regs(self)->srr0_ip = word_t(ip);
+    get_user_syscall_regs(self)->srr0_ip = (word_t) ip;
 }
 
 void tcb_set_user_sp (tcb_t *self, addr_t sp)
 {
-    get_user_syscall_regs(self)->r1_stack = word_t(sp);
+    get_user_syscall_regs(self)->r1_stack = (word_t) sp;
 }
 
 /********************************************************************** 
@@ -723,12 +723,12 @@ void tcb_set_utcb_location (tcb_t *self, word_t utcb_location)
 void tcb_switch_to (tcb_t *self, tcb_t * dest)
 {
     ASSERT(dest->stack);
-    ASSERT(get_cpu() == dest->get_cpu());
+    ASSERT(get_current_cpu() == tcb_get_cpu (dest));
     ASSERT(dest != self);
 
     // TODO: adjust the thread switch return address to load 
     // resources.  Thus the common path need not check for a load.
-    if( EXPECT_FALSE(self->resource_bits) )
+    if( EXPECT_FALSE(resource_bits_have_resources (&self->resource_bits)) )
 	tcb_resources_save (&self->resources, self);
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
@@ -818,6 +818,6 @@ void tcb_switch_to (tcb_t *self, tcb_t * dest)
 	      "cr0", "cr1", "cr2", "cr3", "cr4", "cr5", "cr6", "cr7", "xer"
         );
 
-    if( EXPECT_FALSE(self->resource_bits) )
+    if( EXPECT_FALSE(resource_bits_have_resources (&self->resource_bits)) )
 	tcb_resources_load (&self->resources, self);
 }

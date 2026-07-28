@@ -242,6 +242,20 @@ INLINE void tcb_deallocate (threadid_t dest)			{ (void) dest; }
 #define TCB_FLAG_HAS_XFER_TIMEOUT	0	/* tcb_t::has_xfer_timeout */
 #define TCB_FLAG_SCHEDULE_IN_PROGRESS	1	/* tcb_t::schedule_in_progress */
 #define TCB_FLAG_KERNEL_CTRLXFER_MSG	2	/* tcb_t::kernel_ctrlxfer_msg */
+#if defined(CONFIG_X_CTRLXFER_MSG)
+/* NB: tcb_ctrlxfer was tcb_t::ctrlxfer, which is declared and called but has
+   no definition anywhere -- not in this tree and not in the original import
+   that introduced control-transfer items as an experimental feature. So a
+   CONFIG_X_CTRLXFER_MSG build compiles but cannot link, independently of this
+   migration. */
+word_t tcb_ctrlxfer (tcb_t *self, tcb_t *dst, msg_item_t item, word_t src_idx,
+		     word_t dst_idx, bool src_mr, bool dst_mr);
+void   tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t mask);
+ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault);
+#if defined(CONFIG_DEBUG)
+void   tcb_dump_ctrlxfer_state (tcb_t *self, bool extended);
+#endif
+#endif
 INLINE bool tcb_flags_is_set (const tcb_t *self, word_t bit)
     { return (self->flags.maskvalue & (1UL << bit)) != 0; }
 INLINE void tcb_flags_add (tcb_t *self, word_t bit)

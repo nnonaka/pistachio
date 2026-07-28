@@ -62,9 +62,9 @@
 
 #define SYS_IPC_PREAMBLE					\
   threadid_t to_tid, from_tid; timeout_t timeout;		\
-  to_tid.set_raw(__to_tid);					\
-  from_tid.set_raw(__from_tid);					\
-  timeout.set_raw(__timeout);
+  threadid_set_raw (&to_tid, __to_tid);				\
+  threadid_set_raw (&from_tid, __from_tid);			\
+  timeout.raw = __timeout;
 
 #else
 #define SYS_IPC(to, from, timeout)				\
@@ -169,8 +169,9 @@ do {									\
  * callers.  These macros will only work from the top-level ipc() function,
  * since they access frame information.
  */
-#define return_ipc(from) return_kernel_ipc(from.get_raw())
-#define return_ipc_error() return_kernel_ipc(threadid_t::nilthread())
+/* `from' may be an rvalue, so read .raw rather than taking its address. */
+#define return_ipc(from) return_kernel_ipc((from).raw)
+#define return_ipc_error() return_kernel_ipc(threadid_nilthread().raw)
 
 #define return_user_ipc(ret_val)					\
 do {									\
@@ -189,7 +190,7 @@ do {									\
  * can we, since we have no access to the call-chain when we want to 
  * invoke return_ipc_abort().
  */
-#define return_ipc_abort() return_user_ipc(threadid_t::nilthread())
+#define return_ipc_abort() return_user_ipc(threadid_nilthread().raw)
  
 #define return_user_1param(ret_val)					\
 do {									\

@@ -212,70 +212,76 @@ static bool perform_exregs (tcb_t *src, tcb_t * dst, exregs_ctrl_t * control, wo
 #if defined(CONFIG_X_CTRLXFER_MSG)
     word_t items = 0;
     msg_item_t src_item;
-    acceptor_t acceptor = dst->get_br(0);
+    acceptor_t acceptor;
 
-    if (ctrl.is_set(exregs_ctrl_t::ctrlxfer_conf_flag))
+    acceptor.raw = tcb_get_br (dst, 0);
+
+    if (exregs_ctrl_is_set (&ctrl, EXREGS_CTRL_CTRLXFER_CONF_FLAG))
     {
 	do
 	{
-	    src_item.raw = src->get_mr(src_idx++);
+	    src_item.raw = tcb_get_mr (src, src_idx++);
 
-	    if (!src_item.is_ctrlxfer_item())
+	    if (!msg_item_is_ctrlxfer_item (&src_item))
 		break;
 
 	    TRACEPOINT(IPC_CTRLXFER_ITEM, "ctrlxfer item: conf %t->%t fault=%d, id_mask=%x",
-		       src, dst, src_item.get_ctrlxfer_id(), src_item.get_ctrlxfer_mask());
+		       src, dst, msg_item_get_ctrlxfer_id (&src_item),
+		       msg_item_get_ctrlxfer_mask (&src_item));
 
-	    dst->set_fault_ctrlxfer_items( src_item.get_ctrlxfer_id(),
-					   ctrlxfer_mask_t(src_item.get_ctrlxfer_mask()));
+	    {
+		ctrlxfer_mask_t mask;
+		mask.maskvalue = msg_item_get_ctrlxfer_mask (&src_item);
+		tcb_set_fault_ctrlxfer_items (dst, msg_item_get_ctrlxfer_id (&src_item), mask);
+	    }
 
-	} while (src_item.more_ctrlxfer_items());
+	} while (msg_item_more_ctrlxfer_items (&src_item));
 
     }
-    if (ctrl.is_set(exregs_ctrl_t::ctrlxfer_read_flag))
+    if (exregs_ctrl_is_set (&ctrl, EXREGS_CTRL_CTRLXFER_READ_FLAG))
     {
 	do
 	{
-	    src_item.raw = src->get_mr(src_idx);
+	    src_item.raw = tcb_get_mr (src, src_idx);
 
-	    if (!src_item.is_ctrlxfer_item() || !acceptor.accept_ctrlxfer())
+	    if (!msg_item_is_ctrlxfer_item (&src_item) || !acceptor_accept_ctrlxfer (&acceptor))
 		break;
 
     	    TRACEPOINT(IPC_CTRLXFER_ITEM,
 		       "ctrlxfer item: read %t->%t id=%d, mask=%x (m->%c)",
 		       src, dst,
-		       src_item.get_ctrlxfer_id(), src_item.get_ctrlxfer_mask(),
-		       acceptor.accept_ctrlxfer() ? 'f' : 'm');
+		       msg_item_get_ctrlxfer_id (&src_item), msg_item_get_ctrlxfer_mask (&src_item),
+		       acceptor_accept_ctrlxfer (&acceptor) ? 'f' : 'm');
 
-	    if( (items = dst->ctrlxfer(src, src_item, 0, src_idx, false, true)) == 0)
+	    if( (items = tcb_ctrlxfer (dst, src, src_item, 0, src_idx, false, true)) == 0)
 		break;
 
 	    src_idx += items;
 
-	} while (src_item.more_ctrlxfer_items());
+	} while (msg_item_more_ctrlxfer_items (&src_item));
 
     }
-    if (ctrl.is_set(exregs_ctrl_t::ctrlxfer_write_flag))
+    if (exregs_ctrl_is_set (&ctrl, EXREGS_CTRL_CTRLXFER_WRITE_FLAG))
     {
 	do
 	{
-	    src_item.raw = src->get_mr(src_idx);
+	    src_item.raw = tcb_get_mr (src, src_idx);
 
-	    if (!src_item.is_ctrlxfer_item() || !acceptor.accept_ctrlxfer())
+	    if (!msg_item_is_ctrlxfer_item (&src_item) || !acceptor_accept_ctrlxfer (&acceptor))
 		break;
 
     	    TRACEPOINT(IPC_CTRLXFER_ITEM,
 		       "ctrlxfer item: write %t->%t id=%d, mask=%x (m->%c)",
 		       src, dst,
-		       src_item.get_ctrlxfer_id(), src_item.get_ctrlxfer_mask(),
-		       acceptor.accept_ctrlxfer() ? 'f' : 'm');
+		       msg_item_get_ctrlxfer_id (&src_item), msg_item_get_ctrlxfer_mask (&src_item),
+		       acceptor_accept_ctrlxfer (&acceptor) ? 'f' : 'm');
 
-	    if( (items = src->ctrlxfer(dst, src_item, src_idx, 0, true, false)) == 0)
+	    if( (items = tcb_ctrlxfer (src, dst, src_item, src_idx, 0, true, false)) == 0)
 		break;
 
 	    src_idx += items;
 
-	} while (src_item.more_ctrlxfer_items());
+	} while (msg_item_more_ctrlxfer_items (&src_item));
 
     }
 
