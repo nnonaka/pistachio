@@ -3448,3 +3448,79 @@ Grepping for `.cc` sources and for `g++` both missed this, because the C++ came
 from `$(CC) -x c++` inside a code generator. Before declaring a language
 migration complete, read the build rules for explicit `-x`, and check generated
 translation units as well as checked-in ones.
+
+## §96 — Collapse step 5: the remaining 71 headers
+
+With the tcb_layout generator switched to `-x c` (§95), no C++ translation unit
+is produced anywhere in a working x86 build, and the whole remaining set could
+go at once. Five batches, 71 files, **8457 lines of dead C++ branch**:
+
+    src/platform          5 headers    367 lines
+    src/arch/x86         14 headers   1905 lines
+    src/generic          13 headers   1890 lines
+    src/glue/v4-x86      16 headers   1340 lines
+    src/api/v4           23 headers   2955 lines
+
+`src/` is now free of `__cplusplus` guards except `glue/v4-powerpc64/config.h`,
+left with the rest of powerpc per §93.
+
+### Doing it with a tool instead of by hand
+
+§92 collapsed four headers by hand and got a dangling `#else`/`#endif` twice.
+At 212 conditionals that failure mode is a certainty, so this pass used a small
+script that tracks `#if/#ifdef/#ifndef` nesting properly, evaluates only
+expressions it fully understands (`defined(__cplusplus)`, the negation, and
+conjunctions where one term settles it), and **refuses to touch a file** whose
+conditionals it cannot decide or that comes out unbalanced. It was tested
+against a fixture covering nesting, compound conditions, `#ifdef`/`#ifndef`
+spellings, unrelated conditionals inside dropped branches, and blocks with no
+`#else`, before being pointed at the tree. `unifdef -U__cplusplus` would have
+done the same job; it is not installed here and installing it needs root.
+
+### "Byte-identical" was never byte-identical
+
+The migration has claimed byte-identical kernels for ~90 sections. Checking
+properly showed those claims were **size comparisons**: two consecutive builds
+of an unmodified tree produce different images. The difference is exactly two
+bytes, inside the `L4Ka::Pistachio - built on <date> <time>` string. Everything
+else is deterministic.
+
+That makes a real check cheap, so this pass used one: dump the disassembly with
+addresses and opcode bytes stripped, and diff it against the previous commit's.
+Results:
+
+    platform    4 instructions differ  -- all __LINE__ immediates
+    arch/x86    identical
+    generic     identical
+    glue/v4-x86 identical
+    api/v4     12 instructions differ  -- all __LINE__ immediates
+
+The only thing a guard collapse can legitimately change is `__LINE__`, because
+deleting lines from a header renumbers the assert sites below them. Each such
+site compiles to `mov $<line>,%edx` ahead of the assert `printf`, and the shifts
+are constant per header (70, 100 and 175 lines in the api/v4 batch), which is
+what a deletion of that many lines above an assert produces. Nothing else in
+any of the five images moved.
+
+Runtime: boottest PASS, and the scratch `CONFIG_TRACEBUFFER` config rebuilt and
+re-driven -- `showfilters` still `ffffffffffffffff`, `dump` still 32 records,
+`IPC_DETAILS` still 80 and `KMEM_ALLOC` still 41, matching §94 exactly.
+
+### What the collapse exposed, and the follow-up it leaves
+
+Three `.c` files carry `extern` declarations they added because the header's
+only declaration sat in a C++-only block: `do_xcpu_send_irq` (api/v4/
+interrupt.c), `notify_prologue` / `active_cpu_space_set` / the present-list
+globals (glue/v4-x86/thread.c), and a local copy of `addr_to_tcb`
+(kdb/api/v4/thread.c). Collapsing deleted those C++ branches, so **these local
+declarations are now the only declarations of those symbols** — a duplicate
+`extern` that no header can keep in step. The comments now say so. Moving them
+into the headers is the obvious next cleanup and was left out of a pass whose
+whole verification argument rests on changing no generated code.
+
+**Lesson: pick a verification that can actually fail.** Comparing sizes passed
+on every one of these batches, and would have passed just as happily if a
+collapse had silently dropped a live declaration, because the image is padded
+and rounded. The disassembly diff is barely more work, distinguishes "identical"
+from "identical except six asserts", and is the reason this pass can say what
+changed rather than that nothing appeared to.

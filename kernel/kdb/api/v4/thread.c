@@ -34,7 +34,8 @@
 #include INC_API(tcb.h)
 
 
-/* addr_to_tcb is inside tcb.h's __cplusplus block */
+/* A local copy of addr_to_tcb, which was declared only in tcb.h's C++ branch
+   and went with the guard collapse.  Keep it in step with KTCB_MASK. */
 INLINE tcb_t * to_tcb (addr_t addr) { return (tcb_t *) ((word_t) addr & KTCB_MASK); }
 
 /* From generic/print.c (C now -- no linkage decoration needed here) */

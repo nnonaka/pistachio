@@ -47,9 +47,10 @@
    below calls it directly. */
 x86_x64_sysret_t sys_ipc (timeout_t timeout, threadid_t to, threadid_t from);
 
-/* Symbols declared C++-only in their headers (notify_prologue in x64/tcb.h;
-   active_cpu_space_set inside space.h's __cplusplus block; the present-list
-   globals under tcb.h's C++ section) -- thread.c needs plain C declarations. */
+/* These were declared only in the C++ branches of x64/tcb.h (notify_prologue),
+   space.h (active_cpu_space_set) and tcb.h (the present-list globals).  Those
+   branches went with the guard collapse, so these are now the only
+   declarations -- they belong back in their headers. */
 extern void notify_prologue (void);
 extern void active_cpu_space_set (cpuid_t cpu, space_t *s);
 #if defined(CONFIG_DEBUG)

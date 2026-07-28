@@ -63,8 +63,9 @@ bool tcb_is_interrupt_thread (tcb_t *);
 static void irq_thread(void);
 
 #if defined(CONFIG_SMP)
-/* defined in api/v4/schedule.cc with C linkage; the C-linkage decl in
-   schedule.h sits inside its __cplusplus guard, so declare it for C here. */
+/* Defined in api/v4/schedule.c.  Its only declaration used to live in
+   schedule.h's C++ branch, which went with the guard collapse, so this local
+   one is now the sole declaration -- it belongs in schedule.h. */
 void do_xcpu_send_irq (cpu_mb_entry_t * entry);
 #endif
 
