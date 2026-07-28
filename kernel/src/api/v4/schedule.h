@@ -175,6 +175,9 @@ END_DECLS
    data, so it has that base's layout (composed as __base at offset 0). */
 typedef struct scheduler_t { policy_scheduler_t __base; } scheduler_t;
 
+/* per-policy scheduler initialisation, called from scheduler_init() */
+void policy_scheduler_init (scheduler_t *self);
+
 
 #endif /*__API__V4__SCHEDULE_H__*/
 

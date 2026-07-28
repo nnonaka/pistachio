@@ -985,6 +985,16 @@ void xcpu_request7 (cpuid_t dstcpu, xcpu_handler_t handler, tcb_t *tcb,
 void scheduler_init (scheduler_t *self, bool bootcpu);
 void scheduler_start (scheduler_t *self, cpuid_t cpuid);
 
+/* was scheduler_t::policy_scheduler_init; the body used to be inlined into
+   api/v4/schedule.c's scheduler_init. */
+void policy_scheduler_init (scheduler_t *self)
+{
+    self->__base.wakeup_list = (tcb_t *) 0;
+    for (int i = 0; i <= MAX_PRIORITY; i++)
+	self->__base.root_prio_queue.prio_queue[i] = (tcb_t *) 0;
+    self->__base.root_prio_queue.max_prio = -1;
+}
+
 void sched_init (bool bootcpu)		{ scheduler_init (cur_sched (), bootcpu); }
 void sched_start (cpuid_t cpu)		{ scheduler_start (cur_sched (), cpu); }
 

@@ -350,12 +350,13 @@ void SECTION(".init") scheduler_init(scheduler_t *self, bool bootcpu)
 {
 
     TRACE_INIT ("\tInitializing threading (CPU %d)\n", get_current_cpu());
-    /* inlined policy_scheduler_init() (protected in the C++ class): reset the
-       wakeup list and the priority queue via the C-visible __base. */
-    self->__base.wakeup_list = (tcb_t *) 0;
-    for (int i = 0; i <= MAX_PRIORITY; i++)
-	self->__base.root_prio_queue.prio_queue[i] = (tcb_t *) 0;
-    self->__base.root_prio_queue.max_prio = -1;
+    /* Was protected scheduler_t::policy_scheduler_init().  This used to be
+       inlined here, which silently hard-coded the round-robin policy's idea of
+       "empty scheduler" into shared code: sched-hs additionally has to set up
+       the root queue's domain tcb and the scheduled_queue/scheduled_tcb pair,
+       and without them its first enqueue walks a NULL domain tcb.  Each policy
+       supplies its own. */
+    policy_scheduler_init (self);
 
 
     /* set idle-magic */

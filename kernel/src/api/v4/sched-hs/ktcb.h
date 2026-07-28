@@ -127,6 +127,32 @@ INLINE u64_t  hs_sched_get_pass (hs_sched_ktcb_t *self)			{ return self->pass; }
 
 INLINE prio_queue_t * hs_sched_get_prio_queue (hs_sched_ktcb_t *self)	{ return self->prio_queue; }
 
+/* DEFAULT_TIMESLICE_LENGTH was time_t::period(625,3): mantissa 625,
+   exponent 3, type 0.  DEFAULT_TOTAL_QUANTUM was time_t::never() (raw 0). */
+INLINE time_t hs_default_timeslice (void)
+{ time_t t; t.raw = 0; t.time.mantissa = 625; t.time.exponent = 3; t.time.type = 0; return t; }
+
+INLINE void hs_sched_init_timeslice (hs_sched_ktcb_t *self, time_t timeslice)
+{
+    ASSERT (timeslice.time.type == 0);	/* is_period */
+    /* time_t::get_microseconds inlined (declared later, in tcb.h) */
+    self->current_timeslice = (s64_t)
+	(self->timeslice_length = (u64_t) ((1 << timeslice.time.exponent) * timeslice.time.mantissa));
+}
+
+/* init_total_quantum(quantum): never -> 0, and a fresh timeslice either way. */
+INLINE void hs_sched_init_total_quantum (hs_sched_ktcb_t *self, time_t quantum)
+{
+    if (quantum.raw == 0)		/* is_never */
+	self->total_quantum = 0;
+    else
+    {
+	ASSERT (quantum.time.type == 0);	/* is_period */
+	self->total_quantum = (u64_t) ((1 << quantum.time.exponent) * quantum.time.mantissa);
+    }
+    self->current_timeslice = (s64_t) self->timeslice_length;
+}
+
 /* The domain queue is stored in the TCB's kernel stack area; `self' stands in
    for the C++ `this'.  Guarded because OFS_TCB_KERNEL_STACK is what the
    tcb_layout pass is in the middle of computing.  The C++ form fell off the

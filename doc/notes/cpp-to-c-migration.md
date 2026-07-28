@@ -4040,3 +4040,84 @@ work.
 The x86 rr gate is unaffected throughout: `sched-hs/*` is only reachable with
 `SCHED=hs`, and the gate kernel compares byte-identical apart from its 4-byte
 `.kip` timestamp, 705 symbols with identical bodies.
+
+
+## §104 — sched-hs, part 2: it boots, and the bug that only a second policy could expose
+
+`src/api/v4/sched-hs/` is now C: `ktcb.h`, `schedule.h`, `schedule.c`, plus
+`kdb/api/v4/schedule-hs.c`. `schedule_functions.h` is gone, its 686 lines folded
+into `schedule.c` alongside the 768 from `schedule.cc`, exactly as rr did.
+
+**The hs kernel builds, links and boots**: 73 objects, 0 errors, 0 implicit
+declarations, 0 linker warnings, a 340968-byte image that reaches userland with
+sigma0 and ROOTTASK created and the L4 test suite running. This is the first
+verification in the whole powerpc/hs stretch that is *behavioural* rather than
+structural — x86 can be booted, unlike ppc44x.
+
+### The bug: shared code that had quietly become rr-specific
+
+The first hs kernel linked cleanly and then triple-faulted with no output at
+all. The cause was not in sched-hs. `api/v4/schedule.c`'s `scheduler_init()`
+carried this:
+
+    /* inlined policy_scheduler_init() (protected in the C++ class): reset the
+       wakeup list and the priority queue via the C-visible __base. */
+    self->__base.wakeup_list = 0;
+    for (int i = 0; i <= MAX_PRIORITY; i++) ...prio_queue[i] = 0;
+    self->__base.root_prio_queue.max_prio = -1;
+
+Three fields — which is precisely what **round-robin** needs. hs additionally
+requires the root queue's `domain_tcb`, its `refcnt`/`depth`/`count`, the period
+counters, and the `scheduled_tcb`/`scheduled_queue` pair. Without them the very
+first `enqueue_ready` walks `prio_queue_get_domain_tcb()` == NULL and dies
+before a single character reaches the console.
+
+When a policy method is inlined into shared code, the shared code silently
+acquires that policy's assumptions. It was correct while rr was the only policy
+that built, and there was no way to notice: sched-hs had not compiled in years.
+`policy_scheduler_init(scheduler_t *)` is restored as a real per-policy hook,
+declared in `api/v4/schedule.h`, with rr supplying the three lines it used to
+inline.
+
+That change is visible in the rr binary and was checked rather than assumed:
+706 symbols instead of 705 (the extracted function), `scheduler_init` now
+calling it, and two incidental diffs — `kdb_prepost_init` gaining trailing
+alignment `nop`s and `tcb_create_startup_stack` carrying a relocated address
+(0xc0612d24 -> 0xc0612d74) shifted by the new function's presence. rr still
+boots to userland.
+
+### Notes on the translation
+
+  - `prio_tickets()` computed ticket ratios in **`float`** — in kernel code,
+    with no FPU state saved across the switch. Rewritten in fixed point
+    (1/1024ths). This is the one place the C is deliberately not a transcription
+    of the C++; the old code would have clobbered user FPU state or trapped,
+    depending on build flags.
+  - `check_dispatch_thread` and `delay_preemption` contained the same
+    walk-to-common-ancestor loop, duplicated; it is now `hs_common_ancestor()`.
+  - Five helper names had to be looked up rather than guessed, and the compiler
+    caught every one as an implicit declaration: there is no `threadid_is_equal`
+    (compare `.raw`), no `bitmask_word_is_set`/`_add` (poke `.maskvalue`, as
+    `api/v4/tcb.h` does), and the notify wrapper is `tcb_notify_word`, not
+    `tcb_notify1`.
+  - `prio_control.stride` is a **signed** 16-bit bitfield
+    (`BITFIELD4(long, prio:9, logid:7, stride:16, ...)`), so every
+    `set_stride(prio_control.stride)` widens a signed short to `word_t`. The
+    casts are explicit now; the behaviour (including wrap for stride > 32767) is
+    what the C++ already did.
+  - kdb's `showqueue` prints pass values as `[?]` because `%U` is not a
+    specifier `kdb/generic/print.c` implements. The C++ used the identical
+    `%16U`, so this is preserved, not introduced — a display bug worth fixing
+    separately.
+
+### A build-system gap this exposed
+
+`Mk/Makeconf:130` defaults `SCHED` to `rr` and nothing derives it from the
+config: a config with `X_SCHED_HS=y` still builds `sched-rr` unless you also
+pass `SCHED=hs` on the make line, and conversely `SCHED=hs` leaves
+`CONFIG_SCHED_RR` defined in `config.h`. Both halves of that were exercised here
+(the policy builds clean with `CONFIG_X_SCHED_HS=1` and `CONFIG_SCHED_RR`
+undefined), but the two knobs should be wired together.
+
+`sched-rr/schedule_functions.h` remains as dead C++ — nothing includes it, and
+its contents live in `sched-rr/schedule.c`. It can be deleted.
