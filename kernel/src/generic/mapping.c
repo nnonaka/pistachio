@@ -75,8 +75,10 @@ void SECTION (".init") init_mdb (void)
     mapnode_set_depth (sigma0_mapnode, 0);
     mapnode_set_next_dual (sigma0_mapnode, dual);
 
-    // Sanity checking of pgshift arrays.
-    for (i = 0; i < X86_PGSIZE_MAX; i++)
+    /* Sanity checking of pgshift arrays.  This was pgent_t::size_max before the
+       flip to C, and briefly became the x86-only X86_PGSIZE_MAX; MDB_PGSIZE_MAX
+       is the architecture-neutral spelling, defined in mapping.h. */
+    for (i = 0; i < MDB_PGSIZE_MAX; i++)
     {
 	if (! is_page_size_valid (i))
 	    continue;

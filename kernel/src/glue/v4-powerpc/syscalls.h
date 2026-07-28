@@ -296,7 +296,7 @@ do {									\
 
 #define return_user_with_MRs()						\
 do {									\
-    utcb_t *utcb = get_current_tcb()->get_utcb();			\
+    utcb_t *utcb = get_current_tcb()->utcb;			\
     asm volatile (							\
 	    "mr  %%r25, %7;"          /* our utcb location */		\
     	    "clrrwi %%r1, %%r1, %0;"  /* find the start of the tcb */	\
