@@ -60,39 +60,38 @@ space_t *kernel_space = NULL;
 //translation table
 struct transtable_t transtable[TRANSLATION_TABLE_ENTRIES];
 
-void space_t::allocate_tcb(addr_t addr)
+void space_allocate_tcb (space_t *self, addr_t addr)
 {
 #if !defined(CONFIG_STATIC_TCBS)
     /* Remove the dummy tcb mapping. We could have a dummy tcb
      * mapping due to someone sending invalid parameters to system
      * calls
      */
-    pgent_t *pgent = kernel_space->page_lookup( addr );
-    if( pgent && pgent->is_valid(this, size_4k) )
-	kernel_space->flush_mapping( addr, size_4k, pgent );
+    pgent_t *pgent = space_page_lookup (kernel_space,  addr );
+    if( pgent && pgent_is_valid (pgent, self, size_4k) )
+	space_flush_mapping (kernel_space,  addr, size_4k, pgent );
 
     addr_t page = kmem_alloc(&kmem,  kmem_tcb, POWERPC_PAGE_SIZE );
     ASSERT(page);
 
     TRACE_SPACE( "new tcb, kmem virt %p, phys %p, tcb virt %p\n", page, 
 	         virt_to_phys(page), addr);
-    kernel_space->add_mapping( addr, virt_to_phys(page), size_4k, true, true);
+    space_add_mapping (kernel_space,  addr, virt_to_phys(page), size_4k, true, true);
 
     sync_kernel_space( addr );
 #endif
 }
 
-void space_t::map_dummy_tcb(addr_t addr)
+void space_map_dummy_tcb (space_t *self, addr_t addr)
 {
 #if !defined(CONFIG_STATIC_TCBS)
     add_mapping( addr, (addr_t)virt_to_phys(get_dummy_tcb()), size_4k, false, true );
 #endif
 }
 
-void space_t::add_mapping( addr_t vaddr, paddr_t paddr, word_t size, 
-			   bool writable, bool kernel, word_t attrib )
+void space_add_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t size, bool writable, bool kernel, word_t attrib)
 {
-    pgent_t * pg = this->pgent (page_table_index (size_max, vaddr), 0);
+    pgent_t * pg = space_pgent (self, page_table_index (size_max, vaddr));
     word_t pgsize = size_max;
 
     ASSERT(is_page_size_valid(size));
@@ -100,20 +99,20 @@ void space_t::add_mapping( addr_t vaddr, paddr_t paddr, word_t size,
     /* Lookup mapping */
     while (pgsize > size)
     {
-	if (!pg->is_valid (this, pgsize))
-	    pg->make_subtree (this, pgsize, kernel);
+	if (!pgent_is_valid (pg, self, pgsize))
+	    pgent_make_subtree (pg, self, pgsize, kernel);
 	else
 	{
-	    ASSERT(pg->is_subtree(this, pgsize) );
+	    ASSERT(pgent_is_subtree (pg, self, pgsize) );
 	}
 
-	pg = pg->subtree (this, pgsize)->next
-	    (this, pgsize-1, page_table_index (pgsize-1, vaddr));
+	pg = pgent_next (pgent_subtree (pg, self, pgsize), self,
+			 pgsize-1, page_table_index (pgsize-1, vaddr));
 	pgsize--;
     }
 
     /* Modify page table */
-    pg->set_entry( this, pgsize, paddr, writable ? 7 : 5, attrib, kernel);
+    pgent_set_entry (pg, self, pgsize, paddr, writable ? 7 : 5, attrib, kernel);
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
     ASSERT(pgsize == size_4k);
@@ -122,17 +121,16 @@ void space_t::add_mapping( addr_t vaddr, paddr_t paddr, word_t size,
 }
 
 #if 0
-void space_t::add_4k_mapping( addr_t vaddr, paddr_t paddr, 
-	bool writable, bool kernel, word_t attrib )
+void space_add_4k_mapping (space_t *self, addr_t vaddr, paddr_t paddr, bool writable, bool kernel, word_t attrib)
 {
-    pgent_t *pgent = this->pgent( page_table_index(size_4m, vaddr) );
-    if( !pgent->is_valid(this, size_4m))
-	pgent->make_subtree( this, size_4m, kernel );
+    pgent_t *pgent = space_pgent (self,  page_table_index(size_4m, vaddr) );
+    if( !pgent_is_valid (pgent, self, size_4m))
+	pgent_make_subtree (pgent, self, size_4m, kernel );
 
-    pgent = pgent->subtree( this, size_4m )->next( this, 
+    pgent = pgent_subtree (pgent, self, size_4m )->next( this, 
 	    size_4k, page_table_index(size_4k, vaddr) );
 
-    pgent->set_entry( this, size_4k, paddr, writable ? 7 : 5, 
+    pgent_set_entry (pgent, self, size_4k, paddr, writable ? 7 : 5, 
 		      attrib, kernel);
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
@@ -141,7 +139,7 @@ void space_t::add_4k_mapping( addr_t vaddr, paddr_t paddr,
 }
 #endif
 
-void space_t::flush_mapping( addr_t vaddr, word_t pgsize, pgent_t *pgent )
+void space_flush_mapping (space_t *self, addr_t vaddr, word_t pgsize, pgent_t *pgent)
 {
 #ifdef CONFIG_PPC_MMU_SEGMENT
     ASSERT(pgsize == size_4k);
@@ -150,14 +148,14 @@ void space_t::flush_mapping( addr_t vaddr, word_t pgsize, pgent_t *pgent )
     ppc_invalidate_tlbe( vaddr );
 }
 
-pgent_t * space_t::page_lookup( addr_t vaddr )
+pgent_t * space_page_lookup (space_t *self, addr_t vaddr)
 {
-    pgent_t *pgent = this->pgent( page_table_index(size_4m, vaddr) );
-    if( !pgent->is_valid(this, size_4m) )
+    pgent_t *pgent = space_pgent (self, page_table_index(size_4m, vaddr));
+    if( !pgent_is_valid (pgent, self, size_4m) )
 	return NULL;
 
-    pgent = pgent->subtree( this, size_4m );
-    pgent = pgent->next( this, size_4k, 
+    pgent = pgent_subtree (pgent, self, size_4m );
+    pgent = pgent_next (pgent, self, size_4k, 
 	    page_table_index(size_4k, vaddr) );
     return pgent;
 }
@@ -166,14 +164,14 @@ pgent_t * space_t::page_lookup( addr_t vaddr )
  *                               Allocation
  **********************************************************************/
 
-space_t * space_t::allocate_space() 
+space_t * space_allocate_space (void)
 {
     space_t * space = (space_t*)kmem_alloc(&kmem, kmem_space, sizeof(space_t));
     ASSERT(space);
     return space;
 }
 
-void space_t::free_space(space_t *space) 
+void space_free_space (space_t *space)
 {
     kmem_free(&kmem, kmem_space, (addr_t)space, sizeof(space_t));
 }
@@ -188,13 +186,13 @@ void space_t::free_space(space_t *space)
 # error invalid kernel page size - please adapt
 #endif
 
-void SECTION(".init.memory") space_t::init_kernel_space()
+void SECTION(".init.memory") space_init_kernel_space (void)
 {
-    kernel_space = space_t::allocate_space();
-    kernel_space->init_kernel_mappings();
+    kernel_space = space_allocate_space();
+    space_init_kernel_mappings (kernel_space);
 }
 
-addr_t space_t::map_device( paddr_t paddr, word_t size, bool kernel, word_t attrib)
+addr_t space_map_device (space_t *self, paddr_t paddr, word_t size, bool kernel, word_t attrib)
 {
     addr_t start_addr = (addr_t)(DEVICE_AREA_START + DEVICE_AREA_BAT_SIZE);
 
@@ -208,18 +206,18 @@ addr_t space_t::map_device( paddr_t paddr, word_t size, bool kernel, word_t attr
     {
 	// Look for a 2nd level page table.
 	word_t pdir_idx = page_table_index( size_4m, start_addr );
-	pgent_t *pgent = this->pgent( pdir_idx );
-	if( !pgent->is_valid(this, size_4m) )
+	pgent_t *pgent = space_pgent (self,  pdir_idx );
+	if( !pgent_is_valid (pgent, self, size_4m) )
 	    goto found;
 
 	// Move to the starting position in the 2nd level page table.
-	pgent = pgent->subtree( this, size_4m );
+	pgent = pgent_subtree (pgent, self, size_4m );
 	word_t ptab_idx = page_table_index( size_4k, start_addr );
-	pgent = pgent->next( this, size_4k, ptab_idx );
+	pgent = pgent_next (pgent, self, size_4k, ptab_idx );
 
 	// Search the page table for an unused entry.
 	do {
-	    if( !pgent->is_valid(this, size_4k) )
+	    if( !pgent_is_valid (pgent, self, size_4k) )
 		goto found;
 
 	    // Increment the address to the next page.
@@ -228,7 +226,7 @@ addr_t space_t::map_device( paddr_t paddr, word_t size, bool kernel, word_t attr
 		return NULL;
 
 	    // Move to the next page table entry.
-	    pgent = pgent->next( this, size_4k, 1 );
+	    pgent = pgent_next (pgent, self, size_4k, 1 );
 	    ptab_idx++;
 	} while( ptab_idx < POWERPC_PAGE_SIZE/sizeof(pgent_t) );
     }
@@ -244,7 +242,7 @@ found:
 
     for( word_t page = 0; page < size; page += POWERPC_PAGE_SIZE ) 
     {
-	this->add_mapping( addr_offset(start_addr, page),
+	space_add_mapping (self,  addr_offset(start_addr, page),
 		paddr + page, size_4k, true, kernel, attrib );
     }
 
@@ -258,24 +256,25 @@ found:
  **********************************************************************/
 
 
-void space_t::release_kernel_mapping (addr_t vaddr, paddr_t paddr,
-				      word_t log2size)
+void space_release_kernel_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t log2size)
 {
     // Free up memory used for UTCBs
-    if (get_utcb_page_area ().is_addr_in_fpage (vaddr))
+    fpage_t utcb_page_area = space_get_utcb_page_area (self);
+
+    if (fpage_is_addr_in_fpage (&utcb_page_area, vaddr))
 	kmem_free(&kmem, kmem_utcb, (addr_t) phys_to_virt (paddr), 1UL << log2size);
 }
 
-utcb_t *space_t::allocate_utcb( tcb_t *tcb )
+utcb_t *space_allocate_utcb (space_t *self, tcb_t *tcb)
 {
     ASSERT(tcb);
-    addr_t utcb = (addr_t)tcb->get_utcb_location();
+    addr_t utcb = (addr_t)tcb_get_utcb_location (tcb);
     addr_t page;
 
-    pgent_t *pgent = this->page_lookup( utcb );
-    if( pgent && pgent->is_valid(this, size_4k) )
+    pgent_t *pgent = space_page_lookup (self,  utcb );
+    if( pgent && pgent_is_valid (pgent, self, size_4k) )
 	// Already a valid page mapped at the UTCB address.
-	page = (addr_t) phys_to_virt( pgent->address(this, size_4k) );
+	page = (addr_t) phys_to_virt( pgent_address (pgent, self, size_4k) );
     else
     {
 	// Allocate a new UTCB page.
@@ -291,7 +290,7 @@ utcb_t *space_t::allocate_utcb( tcb_t *tcb )
     return (utcb_t *)addr_offset( page, (word_t)utcb & ~POWERPC_PAGE_MASK );
 }
 
-void space_t::map_sigma0(addr_t addr)
+void space_map_sigma0 (space_t *self, addr_t addr)
 {
     ASSERT( 
 	    ((addr < get_kip()->reserved_mem0.low) 
@@ -304,19 +303,19 @@ void space_t::map_sigma0(addr_t addr)
     add_mapping( addr, (paddr_t)addr, size_4k, true, false );
 }
 
-word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
+word_t space_space_control (space_t *self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
 {
     word_t oldctrl = 0;
     paddr_t physaddr;
     int i;
 #ifdef CONFIG_X_PPC_SOFTHVM
-    oldctrl |= this->hvm_mode ? 1 : 0;
+    oldctrl |= self->hvm_mode ? 1 : 0;
 
     /* XXX: HVM mode can only be changed when space is uninitialized */
-    if ((ctrl & 1) && !this->hvm_mode) 
+    if ((ctrl & 1) && !self->hvm_mode) 
     {
 	TRACEF("Enabling HVM mode\n");
-	this->hvm_mode = true;
+	self->hvm_mode = true;
     }
 #endif
     if (ctrl & (1 << 29)) {
@@ -324,7 +323,7 @@ word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area,
     		if (transtable[i].size > 0)
     			continue;
         	oldctrl |= 1 << 29;
-        	physaddr = redirector_tid.get_raw();
+        	physaddr = threadid_get_raw (&redirector_tid);
         	physaddr <<= 32;
         	physaddr |= utcb_area.raw;
         	transtable[i].physaddr = physaddr;
