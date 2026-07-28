@@ -58,14 +58,18 @@ INLINE void halt_user_thread( void )
 {
     tcb_t *current = get_current_tcb();
 
-    current->set_state( thread_state_t::halted );
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_dest);
+    tcb_set_state (current,  THREAD_STATE_HALTED );
+    scheduler_schedule (get_current_scheduler(), get_idle_tcb(), sched_dest);
 }
 
 static bool send_exception_ipc( word_t exc_no, word_t exc_code )
 {
     tcb_t *current = get_current_tcb();
-    if( current->get_exception_handler().is_nilthread() )
+    threadid_t handler = tcb_get_exception_handler (current);
+    threadid_t local_id;
+    word_t local_id_raw;
+
+    if( threadid_is_nilthread (&handler) )
     {
 	printf( "Unable to deliver user exception: no exception handler.\n" );
 	return false;
@@ -78,51 +82,53 @@ static bool send_exception_ipc( word_t exc_no, word_t exc_code )
 
     // Save message registers.
     for( int i = 0; i < EXC_IPC_SAVED_REGISTERS; i++ )
-	saved_mr[i] = current->get_mr(i);
-    current->set_saved_partner( current->get_partner() );
-    current->set_saved_state( current->get_state() );
+	saved_mr[i] = tcb_get_mr (current, i);
+    tcb_set_saved_partner (current,  tcb_get_partner (current) );
+    tcb_set_saved_state (current,  tcb_get_state (current) );
 
     // Create the message tag.
-    tag.set( 0, GENERIC_EXC_MR_MAX, (word_t)GENERIC_EXC_LABEL );
-    current->set_tag( tag );
+    msg_tag_set (&tag, 0, GENERIC_EXC_MR_MAX, (word_t)GENERIC_EXC_LABEL );
+    tcb_set_tag (current,  tag );
 
     // Create the message.
-    current->set_mr( GENERIC_EXC_MR_UIP,      (word_t)current->get_user_ip() );
-    current->set_mr( GENERIC_EXC_MR_USP,      (word_t)current->get_user_sp() );
-    current->set_mr( GENERIC_EXC_MR_UFLAGS,   (word_t)current->get_user_flags() );
-    current->set_mr( GENERIC_EXC_MR_NO,       exc_no );
-    current->set_mr( GENERIC_EXC_MR_CODE,     exc_code );
-    current->set_mr( GENERIC_EXC_MR_LOCAL_ID, current->get_local_id().get_raw() );
+    local_id = tcb_get_local_id (current);
+    local_id_raw = threadid_get_raw (&local_id);
+    tcb_set_mr (current,  GENERIC_EXC_MR_UIP,      (word_t)tcb_get_user_ip (current) );
+    tcb_set_mr (current,  GENERIC_EXC_MR_USP,      (word_t)tcb_get_user_sp (current) );
+    tcb_set_mr (current,  GENERIC_EXC_MR_UFLAGS,   (word_t)tcb_get_user_flags (current) );
+    tcb_set_mr (current,  GENERIC_EXC_MR_NO,       exc_no );
+    tcb_set_mr (current,  GENERIC_EXC_MR_CODE,     exc_code );
+    tcb_set_mr (current,  GENERIC_EXC_MR_LOCAL_ID, local_id_raw );
 
     // Deliver the exception IPC.
-    tag = current->do_ipc( current->get_exception_handler(),
-	    current->get_exception_handler(), timeout_t::never() );
+    tag = tcb_do_ipc (current,  tcb_get_exception_handler (current),
+	    tcb_get_exception_handler (current), timeout_never() );
 
     // Alter the user context if necessary.
-    if( !tag.is_error() )
+    if( !msg_tag_is_error (&tag) )
     {
-	current->set_user_ip( (addr_t)current->get_mr(GENERIC_EXC_MR_UIP) );
-	current->set_user_sp( (addr_t)current->get_mr(GENERIC_EXC_MR_USP) );
-	current->set_user_flags( current->get_mr(GENERIC_EXC_MR_UFLAGS) );
+	tcb_set_user_ip (current,  (addr_t)tcb_get_mr (current, GENERIC_EXC_MR_UIP) );
+	tcb_set_user_sp (current,  (addr_t)tcb_get_mr (current, GENERIC_EXC_MR_USP) );
+	tcb_set_user_flags (current,  tcb_get_mr (current, GENERIC_EXC_MR_UFLAGS) );
     }
     else
 	printf( "Unable to deliver user exception: IPC error.\n" );
 
     // Clean-up.
     for( int i = 0; i < EXC_IPC_SAVED_REGISTERS; i++ )
-	current->set_mr( i, saved_mr[i] );
-    current->set_partner( current->get_saved_partner() );
-    current->set_saved_partner( NILTHREAD );
-    current->set_state( current->get_saved_state() );
-    current->set_saved_state( thread_state_t::aborted );
+	tcb_set_mr (current,  i, saved_mr[i] );
+    tcb_set_partner (current,  tcb_get_saved_partner (current) );
+    tcb_set_saved_partner (current,  NILTHREAD );
+    tcb_set_state (current,  tcb_get_saved_state (current) );
+    tcb_set_saved_state (current,  THREAD_STATE_ABORTED );
 
-    return !tag.is_error();
+    return !msg_tag_is_error (&tag);
 }
 
 // XXX switch to kdebug thread model
 tcb_t *get_kdebug_tcb() { return (tcb_t*)~0; }
 
-INLINE void try_to_debug( except_regs_t *regs, word_t exc_no, word_t dar=0, word_t dsisr=0 )
+INLINE void try_to_debug( except_regs_t *regs, word_t exc_no, word_t dar, word_t dsisr )
 {
     if( EXPECT_TRUE(get_kip()->kdebug_entry == NULL) )
 	return;
@@ -151,7 +157,7 @@ static void dispatch_exception( except_regs_t *regs, word_t exc_no )
 	word_t start_ip = regs->srr0_ip;
 	word_t start_flags = regs->srr1_flags;
 
-	try_to_debug( regs, exc_no );
+	try_to_debug( regs, exc_no, 0, 0 );
 
 	if( (regs->srr0_ip != start_ip) || (regs->srr1_flags != start_flags) )
 	    return;	// The kernel debugger handled the exception.
@@ -171,29 +177,29 @@ static void dispatch_exception( except_regs_t *regs, word_t exc_no )
 static bool emulate_instruction(word_t opcode, except_regs_t *regs)
 {
 #if defined(CONFIG_PPC_BOOKE)
-    ppc_instr_t instr(opcode);
-    switch(instr.get_primary())
+    ppc_instr_t instr = PPC_INSTR(opcode);
+    switch(ppc_instr_get_primary (instr))
     {
     case 31:
-	switch(instr.get_secondary())
+	switch(ppc_instr_get_secondary (instr))
 	{
 	case 259: // mfdcrx
-	    regs->set_register(instr.rt(), ppc_get_dcrx(regs->get_register(instr.ra())));
+	    except_regs_set_register (regs, ppc_instr_rt (instr), ppc_get_dcrx(except_regs_get_register (regs, ppc_instr_ra (instr))));
 	    regs->srr0_ip += 4;
 	    return true;
 
 	case 323: // mfdcr
-	    regs->set_register(instr.rt(), ppc_get_dcrx(instr.rf()));
+	    except_regs_set_register (regs, ppc_instr_rt (instr), ppc_get_dcrx(ppc_instr_rf (instr)));
 	    regs->srr0_ip += 4;
 	    return true;
 
 	case 387: // mtdcrx
-	    ppc_set_dcrx(regs->get_register(instr.ra()), regs->get_register(instr.rt()));
+	    ppc_set_dcrx(except_regs_get_register (regs, ppc_instr_ra (instr)), except_regs_get_register (regs, ppc_instr_rt (instr)));
 	    regs->srr0_ip += 4;
 	    return true;
 
 	case 451: // mtdcr
-	    ppc_set_dcrx(instr.rf(), regs->get_register(instr.rt()));
+	    ppc_set_dcrx(ppc_instr_rf (instr), except_regs_get_register (regs, ppc_instr_rt (instr)));
 	    regs->srr0_ip += 4;
 	    return true;
 	}
@@ -206,20 +212,20 @@ static bool emulate_instruction(word_t opcode, except_regs_t *regs)
 EXCDEF( unknown_handler )
 {
     TRACEF("unknown handler\n");
-    try_to_debug( frame, 0 );
+    try_to_debug( frame, 0, 0, 0 );
     return_except();
 }
 
 EXCDEF( sys_reset_handler )
 {
-    try_to_debug( frame, EXCEPT_ID(SYSTEM_RESET) );
+    try_to_debug( frame, EXCEPT_ID(SYSTEM_RESET), 0, 0 );
     return_except();
 }
 
 EXCDEF( machine_check_handler )
 {
     panic("machine check\n");
-    try_to_debug( frame, EXCEPT_ID(MACHINE_CHECK) );
+    try_to_debug( frame, EXCEPT_ID(MACHINE_CHECK), 0, 0 );
     return_except();
 }
 
@@ -234,7 +240,7 @@ EXCDEF( extern_int_handler )
 	frame->srr1_flags = srr1;
     }
 
-    get_interrupt_ctrl()->handle_irq(get_current_cpu());
+    intctrl_handle_irq (get_current_cpu());
 
     return_except();
 }
@@ -254,12 +260,20 @@ EXCDEF( program_handler )
     if( EXPECT_FALSE(space == NULL) )
 	space = get_kernel_space();
 
-    word_t instr = space->get_from_user( (addr_t)srr0 );
+    word_t instr = space_get_from_user (space,  (addr_t)srr0 );
     if( instr == KIP_EXCEPT_INSTR ) {
-	frame->r3 = (word_t)space->get_kip_page_area().get_base();
-	frame->r4 = get_kip()->api_version;
-	frame->r5 = get_kip()->api_flags;
-       	frame->r6 = get_kip()->get_kernel_descriptor()->kernel_id.get_raw();
+	fpage_t kip_area = space_get_kip_page_area (space);
+
+	frame->r3 = (word_t) fpage_get_base (&kip_area);
+	/* Reaching the descriptor through kernel_desc_ptr is what
+	   glue/v4-x86/exception.c does since get_kernel_descriptor went. */
+	kernel_interface_page_t *kip = get_kip();
+	kernel_descriptor_t *kdesc =
+	    (kernel_descriptor_t *) ((addr_word_t) kip + kip->kernel_desc_ptr);
+
+	frame->r4 = api_version_to_word (&kip->api_version);
+	frame->r5 = api_flags_to_word (&kip->api_flags);
+	frame->r6 = kernel_id_get_raw (&kdesc->kernel_id);
 	frame->srr0_ip += 4;
 	return_except();
     }
@@ -277,7 +291,7 @@ EXCDEF( fp_unavail_handler )
 	       "FPU unavail IP %p, MSR %08x (curr=%p, FPU owner=%p)\n", 
 	       srr0, srr1, current_tcb, get_fp_lazy_tcb());
 
-    current_tcb->resources.fpu_unavail_exception( current_tcb );
+    tcb_resources_fpu_unavail_exception (&current_tcb->resources, current_tcb);
 
     return_except();
 }
@@ -298,13 +312,16 @@ EXCDEF( decrementer_handler )
 
 #ifdef CONFIG_PPC_BOOKE
     // BookE uses auto-reload decrementer; just ack
-    ppc_tsr_t::dec_irq().write();
+    {
+	ppc_tsr_t tsr = ppc_tsr_dec_irq ();
+	ppc_tsr_write (&tsr);
+    }
 #else
     extern word_t decrementer_interval;
     ppc_set_dec( decrementer_interval );
 #endif
 
-    get_current_scheduler()->handle_timer_interrupt();
+    scheduler_handle_timer_interrupt (get_current_scheduler());
     return_except();
 }
 

@@ -120,6 +120,8 @@ void      space_allocate_tcb (space_t *self, addr_t addr);
 void      space_map_dummy_tcb (space_t *self, addr_t addr);
 utcb_t *  space_allocate_utcb (space_t *self, tcb_t *tcb);
 bool      space_is_user_area_addr (addr_t addr);
+/* generic/linear_ptab.h calls the unsuffixed name; glue/v4-x86 declares both. */
+bool      space_is_user_area (addr_t addr);
 bool      space_is_user_area_fpage (fpage_t fpage);
 bool      space_is_kernel_area (addr_t addr);
 bool      space_is_tcb_area (addr_t addr);

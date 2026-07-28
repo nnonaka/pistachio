@@ -32,27 +32,23 @@
  ********************************************************************/
 #pragma once
 
-class spinlock_t
+struct spinlock_t
 {
-public:
-    void init( word_t val=0 ) 
-	{ this->_lock = val; }
-    void lock();
-    void unlock();
-    bool is_locked()
-	{ return _lock != 0; }
-
-public: // to allow initializers
     volatile word_t _lock;
 };
+typedef struct spinlock_t spinlock_t;
+
+/* init's val argument defaulted to 0. */
+INLINE void spinlock_init (spinlock_t *self, word_t val) { self->_lock = val; }
+INLINE bool spinlock_is_locked (spinlock_t *self)	 { return self->_lock != 0; }
 
 #define DECLARE_SPINLOCK(name) extern spinlock_t name;
-#define DEFINE_SPINLOCK(name) spinlock_t name = {_lock: 0}
+#define DEFINE_SPINLOCK(name) spinlock_t name = { ._lock = 0 }
 
 // TODO: do I satisfy synchronization criteria for PowerPC?
 // TODO: should i eieio when grabbing the lock?
 
-INLINE void spinlock_t::lock()
+INLINE void spinlock_lock (spinlock_t *self)
 {
     word_t old_val;
 
@@ -66,17 +62,17 @@ INLINE void spinlock_t::lock()
 	bne-	1b		/* Retry if we failed to store. */\n\
 	isync\n"
 	: "=&r" (old_val)
-	: "r" (&this->_lock), "r" (1)
+	: "r" (&self->_lock), "r" (1)
 	: "cr0", "memory"
 	);
 }
 
-INLINE void spinlock_t::unlock()
+INLINE void spinlock_unlock (spinlock_t *self)
 {
     // Ensure memory ordering before we unlock.
     asm volatile ("eieio" : : : "memory");
 
-    this->_lock = 0;
+    self->_lock = 0;
 }
 
 INLINE word_t ppc_load_reserve( addr_t addr )

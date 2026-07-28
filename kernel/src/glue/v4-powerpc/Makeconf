@@ -30,7 +30,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/glue/v4-powerpc/, thread.c except_handlers.cc \
+SOURCES += $(addprefix src/glue/v4-powerpc/, thread.c except_handlers.c \
 	init.cc kip_sc.S resources.cc ctors.c cpu.cc space.cc except.S)
 
 ifeq ("$(CONFIG_PPC_MMU_SEGMENTS)","y")
