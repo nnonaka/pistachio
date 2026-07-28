@@ -58,7 +58,7 @@ DECLARE_TRACEPOINT(PPC_HVM_EXCEPT_DSI);
 DECLARE_TRACEPOINT(PPC_HVM_ALIGN);
 DECLARE_TRACEPOINT(PPC_HVM_EMUL_INTERPRET);
 
-INLINE void try_to_debug( except_regs_t *regs, word_t exc_no, word_t dar=0, word_t dsisr=0 )
+INLINE void try_to_debug( except_regs_t *regs, word_t exc_no, word_t dar, word_t dsisr )
 {
     if( EXPECT_TRUE(get_kip()->kdebug_entry == NULL) )
 	return;
@@ -79,13 +79,13 @@ INLINE void try_to_debug( except_regs_t *regs, word_t exc_no, word_t dar=0, word
 }
 
 /* assumption: running in context of HVM, IP is guest-virtual */
-INLINE bool read_hvm_instruction(word_t ip, word_t &instr, bool speculative = false)
+INLINE bool read_hvm_instruction(word_t ip, word_t *instr, bool speculative)
 {
     word_t origmsr, newmsr, idx;
 
     if (EXPECT_FALSE(speculative))
     {
-	ppc_mmucr_t::write_search_id(2, 1);
+	ppc_mmucr_write_search_id(2, 1);
 	if (!ppc_tlbsx(ip, idx))
 	    return false;
     }
@@ -104,67 +104,69 @@ INLINE bool read_hvm_instruction(word_t ip, word_t &instr, bool speculative = fa
 }
 
 NOINLINE bool 
-arch_ktcb_t::send_hvm_fault(softhvm_t::exit_reason_e exc, except_regs_t *frame, word_t instr, 
+arch_ktcb_send_hvm_fault (arch_ktcb_t *self, enum softhvm_exit_reason_e exc, except_regs_t *frame, word_t instr, 
 			    word_t param, bool internal)
 {
     const int untyped = 4;
-    tcb_t *tcb = addr_to_tcb(this);
+    tcb_t *tcb = addr_to_tcb(self);
     acceptor_t acceptor;
 
-    msg_tag_t tag = softhvm_t::fault_tag(exc, untyped, internal);
-    tag.x.typed = tcb->append_ctrlxfer_item(tag, untyped + 1);
-    tcb->set_tag(tag);
-    tcb->set_mr(1, instr);
-    tcb->set_mr(2, frame->srr0_ip);
-    tcb->set_mr(3, vm->msr);
-    tcb->set_mr(4, param);
+    msg_tag_t tag = softhvm_fault_tag(exc, untyped, internal);
+    tag.x.typed = tcb_append_ctrlxfer_item (tcb, tag, untyped + 1);
+    tcb_set_tag (tcb, tag);
+    tcb_set_mr (tcb, 1, instr);
+    tcb_set_mr (tcb, 2, frame->srr0_ip);
+    tcb_set_mr (tcb, 3, self->vm->msr);
+    tcb_set_mr (tcb, 4, param);
 
-    acceptor.clear();
+    acceptor.raw = 0;
     acceptor.x.ctrlxfer = 1;
-    tcb->set_br(0, acceptor.raw);
+    tcb_set_br (tcb, 0, acceptor.raw);
 
-    threadid_t partner = tcb->get_pager();
-    tag = tcb->do_ipc (partner, partner, timeout_t::never());
+    threadid_t partner = tcb_get_pager (tcb);
+    tag = tcb_do_ipc (tcb, partner, partner, timeout_never());
 
-    if (tag.is_error())
+    if (msg_tag_is_error (&tag))
 	enter_kdebug("hvm fault send failed");
 
-    return !tag.is_error();
+    return !msg_tag_is_error (&tag);
 }
 
 NOINLINE bool
-arch_ktcb_t::send_hvm_pagefault(softhvm_t::exit_reason_e exc, except_regs_t *frame,
+arch_ktcb_send_hvm_pagefault (arch_ktcb_t *self, enum softhvm_exit_reason_e exc, except_regs_t *frame,
                                 word_t addr, word_t instr,
 				                word_t tlb0, word_t tlb1, word_t tlb2, u8_t pid, u8_t idx,
 				                bool read, bool write, bool execute)
 {
     const int untyped = 8;
-    tcb_t *tcb = addr_to_tcb(this);
-    acceptor_t acceptor = 0;
+    tcb_t *tcb = addr_to_tcb(self);
+    acceptor_t acceptor;
 
-    msg_tag_t tag = softhvm_t::pagefault_tag(exc, untyped, read, write, execute);
-    tag.x.typed = tcb->append_ctrlxfer_item(tag, untyped + 1);
-    tcb->set_tag(tag);
-    tcb->set_mr(1, addr);
-    tcb->set_mr(2, frame->srr0_ip);
-    tcb->set_mr(3, instr);
-    tcb->set_mr(4, vm->msr);
-    tcb->set_mr(5, tlb0);
-    tcb->set_mr(6, tlb1);
-    tcb->set_mr(7, tlb2);
-    tcb->set_mr(8, (word_t) pid << 8 | idx);
+    acceptor.raw = 0;
 
-    acceptor.set_rcv_window(fpage_t::complete_mem());
+    msg_tag_t tag = softhvm_pagefault_tag(exc, untyped, read, write, execute);
+    tag.x.typed = tcb_append_ctrlxfer_item (tcb, tag, untyped + 1);
+    tcb_set_tag (tcb, tag);
+    tcb_set_mr (tcb, 1, addr);
+    tcb_set_mr (tcb, 2, frame->srr0_ip);
+    tcb_set_mr (tcb, 3, instr);
+    tcb_set_mr (tcb, 4, self->vm->msr);
+    tcb_set_mr (tcb, 5, tlb0);
+    tcb_set_mr (tcb, 6, tlb1);
+    tcb_set_mr (tcb, 7, tlb2);
+    tcb_set_mr (tcb, 8, (word_t) pid << 8 | idx);
+
+    acceptor_set_rcv_window (&acceptor, fpage_complete_mem());
     acceptor.x.ctrlxfer = 1;
-    tcb->set_br(0, acceptor.raw);
+    tcb_set_br (tcb, 0, acceptor.raw);
 
-    threadid_t partner = tcb->get_pager();
-    tag = tcb->do_ipc (partner, partner, timeout_t::never());
+    threadid_t partner = tcb_get_pager (tcb);
+    tag = tcb_do_ipc (tcb, partner, partner, timeout_never());
 
-    if (tag.is_error())
+    if (msg_tag_is_error (&tag))
 	enter_kdebug("hvm pagefault send failed");
 
-    return !tag.is_error();
+    return !msg_tag_is_error (&tag);
 }
 
 static void check_tlb( ppc_softhvm_t *vm )
@@ -176,14 +178,14 @@ static void check_tlb( ppc_softhvm_t *vm )
     for (word_t idx = 0; idx < PPC_MAX_TLB_ENTRIES; idx++)
     {
 	ppc_tlb0_t tlb0;
-	tlb0.read(idx);
-	if (tlb0.is_valid() && tlb0.trans_space == 1)
+	ppc_tlb0_read (&tlb0, idx);
+	if (ppc_tlb0_is_valid (&tlb0) && tlb0.trans_space == 1)
 	{
 	    bool found = false;
 	    for (int entry = 0; entry < PPC_MAX_TLB_ENTRIES; entry++)
-		if (vm->tlb[entry].vaddr_in_entry(tlb0.get_vaddr(), vm->pid))
+		if (vm->tlb[entry].vaddr_in_entry(ppc_tlb0_get_vaddr (&tlb0), vm->pid))
 		    found = true;
-	    if (vm->shadow_tlb.vaddr_in_entry(tlb0.get_vaddr(), vm->pid))
+	    if (vm->shadow_tlb.vaddr_in_entry(ppc_tlb0_get_vaddr (&tlb0), vm->pid))
 		found = true;
 	    if (!found)
 	    {
@@ -200,43 +202,46 @@ static void update_tlb_hvm( ppc_softhvm_t * vm )
     if (EXPECT_FALSE(vm->htlb_dirty))
     {
 	space_t *space = get_current_space();
-	space->flush_tlb_hvm(space, vm->tlb_dirty_start, vm->tlb_dirty_end);
+	space_flush_tlb_hvm (space, space, vm->tlb_dirty_start, vm->tlb_dirty_end);
 	vm->htlb_dirty = false;
     }
 }
 
-NOINLINE void space_t::flush_tlb_hvm( space_t *curspace, word_t start, word_t end )
+NOINLINE void space_flush_tlb_hvm (space_t *self,  space_t *curspace, word_t start, word_t end )
 {
     //TRACEF("flush %x - %x\n", start, end);
     for (word_t idx = 0; idx < swtlb.high_water; idx++)
     {
 	ppc_tlb0_t tlb0;
-	tlb0.read(idx);
+	ppc_tlb0_read (&tlb0, idx);
 
-	if (!tlb0.is_valid())
+	if (!ppc_tlb0_is_valid (&tlb0))
 	    continue;
 
 	if ( (tlb0.trans_space == 1) &&
-	     !((tlb0.get_vaddr() >= end) ||
-	       (tlb0.get_vaddr() + tlb0.get_size() - 1) <= start) )
+	     !((ppc_tlb0_get_vaddr (&tlb0) >= end) ||
+	       (ppc_tlb0_get_vaddr (&tlb0) + ppc_tlb0_get_size (&tlb0) - 1) <= start) )
 	{
-	    ppc_tlb0_t::invalid().write(idx);
-	    swtlb.set_free(idx);
+	    {
+		ppc_tlb0_t inv = ppc_tlb0_invalid ();
+		ppc_tlb0_write (&inv, idx);
+	    }
+	    ppc_swtlb_set_free (&swtlb, idx);
 	}
     }
     isync();
 }
 
 NOINLINE bool 
-space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, word_t gvaddr, paddr_t &gpaddr)
+space_handle_hvm_tlb_miss (space_t *self, ppc_softhvm_t *vm, ppc_hvm_tlb_t *tlbentry, word_t gvaddr, paddr_t *gpaddr)
 {
     TRACE_EMUL("Inserting GV-GP TLB entry from shadow TLB: %08x %08x %08x pid=%x\n", 
 	       tlbentry->tlb0.raw, tlbentry->tlb1.raw, tlbentry->tlb2.raw, tlbentry->pid);
     
-    ppc_tlb1_t tlb1(tlbentry->phys_tlb1);
+    ppc_tlb1_t tlb1 = tlbentry->phys_tlb1;   /* was a copy constructor */
 
-    size_t gsize = tlbentry->tlb0.get_log2size();
-    gpaddr = tlbentry->tlb1.get_paddr() | (gvaddr & (tlbentry->tlb0.get_size() - 1));
+    size_t gsize = ppc_tlb0_get_log2size (&tlbentry->tlb0);
+    gpaddr = ppc_tlb1_get_paddr (&tlbentry->tlb1) | (gvaddr & (ppc_tlb0_get_size (&tlbentry->tlb0) - 1));
 
     if (gpaddr >= USER_AREA_END)
 	return false;
@@ -245,33 +250,37 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
 
     pgent_t *pg;
     word_t pgsize;
-    if (!this->lookup_mapping ((addr_t) gpaddr, &pg, &pgsize))
+    if (!space_lookup_mapping (self, (addr_t) *gpaddr, &pg, &pgsize, 0))
 	return false;
     
     size_t hsize = page_shift (pgsize);
-    paddr_t hpaddr = pg->address (this, pgsize) | (gpaddr & ((1ull << hsize) - 1));
+    paddr_t hpaddr = pgent_address (pg, self, pgsize) | (*gpaddr & ((1ull << hsize) - 1));
 	
     /* we have a valid entry in the TLB and in the ptab --> we
      * can create a TLB entry */
     TRACE_EMUL("mapping found (%p): %p -> %x.%08x (%x)\n",
-	       pg, gpaddr, (word_t)(hpaddr >> 32), (word_t)hpaddr, pgsize);
+	       pg, *gpaddr, (word_t)(hpaddr >> 32), (word_t)hpaddr, pgsize);
     TRACE_EMUL("[%c%c%c], cache=%x, erpn=%x\n", 
 	       pg->map.read ? 'R' : ' ', pg->map.write ? 'W' : ' ',
 	       pg->map.execute ? 'X' : ' ', pg->map.caching, pg->map.erpn);
     
     size_t size = min (gsize, hsize);
-    while (!ppc_tlb0_t::is_valid_pagesize (size))
+    while (!ppc_tlb0_is_valid_pagesize (size))
         size--;
 
-    ppc_tlb0_t tlb0 (gvaddr & ~((1ul << size) - 1), size);
+    ppc_tlb0_t tlb0;
+
+    /* was the ppc_tlb0_t(vaddr, log2size) constructor, whose valid/space
+       arguments defaulted to true/0. */
+    ppc_tlb0_init_vaddr_size (&tlb0, gvaddr & ~((1ul << size) - 1), size, true, 0);
     tlb0.trans_space = 1;
 
-    tlb1.init_paddr (hpaddr & ~((1ull << size) - 1));
+    ppc_tlb1_init_paddr (&tlb1, hpaddr & ~((1ull << size) - 1));
 
     ppc_tlb2_t tlb2;
     tlb2.raw = tlbentry->tlb2.raw;
 
-    if (tlb2.is_accessible()) // don't bother if no access rights are set...
+    if (ppc_tlb2_is_accessible (&tlb2)) // don't bother if no access rights are set...
     {
 	/* we support three protection modes right now:
 	 *   user and kernel have access rights: pid0
@@ -281,9 +290,9 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
 
 	word_t pid = 0; // kernel+user accessible
 
-	if (!tlb2.is_user_accessible())
+	if (!ppc_tlb2_is_user_accessible (&tlb2))
 	    pid = 2;
-	else if (!tlb2.is_kernel_accessible())
+	else if (!ppc_tlb2_is_kernel_accessible (&tlb2))
 	    pid = 1;
 
 	// move kernel access permissions into user part
@@ -296,16 +305,16 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
 	tlb2.wt_l1 = 1;
 	tlb2.user2 = 1;
 
-	word_t hwtlb_index = swtlb.allocate();
+	word_t hwtlb_index = ppc_swtlb_allocate (&swtlb);
 
 	TRACE_EMUL("inserting TLB entry %d: %08x, %08x, %08x, pid=%d (%x)\n",
 		   hwtlb_index, tlb0.raw, tlb1.raw, tlb2.raw, pid, 
-		   (&vm->shadow_tlb == tlbentry) ? 255 : (tlbentry - &vm->tlb[0]) / sizeof(ppc_softhvm_t::tlb_t));
+		   (&self->vm->shadow_tlb == tlbentry) ? 255 : (tlbentry - &self->vm->tlb[0]) / sizeof(ppc_hvm_tlb_t));
 
-	ppc_mmucr_t::write_search_id(pid);
-	tlb0.write(hwtlb_index);
-	tlb1.write(hwtlb_index);
-	tlb2.write(hwtlb_index);
+	ppc_mmucr_write_search_id(pid, 0);
+	ppc_tlb0_write (&tlb0, hwtlb_index);
+	ppc_tlb1_write (&tlb1, hwtlb_index);
+	ppc_tlb2_write (&tlb2, hwtlb_index);
 	isync();
 
 	/* flush icache to avoid alias problems after PID change */
@@ -313,7 +322,7 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
 	    asm volatile ("iccci 0,0" : : : "memory");
 
 	/* mark entry dirty in VTLB */
-	tlbentry->touch(hwtlb_index);
+	ppc_hvm_tlb_touch (tlbentry, hwtlb_index);
     }
     return true;
 }
@@ -321,9 +330,9 @@ space_t::handle_hvm_tlb_miss(ppc_softhvm_t *vm, ppc_softhvm_t::tlb_t *tlbentry, 
 EXCDEF( hvm_dtlb_miss_handler )
 {
     tcb_t *tcb = get_current_tcb();
-    ppc_softhvm_t *vm = tcb->get_arch()->vm;
+    ppc_softhvm_t *vm = (&tcb->arch)->vm;
     word_t dear = ppc_get_spr(SPR_DEAR);
-    ppc_esr_t esr; esr.read();
+    ppc_esr_t esr; ppc_esr_read (&esr);
     paddr_t gpaddr;
 
     TRACEPOINT(PPC_HVM_DTLB_MISS,
@@ -332,48 +341,48 @@ EXCDEF( hvm_dtlb_miss_handler )
 
     if (ppc_is_kernel_mode(srr1))
     {
-        if (!get_kernel_space()->handle_tlb_miss((addr_t)dear, (addr_t)dear, false, true))
+        if (!space_handle_tlb_miss (get_kernel_space(), (addr_t)dear, (addr_t)dear, false, true))
             panic("kernel accessed unmapped device @ %08x, IP %08x\n", dear, srr0);
         return_except();
     }
     
-    ppc_softhvm_t::tlb_t *tlbentry = NULL;
+    ppc_hvm_tlb_t *tlbentry = NULL;
     int tlbidx = -1;
 
-    if (vm->in_shadow_tlb(dear))
+    if (ppc_softhvm_in_shadow_tlb (vm, dear))
 	tlbentry = &vm->shadow_tlb;
-    else if ( (tlbidx = vm->find_tlb_entry (dear)) != -1 )
+    else if ( (tlbidx = ppc_softhvm_find_tlb_entry (vm, dear)) != -1 )
 	tlbentry = &vm->tlb[tlbidx];
 
     if (!tlbentry)
     {
 	vm->dear = dear;
 	vm->esr = esr.raw;      // XXX: Interpret this correctly!
-	vm->raise_exception(ppc_softhvm_t::exc_data_tlb, frame);
+	ppc_softhvm_raise_exception (vm, exc_data_tlb, frame);
     }
     else
     {
-	if (tcb->get_space()->handle_hvm_tlb_miss(vm, tlbentry, dear, gpaddr))
+	if (space_handle_hvm_tlb_miss (tcb_get_space (tcb), vm, tlbentry, dear, &gpaddr))
 	{
 	    if (tlbidx != -1)
 	    {
-		vm->replace_shadow_tlb(tlbentry, tlbidx);
+		ppc_softhvm_replace_shadow_tlb (vm, tlbentry, tlbidx);
 		update_tlb_hvm(vm);
 	    }
 	}
 	else
 	{
 	    word_t instr;
-	    read_hvm_instruction(frame->srr0_ip, instr);
+	    read_hvm_instruction(frame->srr0_ip, &instr, false);
 
-	    tcb->get_arch()->send_hvm_pagefault(
-		softhvm_t::er_tlb, frame, dear, instr,
+	    arch_ktcb_send_hvm_pagefault (&tcb->arch, 
+		er_tlb, frame, dear, instr,
 		tlbentry->tlb0.raw, tlbentry->tlb1.raw, tlbentry->tlb2.raw,
 		tlbentry->pid, tlbidx, esr.x.store == 0, esr.x.store != 0, false);
 	}
     }
 
-    vm->handle_pending_events(frame);
+    ppc_softhvm_handle_pending_events (vm, frame);
     check_tlb(vm);
     return_except();
 }
@@ -381,7 +390,7 @@ EXCDEF( hvm_dtlb_miss_handler )
 EXCDEF( hvm_itlb_miss_handler )
 {
     tcb_t *tcb = get_current_tcb();
-    ppc_softhvm_t *vm = tcb->get_arch()->vm;
+    ppc_softhvm_t *vm = (&tcb->arch)->vm;
     paddr_t gpaddr;
 
     TRACEPOINT(PPC_HVM_ITLB_MISS,
@@ -390,38 +399,38 @@ EXCDEF( hvm_itlb_miss_handler )
 
     ASSERT(!ppc_is_kernel_mode(srr1));
 
-    ppc_softhvm_t::tlb_t *tlbentry = NULL;
+    ppc_hvm_tlb_t *tlbentry = NULL;
     int tlbidx = -1;
 
-    if (vm->in_shadow_tlb(srr0))
+    if (ppc_softhvm_in_shadow_tlb (vm, srr0))
 	tlbentry = &vm->shadow_tlb;
-    else if ( (tlbidx = vm->find_tlb_entry (srr0)) != -1 )
+    else if ( (tlbidx = ppc_softhvm_find_tlb_entry (vm, srr0)) != -1 )
 	tlbentry = &vm->tlb[tlbidx];
 
     if (!tlbentry)
     {
-	vm->raise_exception(ppc_softhvm_t::exc_instr_tlb, frame);
+	ppc_softhvm_raise_exception (vm, exc_instr_tlb, frame);
     }
     else 
     {
-	if (tcb->get_space()->handle_hvm_tlb_miss(vm, tlbentry, srr0, gpaddr))
+	if (space_handle_hvm_tlb_miss (tcb_get_space (tcb), vm, tlbentry, srr0, &gpaddr))
 	{
 	    if (tlbidx != -1)
 	    {
-		vm->replace_shadow_tlb(tlbentry, tlbidx);
+		ppc_softhvm_replace_shadow_tlb (vm, tlbentry, tlbidx);
 		update_tlb_hvm(vm);
 	    }
 	}
 	else
 	{
-	    tcb->get_arch()->send_hvm_pagefault(
-		softhvm_t::er_tlb, frame, srr0, 0,
+	    arch_ktcb_send_hvm_pagefault (&tcb->arch, 
+		er_tlb, frame, srr0, 0,
 		tlbentry->tlb0.raw, tlbentry->tlb1.raw, tlbentry->tlb2.raw,
 		tlbentry->pid, tlbidx, false, false, true);
 	}
     }
 
-    vm->handle_pending_events(frame);
+    ppc_softhvm_handle_pending_events (vm, frame);
     check_tlb(vm);
     return_except();
 }
@@ -431,7 +440,7 @@ EXCDEF( hvm_dsi_handler )
     /* just reflect the exception back to the guest, the VTLB should
      * take care of this */
 
-    ppc_esr_t esr; esr.read();
+    ppc_esr_t esr; ppc_esr_read (&esr);
     word_t dear = ppc_get_spr(SPR_DEAR);
 
     TRACEPOINT(PPC_HVM_EXCEPT_DSI,
@@ -440,11 +449,11 @@ EXCDEF( hvm_dsi_handler )
 
     ASSERT(!ppc_is_kernel_mode(frame->srr1_flags));
 
-    ppc_softhvm_t *vm = get_current_tcb()->get_arch()->vm;
+    ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;
 
     vm->esr = esr.raw;
     vm->dear = dear;
-    vm->raise_exception(ppc_softhvm_t::exc_data_storage, frame);
+    ppc_softhvm_raise_exception (vm, exc_data_storage, frame);
     check_tlb(vm);
  
     return_except();
@@ -455,7 +464,7 @@ EXCDEF( hvm_isi_handler )
     /* just reflect the exception back to the guest, the VTLB should
      * take care of this */
 
-    ppc_esr_t esr; esr.read();
+    ppc_esr_t esr; ppc_esr_read (&esr);
 
     TRACEPOINT(PPC_HVM_EXCEPT_ISI,
 	       "HVM ISI EXCEPT: IP: %08x, LR: %08x, ESR: %08x",
@@ -463,10 +472,10 @@ EXCDEF( hvm_isi_handler )
 
     ASSERT(!ppc_is_kernel_mode(frame->srr1_flags));
     
-    ppc_softhvm_t *vm = get_current_tcb()->get_arch()->vm;
+    ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;
 
     vm->esr = esr.raw;
-    vm->raise_exception(ppc_softhvm_t::exc_instr_storage, frame);
+    ppc_softhvm_raise_exception (vm, exc_instr_storage, frame);
     check_tlb(vm);
  
     return_except();
@@ -474,7 +483,7 @@ EXCDEF( hvm_isi_handler )
 
 EXCDEF( hvm_alignment_handler )
 {
-    ppc_esr_t esr; esr.read();
+    ppc_esr_t esr; ppc_esr_read (&esr);
     word_t dear = ppc_get_spr(SPR_DEAR);
 
     TRACEPOINT(PPC_HVM_ALIGN,
@@ -483,11 +492,11 @@ EXCDEF( hvm_alignment_handler )
     
     ASSERT(!ppc_is_kernel_mode(frame->srr1_flags));
 
-    ppc_softhvm_t *vm = get_current_tcb()->get_arch()->vm;
+    ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;
 
     vm->esr = esr.raw;
     vm->dear = dear;
-    vm->raise_exception(ppc_softhvm_t::exc_alignment, frame);
+    ppc_softhvm_raise_exception (vm, exc_alignment, frame);
     check_tlb(vm);
  
     return_except();
@@ -504,7 +513,7 @@ EXCDEF( hvm_program_handler )
 	    word_t start_ip = frame->srr0_ip;
 	    word_t start_flags = frame->srr1_flags;
 	    
-	    try_to_debug( frame, EXCEPT_ID(PROGRAM) );
+	    try_to_debug( frame, EXCEPT_ID(PROGRAM), 0, 0 );
 	    
 	    if( (frame->srr0_ip != start_ip) || (frame->srr1_flags != start_flags) )
 		return_except();	// The kernel debugger handled the exception.
@@ -514,25 +523,25 @@ EXCDEF( hvm_program_handler )
     }
     else
     {
-	ppc_esr_t esr; esr.read();
-	ppc_softhvm_t *vm = get_current_tcb()->get_arch()->vm;
+	ppc_esr_t esr; ppc_esr_read (&esr);
+	ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;
 
 	TRACEPOINT(PPC_HVM_EXCEPT_PROG, 
 		   "PROG EXC: IP %p, MSR %08x, ESR %08x", 
 		   frame->srr0_ip, frame->srr1_flags, esr.raw);
 
-	vm->update_timers(ppc_get_timebase());
+	ppc_softhvm_update_timers (vm, ppc_get_timebase());
 
 	if (esr.x.privileged_instr)
 	{
 	    word_t instr;
 	    word_t oldip = frame->srr0_ip;
 
-	    read_hvm_instruction(frame->srr0_ip, instr);
+	    read_hvm_instruction(frame->srr0_ip, &instr, false);
 
 	    TRACE_EMUL("Faulting instruction: %08x @ %08x\n", instr, frame->srr0_ip);
 
-	    if (vm->emulate_instruction(instr, frame))
+	    if (ppc_softhvm_emulate_instruction (vm, instr, frame))
 	    {
 #if 0
 		/* we put an upper bound on emulation to avoid malicious
@@ -540,7 +549,7 @@ EXCDEF( hvm_program_handler )
 		for (unsigned num = 0; num < MAX_INSTR_EMULATE; num++)
 		{
 		    /* only emulate privileged code */
-		    if (vm->is_user())
+		    if (ppc_softhvm_is_user (vm))
 			break;
 
 		    /* speculative fetch if TLB is dirty or next instruction
@@ -550,7 +559,7 @@ EXCDEF( hvm_program_handler )
 		    update_tlb_hvm(vm);
 		    
 		    if (!read_hvm_instruction(frame->srr0_ip, instr, speculative) || 
-			!vm->emulate_instruction(instr, frame))
+			!ppc_softhvm_emulate_instruction (vm, instr, frame))
 			break;
 
 		    TRACEPOINT(PPC_HVM_EMUL_INTERPRET, "instr emulation opcode %08x, IP %08x", 
@@ -562,13 +571,13 @@ EXCDEF( hvm_program_handler )
 	    else
 	    {
 		//TRACEF("send exception IPC\n");
-		get_current_tcb()->get_arch()->
-		    send_hvm_fault(softhvm_t::er_program, frame, instr, 0, false);
+		arch_ktcb_send_hvm_fault (&get_current_tcb()->arch,
+					  er_program, frame, instr, 0, false);
 	    }
 	}
 	else
 	{
-	    vm->raise_exception(ppc_softhvm_t::exc_program, frame);
+	    ppc_softhvm_raise_exception (vm, exc_program, frame);
 	    vm->esr = esr.raw;
 
 	    if (esr.x.floating_point)
@@ -582,7 +591,7 @@ EXCDEF( hvm_program_handler )
 		enter_kdebug("prog except");
 	    }
 	}
-	vm->handle_pending_events(frame);
+	ppc_softhvm_handle_pending_events (vm, frame);
 	check_tlb(vm);
     }
 
@@ -595,30 +604,30 @@ EXCDEF( hvm_fp_unavail_handler )
 
     /* FPU can be unavailable for 2 reasons: guest disabled it or it
      * is not restored */
-    ppc_softhvm_t *vm = current_tcb->get_arch()->vm;
+    ppc_softhvm_t *vm = (&current_tcb->arch)->vm;
     if (!(vm->msr & (1 << MSR_FP)))
     {
-	vm->raise_exception(ppc_softhvm_t::exc_fpu_unavail, frame);
+	ppc_softhvm_raise_exception (vm, exc_fpu_unavail, frame);
     }
     else
     {
 	/* FPU is enabled in guest but not in host--enable it */
-	current_tcb->resources.fpu_unavail_exception( current_tcb );
+	tcb_resources_fpu_unavail_exception (&current_tcb->resources, current_tcb);
     }
     return_except();
 }
 
 EXCDEF( hvm_syscall_handler )
 {
-    get_current_tcb()->get_arch()->vm->
-	raise_exception(ppc_softhvm_t::exc_system_call, frame);
+    ppc_softhvm_raise_exception ((&get_current_tcb()->arch)->vm,
+				 exc_system_call, frame);
     return_except();
 }
 
 EXCDEF( hvm_debug_handler )
 {
-    get_current_tcb()->get_arch()->vm->
-	raise_exception(ppc_softhvm_t::exc_debug, frame);
+    ppc_softhvm_raise_exception ((&get_current_tcb()->arch)->vm,
+				 exc_debug, frame);
     return_except();
 }
 
@@ -637,13 +646,16 @@ EXCDEF( hvm_decrementer_handler )
 	       "Decrementer Intr: IP=%p, MSR %08x", srr0, srr1);
 
     // BookE uses auto-reload decrementer; just ack
-    ppc_tsr_t::dec_irq().write();
-    get_current_scheduler()->handle_timer_interrupt();
+    {
+	ppc_tsr_t tsr = ppc_tsr_dec_irq ();
+	ppc_tsr_write (&tsr);
+    }
+    scheduler_handle_timer_interrupt (get_current_scheduler());
 
     // tick the VM and fire necessary interrupts
-    ppc_softhvm_t *vm = get_current_tcb()->get_arch()->vm;
-    vm->update_timers(ppc_get_timebase());
-    vm->handle_pending_events(frame);
+    ppc_softhvm_t *vm = (&get_current_tcb()->arch)->vm;
+    ppc_softhvm_update_timers (vm, ppc_get_timebase());
+    ppc_softhvm_handle_pending_events (vm, frame);
 
     return_except();
 }
@@ -652,10 +664,10 @@ EXCDEF( hvm_decrementer_handler )
 FEATURESTRING("powerpc-hvm");
 
 DECLARE_KMEM_GROUP(kmem_hvm);
-void arch_ktcb_t::init_hvm(tcb_t *tcb)
+void arch_ktcb_init_hvm (arch_ktcb_t *self, tcb_t *tcb)
 {
     const int allocsize = ((sizeof(ppc_softhvm_t) / KMEM_CHUNKSIZE) + 1) * KMEM_CHUNKSIZE;
-    vm = (ppc_softhvm_t*)kmem_alloc(&kmem, kmem_hvm, allocsize);
-    tcb->resource_bits += SOFTHVM;
-    vm->init();
+    self->vm = (ppc_softhvm_t*)kmem_alloc(&kmem, kmem_hvm, allocsize);
+    resource_bits_add (&tcb->resource_bits, SOFTHVM);
+    ppc_softhvm_init (self->vm);
 }

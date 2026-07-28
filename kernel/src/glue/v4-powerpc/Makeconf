@@ -40,7 +40,7 @@ ifeq ("$(CONFIG_PPC_MMU_TLB)","y")
 SOURCES += src/glue/v4-powerpc/space-swtlb.cc
 endif
 ifeq ("$(CONFIG_X_PPC_SOFTHVM)","y")
-SOURCES += src/glue/v4-powerpc/softhvm.cc
+SOURCES += src/glue/v4-powerpc/softhvm.c
 endif
 
 SOURCES += $(addprefix src/generic/, linear_ptab_walker.c mapping_alloc.c)

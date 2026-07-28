@@ -33,5 +33,5 @@
 SOURCES += $(addprefix src/arch/powerpc/, string.c pghash.cc)
 
 ifeq ("$(CONFIG_X_PPC_SOFTHVM)","y")
-SOURCES += src/arch/powerpc/softhvm.cc
+SOURCES += src/arch/powerpc/softhvm.c
 endif
