@@ -49,46 +49,12 @@ enum resource_type_e {
 };
 
 
-#if defined(__cplusplus)
-class thread_resources_t : public generic_thread_resources_t
-{
-public:
-    /* These are now defined in C (resources.c); the __asm__ labels make C++
-       call sites resolve directly to the C symbols (no forwarders, matching
-       ABI: 'this' is the leading pointer argument). save/load are also called
-       from trap.S by these same names. */
-    void dump(tcb_t * tcb) __asm__ ("tcb_resources_dump");
-    void save(tcb_t * tcb) __asm__ ("tcb_resources_save");
-    void load(tcb_t * tcb) __asm__ ("tcb_resources_load");
-    void purge(tcb_t * tcb) __asm__ ("tcb_resources_purge");
-    void init(tcb_t * tcb) __asm__ ("tcb_resources_init");
-    void free(tcb_t * tcb) __asm__ ("tcb_resources_free");
-
-public:
-    void x86_no_math_exception(tcb_t * tcb) __asm__ ("tcb_resources_x86_no_math_exception");
-    void smp_xcpu_pagetable (tcb_t * tcb, cpuid_t cpu);
-    void enable_copy_area (tcb_t * tcb, addr_t * saddr,
-			   tcb_t * partner, addr_t * daddr);
-    void release_copy_area (tcb_t * tcb, bool disable_copyarea) __asm__ ("tcb_resources_release_copy_area");
-
-    addr_t copy_area_address (word_t n);
-    addr_t copy_area_real_address (word_t n);
-    word_t copy_area_pdir_idx (word_t n, word_t p);
-
-private:
-    addr_t fpu_state;
-    word_t last_copy_area;
-
-    word_t pdir_idx[COPY_AREA_COUNT][COPY_AREA_PDIRS];
-};
-#else
 struct thread_resources_t {
     /* generic_thread_resources_t base is empty (EBO) -> not embedded in C */
     addr_t fpu_state;
     word_t last_copy_area;
     word_t pdir_idx[COPY_AREA_COUNT][COPY_AREA_PDIRS];
 };
-#endif
 typedef struct thread_resources_t thread_resources_t;
 
 /* C prototypes for the resources entry points defined in resources.c, so

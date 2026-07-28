@@ -35,11 +35,7 @@
 
 /* the stub is always a C symbol; "extern \"C\"" is C++-only syntax, so spell it
    conditionally (platform/generic/intctrl-apic.c is C). */
-#if defined(__cplusplus)
-#define __HWIRQ_EXTERN_C	extern "C"
-#else
 #define __HWIRQ_EXTERN_C	extern
-#endif
 
 #define HW_IRQ(num)						\
 __HWIRQ_EXTERN_C void hwirq_##num(void);			\

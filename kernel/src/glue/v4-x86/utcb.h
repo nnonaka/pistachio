@@ -65,25 +65,6 @@ struct utcb_t
     
     /* do not delete this TCB_END_MARKER */
 
-#if defined(__cplusplus)
-public:
-    void set_my_global_id(threadid_t tid);
-    word_t get_user_defined_handle();
-    void set_user_defined_handle(word_t handle);
-    threadid_t get_pager();
-    void set_pager(threadid_t tid);
-    threadid_t get_exception_handler();
-    void set_exception_handler(threadid_t tid);
-    u8_t get_preempt_flags();
-    void set_preempt_flags(u8_t flags);
-    u8_t get_cop_flags();
-    word_t get_error_code();
-    void set_error_code(word_t err);
-    timeout_t get_xfer_timeout();
-    threadid_t get_intended_receiver();
-    threadid_t get_virtual_sender();
-    void set_virtual_sender(threadid_t tid);
-#endif /* __cplusplus */
 
 } __attribute__((packed));
 typedef struct utcb_t utcb_t;

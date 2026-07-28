@@ -38,40 +38,10 @@
 
 #if defined(CONFIG_DEBUG)
 
-#if defined(__cplusplus)
-#include <kdb/tracepoints.h>
-#endif
 
 #define DEBUG_SCREEN (KERNEL_OFFSET + 0xb8000)
 #define KDB_STACK_SIZE	KTCB_SIZE
 
-#if defined(__cplusplus)
-INLINE void spin_forever(int pos = 0)
-{
-#if defined(CONFIG_SPIN_WHEELS)
-    while(1)
-	    ((u16_t*)(DEBUG_SCREEN))[pos] += 1;
-#else /* defined(CONFIG_SPIN_WHEELS) */
-    int dummy = 0;
-    while(1)
-	    dummy = (dummy + 1) % 32;
-#endif /* defined(CONFIG_SPIN_WHEELS) */
-}
-
-#if defined(__cplusplus)
-class space_t;
-class tcb_t;
-#endif
-
-
-INLINE void spin(int pos, int cpu = 0)
-{
-#if defined(CONFIG_SPIN_WHEELS)
-    ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2] += 1;
-    ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2 + 1] = 7;
-#endif /* defined(CONFIG_SPIN_WHEELS) */
-}
-#else /* !__cplusplus: C form of spin() (no default arg), same body */
 INLINE void spin(int pos, int cpu)
 {
 #if defined(CONFIG_SPIN_WHEELS)
@@ -79,12 +49,9 @@ INLINE void spin(int pos, int cpu)
     ((u8_t*)(DEBUG_SCREEN))[(cpu * 160) + pos * 2 + 1] = 7;
 #endif /* defined(CONFIG_SPIN_WHEELS) */
 }
-#endif /* defined(__cplusplus) */
 
-#if !defined(__cplusplus)
 struct space_t; typedef struct space_t space_t;
 struct tcb_t;   typedef struct tcb_t tcb_t;
-#endif
 
 /* plain data -- shared by the C++ kdb entry path and the C kdb files */
 struct debug_param_t
@@ -94,9 +61,7 @@ struct debug_param_t
     tcb_t * tcb;
     x86_exceptionframe_t * frame;
 };
-#if !defined(__cplusplus)
 typedef struct debug_param_t debug_param_t;
-#endif
 
 
 #define enter_kdebug(arg...)                    \
@@ -112,9 +77,6 @@ typedef struct debug_param_t debug_param_t;
             :                                   \
             : "a" (0UL))
 
-#if defined(__cplusplus)
-extern void do_enter_kdebug(x86_exceptionframe_t *frame, const word_t exception);
-#endif
 
 /* Common to both languages: a plain enum, and x86_set_kdb_dr, whose only
    definition now lives in C (kdb/arch/x86/breakpoints.c).  BEGIN_DECLS gives
@@ -125,18 +87,12 @@ enum x86_breakpoint_type_e {
     x86_bp_port  =  0x00020000,
     x86_bp_access = 0x00030000
 };
-#if !defined(__cplusplus)
 typedef enum x86_breakpoint_type_e x86_breakpoint_type_e;
-#endif
 
 BEGIN_DECLS
 extern void x86_set_kdb_dr(word_t num, x86_breakpoint_type_e type, word_t addr, bool enable, bool kdb);
 END_DECLS
 
-#if defined(__cplusplus)
-extern "C" void x86_reset(void);
-extern bool x86_reboot_scheduled;
-#endif /* defined(__cplusplus) */
 
 
 

@@ -31,11 +31,10 @@
  ********************************************************************/
 
 struct arch_ktcb_t {
-#if !defined(__cplusplus)
-    /* x64 has no arch-specific ktcb state; an empty C++ class is 1 byte, so
-       give C an explicit byte to keep tcb_t's by-value `arch` member the
-       same size. */
+    /* x64 has no arch-specific ktcb state, but the struct is a by-value member
+       of tcb_t, and an empty struct is a GNU C extension of size 0 -- which
+       would shift every field after `arch`.  The explicit byte pins the size
+       at 1, matching the layout tcb_layout.h is generated against. */
     char __empty;
-#endif
 };
 typedef struct arch_ktcb_t arch_ktcb_t;

@@ -38,19 +38,6 @@
 extern u64_t ticks;
 #endif
 
-#if defined(__cplusplus)
-class timer_t : public generic_periodic_timer_t {
-public:
-    void init_global();
-    void init_cpu(cpuid_t cpu);
-
-    word_t get_bus_freq() { return bus_freq; }
-    word_t get_proc_freq() { return proc_freq; }
-private:
-    word_t bus_freq;
-    word_t proc_freq;
-};
-#else
 /* generic_periodic_timer_t is an empty base class, so the layout is just the
    two frequency words. */
 struct timer_t {
@@ -58,7 +45,6 @@ struct timer_t {
     word_t proc_freq;
 };
 typedef struct timer_t timer_t;
-#endif /* __cplusplus */
 
 /* C implementations of the former timer_t methods (defined in timer-apic.c). */
 BEGIN_DECLS
@@ -66,16 +52,6 @@ void timer_init_global(void);
 void timer_init_cpu(timer_t *self, cpuid_t cpu);
 END_DECLS
 
-#if defined(__cplusplus)
-INLINE void timer_t::init_global()		{ timer_init_global(); }
-INLINE void timer_t::init_cpu(cpuid_t cpu)	{ timer_init_cpu(this, cpu); }
-
-INLINE timer_t * get_timer()
-{
-    extern timer_t timer;
-    return &timer;
-}
-#else /* !__cplusplus: C forms for api/glue C callers (init.c). */
 INLINE timer_t * get_timer (void)
 {
     extern timer_t timer;
@@ -83,6 +59,5 @@ INLINE timer_t * get_timer (void)
 }
 INLINE word_t timer_get_bus_freq (timer_t *self)	{ return self->bus_freq; }
 INLINE word_t timer_get_proc_freq (timer_t *self)	{ return self->proc_freq; }
-#endif /* __cplusplus */
 
 #endif /* !__GLUE__V4_X86__TIMER_H__ */

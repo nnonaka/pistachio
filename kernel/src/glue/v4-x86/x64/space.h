@@ -48,27 +48,15 @@
 #include <mdb.h>
 
 /* forward declarations - space_t depends on tcb_t and utcb_t */
-#if defined(__cplusplus)
-class tcb_t;
-class utcb_t;
-#else
 struct tcb_t;
 typedef struct tcb_t tcb_t;
 struct utcb_t;
 typedef struct utcb_t utcb_t;
-#endif
 
-#if defined(__cplusplus)
-#define PGSIZE_UTCB	(pgent_t::size_4k)
-#define PGSIZE_KTCB	(pgent_t::size_4k)
-#define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? pgent_t::size_2m : pgent_t::size_4k)
-#define PGSIZE_SIGMA    pgent_t::size_2m
-#else /* C: the pgsize_e values are the X86_PGSIZE_* macros. */
 #define PGSIZE_UTCB	X86_PGSIZE_4K
 #define PGSIZE_KTCB	X86_PGSIZE_4K
 #define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? X86_PGSIZE_2M : X86_PGSIZE_4K)
 #define PGSIZE_SIGMA    X86_PGSIZE_2M
-#endif
 
 //translation table (actual declaration in space.cc)
 #define TRANSLATION_TABLE_ENTRIES 32
@@ -78,12 +66,8 @@ extern struct transTable_t {
 	word_t size;
 } transTable[TRANSLATION_TABLE_ENTRIES];
    
-#if defined(__cplusplus)
-class space_t;
-#else
 struct space_t;
 typedef struct space_t space_t;
-#endif
 
 /*
  * kernel_pdp_t / top_pdir_t were nested in x86_space_t.  Hoisted to
@@ -116,12 +100,6 @@ struct x86_top_pdir_t {
 	    pgent_t kernel_pdp;
 	} __attribute__((aligned(X86_PTAB_BYTES)));
     };
-#if defined(__cplusplus)
-    pgent_t *get_kernel_pdp_pgent()
-	{  return kernel_pdp.subtree((space_t *) this, pgent_t::size_512g); }
-    x86_kernel_pdp_t *get_kernel_pdp()
-	{  return (x86_kernel_pdp_t *) get_kernel_pdp_pgent(); }
-#endif
 };
 typedef struct x86_top_pdir_t x86_top_pdir_t;
 
@@ -143,19 +121,6 @@ struct x86_space_t {
 #define SPACE_ACCESS_READWRITE	(-1)
 #define SPACE_ACCESS_EXECUTE	16
 
-#if defined(__cplusplus)
-public:
-    enum access_e {
-	read		= SPACE_ACCESS_READ,
-	write		= SPACE_ACCESS_WRITE,
-	readwrite	= SPACE_ACCESS_READWRITE,
-	execute		= SPACE_ACCESS_EXECUTE
-    };
-
-    typedef x86_kernel_pdp_t kernel_pdp_t;
-    typedef x86_top_pdir_t top_pdir_t;
-protected:
-#endif
     struct
     {	
 	struct {
@@ -175,17 +140,6 @@ protected:
 #endif		    
     } data;
 
-#if defined(__cplusplus)
-public:
-
-    static const addr_t sign_extend(addr_t addr)
-	{ return (addr_t) ((word_t) addr | X86_X64_SIGN_EXTENSION); }
-
-#if defined(CONFIG_X86_COMPATIBILITY_MODE)
-    /* Compatibility Mode specific functions */
-    bool is_compatibility_mode() { return data.compatibility_mode == true; }
-#endif
-#endif /* __cplusplus */
 
 } __attribute__((aligned(X86_PTAB_BYTES)));
 typedef struct x86_space_t x86_space_t;

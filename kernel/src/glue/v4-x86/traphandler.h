@@ -38,18 +38,8 @@ END_DECLS
    a class static) so it can be defined in C (x64/exception.c). */
 extern const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2];
 
-#if defined(__cplusplus)
-/* exception handling */
-class x86_exc_reg_t
-{
-public:
-    static const word_t mr(word_t num) { return x86_exc_reg_mr2reg[num][0]; };
-    static const word_t reg(word_t num) { return x86_exc_reg_mr2reg[num][1]; };
-};
-#else /* !__cplusplus: C forms of the x86_exc_reg_t static accessors. */
 INLINE word_t x86_exc_reg_mr (word_t num)  { return x86_exc_reg_mr2reg[num][0]; }
 INLINE word_t x86_exc_reg_reg (word_t num) { return x86_exc_reg_mr2reg[num][1]; }
-#endif /* __cplusplus */
 
 /* send_exception_ipc is defined in glue/v4-x86/exception.c (C); keep C linkage
    so it is callable from both languages. */

@@ -43,19 +43,6 @@
 
 struct idt_t
 {
-#if defined(__cplusplus)
-public:
-    enum type_e
-    {
-	interrupt = IDT_TYPE_INTERRUPT,
-	syscall	  = IDT_TYPE_SYSCALL,
-	trap	  = IDT_TYPE_TRAP
-    };
-
-    x86_idtdesc_t get_descriptor(word_t index);
-    void add_gate(word_t index, type_e type, void (*address)());
-    void activate();
-#endif /* __cplusplus */
     x86_idtdesc_t descriptors[IDT_SIZE];
 };
 typedef struct idt_t idt_t;
@@ -69,21 +56,6 @@ void idt_add_gate(idt_t *self, word_t index, int type, void (*address)(void));
 void idt_activate(idt_t *self);
 END_DECLS
 
-#if defined(__cplusplus)
-INLINE x86_idtdesc_t idt_t::get_descriptor(word_t index)
-{
-    ASSERT(index < IDT_SIZE);
-    return descriptors[index];
-}
-INLINE void idt_t::add_gate(word_t index, type_e type, void (*address)())
-{
-    idt_add_gate(this, index, (int) type, (void (*)(void)) address);
-}
-INLINE void idt_t::activate()
-{
-    idt_activate(this);
-}
-#endif /* __cplusplus */
 
 extern idt_t idt;
 
