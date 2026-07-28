@@ -4241,3 +4241,54 @@ rr rebuilds with 0 errors, 706 symbols with identical bodies, and boots to
 userland with `showqueue` printing its "accounted tcb" form; hs rebuilds to 73
 objects, 0 errors, unchanged 340968-byte image. Deleting an unreferenced file
 should be a no-op in the binary, and it measurably is.
+
+
+## §107 — kdb/api/v4/space.cc: not convertible, because its subsystem is gone
+
+The `listspaces` command ('S'): walk a global list of address spaces, printing
+each space and the threads attached to it. It could not be converted, and the
+reason is worth separating from the ordinary migration work.
+
+Three facts, each checked rather than inferred:
+
+  - **It is in no build.** `kdb/api/v4/Makeconf` lists
+    `input.c kernelinterface.c tcb.c thread.c schedule-$(SCHED).c sigma0.c`.
+    No `space`. Nothing compiles this file.
+  - **It does not compile as C++ either** — 11 errors against the current tree.
+    Only three are C++-isms (`queue_state_t::is_set`, `tcb_t::get_cpu`,
+    `spinlock` methods); the other eight are missing declarations.
+  - **The structures it walks no longer exist.** `global_spaces_list`,
+    `spaces_list_lock`, `space_t::get_thread_list()`,
+    `space_t::get_spaces_list()` and `tcb_t::thread_list` appear nowhere in the
+    tree. `git log -S` puts their removal in **a0a8042**, "Removed unmaintained
+    architectures and platforms" — the per-space thread list and the global
+    space list went with it, and this file was left behind.
+
+So "convert it to C" had no achievable meaning. The C++ syntax is the smallest
+part of the problem; making the file build would mean re-adding a linked list to
+`space_t` and a `thread_list` member to `tcb_t` — a new field in the TCB, which
+moves every `tcb_layout.h` offset. That is implementing a removed feature, not
+migrating a file.
+
+Deleted, on the same grounds as §106: dead code for a subsystem that no longer
+exists, recoverable from `git log`. The build is unaffected because it was never
+part of it — the rr kernel differs by 2 bytes, the `.kip` timestamp.
+
+`kdb/api/v4/` is now free of C++.
+
+### The check that mattered
+
+The temptation was to start rewriting `queue_state_t::is_set` into
+`queue_state_is_set` and discover the rest one error at a time. Grepping the
+five identifiers first — thirty seconds — established that the file was
+unbuildable in *either* language before any of it was touched, which is what
+turned "convert this" into a question with three real answers rather than a task
+with one bad outcome. §105 records the inverse mistake: concluding from a build
+what a five-second read of the rule would have settled.
+
+### Remaining C++ in the tree
+
+86 `.cc` files, none of them in a configuration that currently builds: the
+powerpc64 port, x86-x32 and its x32comp layer, the OpenFirmware platforms
+(ofppc, ofpower3/4, ofg5), efi, simics, and `generic/mdb.cc`/`vrt.cc` with their
+kdb counterparts. §95 measured which x64 configs those block: 10 of 11.
