@@ -3387,3 +3387,64 @@ this tree ever built `kdb/tracebuffer.h` as C++ after §90, so the C++ branch
 rotted immediately and silently, and the guard went on claiming otherwise for
 four sections. Where a guard is kept for a consumer that no build touches, it
 is not compatibility — it is unverified code with a comment on it.
+
+## §95 — The last C++ compile was hiding in the build system
+
+Before collapsing the ~72 arch-shared headers, the gate needed answering
+properly: which x86 configurations actually build today? `contrib/configs/`
+holds 32 prebuilt configurations, so unlike powerpc in §93 this can be measured
+rather than argued. Built all eleven x64 ones from a clean tree at HEAD:
+
+    x86-x64-p4-smp          OK  331824
+    x86-x64-p4              FAIL  4    platform/pc99/8259.h -- C++ template
+    x86-x64-p4-nokdb        FAIL  4      "
+    x86-x64-p4-newmdb       FAIL  4      "
+    x86-x64-p4-fp           FAIL  4      "
+    x86-x64-p4-statictcbs   FAIL  4      "
+    x86-x64-p3              FAIL  4      "
+    x86-x64-k8              FAIL  4      "
+    x86-x64-p4-fullkdb      FAIL  7    kdb/tracebuffer.h via tcb_layout
+    x86-x64-p4-iofp         FAIL  61   generic/vrt.h -- still a C++ class
+    x86-x64-p4-cm           FAIL  99   glue/v4-x86/utcb.h -- `namespace`
+
+**Ten of eleven configurations do not build.** This migration has verified
+exactly one configuration from the start, and the others drifted out from under
+it. The recurring 4-error failure is the same root cause in seven configs: with
+`CONFIG_IOAPIC` off the PIC path is selected, and `platform/pc99/8259.h`,
+`platform/generic/intctrl-pic.h` and `glue/v4-x86/intctrl.h` are still C++
+(`i8259_pic_t<0x20> master;`) while every file that includes them is now C.
+These are not header-guard problems — they are unmigrated headers, and they are
+the real remaining work. Recorded here; not fixed in this pass.
+
+### The finding that actually blocks the collapse
+
+`x86-x64-p4-fullkdb` failed inside `include/tcb_layout.h` generation, in a
+*generated `.c` file*, with the §94 C++ signature. That makes no sense until you
+read `Mk/Makefile.voodoo:84`:
+
+    @$(CC) -x c++ -w $(CPPFLAGS) $(CFLAGS) -DBUILD_TCB_LAYOUT -S ...
+
+The tcb_layout generator writes a small file that does `#include INC_API(tcb.h)`
+and compiles it **as C++, on every build, in every configuration**. That line is
+original — `git log -L` shows it unchanged since the initial import. It was
+never touched by this migration.
+
+So the claim in §86 that the x86-x64-p4-smp build issues "no `g++` invocation
+and no C++ compilation" was half right. No `.cc` file is compiled, but one C++
+translation unit is produced by the build system itself on every run, and it
+pulls in `api/v4/tcb.h` and its entire transitive closure — which is most of the
+72 guarded headers. **That generator is why those guards still work, and it is
+what would have broken had the collapse gone ahead on the §94 reasoning alone.**
+
+Switched it to `-x c`. The generated `tcb_layout.h` is byte-identical to the one
+the C++ compile produced (51 lines, same offsets), the kernel is byte-identical
+at 332136, and boottest passes. `src/glue/v4-x86/asmsyms.c` — the other voodoo
+generator — is already C; only powerpc still has `asmsyms.cc`. With this line
+changed, an x86 build issues **no C++ compilation of any kind**, generated or
+otherwise, for the first time in the migration.
+
+**Lesson: "no C++ left" is a claim about the build, not about the file list.**
+Grepping for `.cc` sources and for `g++` both missed this, because the C++ came
+from `$(CC) -x c++` inside a code generator. Before declaring a language
+migration complete, read the build rules for explicit `-x`, and check generated
+translation units as well as checked-in ones.

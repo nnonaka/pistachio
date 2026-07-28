@@ -81,7 +81,7 @@ void make_offsets()						\n\
 	>> $(TCBLAYOUTTMP).c
 	@#
 	@# build offsets with cross compiler
-	@$(CC) -x c++ -w $(CPPFLAGS) $(CFLAGS) -DBUILD_TCB_LAYOUT -S -o $(TCBLAYOUTTMP).s $(TCBLAYOUTTMP).c || ( $(RM) $(TCBLAYOUTTMP)* $@ ; exit -1 )
+	@$(CC) -x c -w $(CPPFLAGS) $(CFLAGS) -DBUILD_TCB_LAYOUT -S -o $(TCBLAYOUTTMP).s $(TCBLAYOUTTMP).c || ( $(RM) $(TCBLAYOUTTMP)* $@ ; exit -1 )
 	@# run dumper
 	@$(PRINTF) '/* machine-generated file - do NOT edit */\n'	>  $@
 	@$(PRINTF) '#ifndef __TCB_LAYOUT__H__\n'			>> $@
