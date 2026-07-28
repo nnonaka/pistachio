@@ -84,27 +84,29 @@ struct except_regs_t
     word_t srr0_ip;
     word_t srr1_flags;
 
-public:
-    void set_register(int reg, word_t val)
-	{
-	    if (reg == 0)
-		this->r0 = val;
-	    else if (reg < 3)
-		((word_t*)&this->r1_stack)[reg - 1] = val;
-	    else
-		((word_t*)&this->r3)[reg - 3] = val;
-	}
-
-    word_t get_register(int reg)
-	{
-	    if (reg == 0)
-		return this->r0;
-	    else if (reg < 3)
-		return ((word_t*)&this->r1_stack)[reg - 1];
-	    else
-		return ((word_t*)&this->r3)[reg - 3];
-	}
 };
+typedef struct except_regs_t except_regs_t;
+
+INLINE void except_regs_set_register (except_regs_t *self, int reg, word_t val)
+{
+    if (reg == 0)
+	self->r0 = val;
+    else if (reg < 3)
+	((word_t*)&self->r1_stack)[reg - 1] = val;
+    else
+	((word_t*)&self->r3)[reg - 3] = val;
+}
+
+INLINE word_t except_regs_get_register (except_regs_t *self, int reg)
+{
+    if (reg == 0)
+	return self->r0;
+    else if (reg < 3)
+	return ((word_t*)&self->r1_stack)[reg - 1];
+    else
+	return ((word_t*)&self->r3)[reg - 3];
+}
+
 
 struct syscall_regs_t
 {
@@ -117,6 +119,7 @@ struct syscall_regs_t
     word_t srr0_ip;
     word_t srr1_flags;
 };
+typedef struct syscall_regs_t syscall_regs_t;
 
 #endif	/* !ASSEMBLY */
 

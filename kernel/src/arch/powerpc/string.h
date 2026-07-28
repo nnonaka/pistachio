@@ -34,7 +34,7 @@
 #ifndef __ARCH__POWERPC__STRING_H__
 #define __ARCH__POWERPC__STRING_H__
 
-extern "C" void *memcpy( void *dst, const void *src, word_t size );
+EXTERN_C void *memcpy( void *dst, const void *src, word_t size );
 
 extern void hex( word_t num, char str[] );
 

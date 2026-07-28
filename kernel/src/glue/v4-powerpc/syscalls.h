@@ -337,7 +337,7 @@ do {									\
 #define return_unmap() return_user_with_MRs()
 
 #if !defined(ASSEMBLY)
-extern "C" {
+BEGIN_DECLS
 extern void _sc_schedule( void );
 extern void _sc_thread_switch( void );
 extern void _sc_system_clock( void );
@@ -350,14 +350,14 @@ extern void _sc_processor_ctrl( void );
 extern void _sc_thread_ctrl( void );
 extern void _sc_space_ctrl( void );
 extern void _sc_perf( void );
-}
+END_DECLS
 #endif
 
 
 /*  EXCDEF is a macro which helps consistantly declare exception handlers,
  *  while reducing typing :)
  */
-#define EXCDEF(n,params...) extern "C" __attribute__((noreturn)) void except_##n (word_t srr0 , word_t srr1 , except_regs_t *frame , ## params )
+#define EXCDEF(n,params...) EXTERN_C __attribute__((noreturn)) void except_##n (word_t srr0 , word_t srr1 , except_regs_t *frame , ## params )
 
 /* return_except() short circuits the C code return path.
  * We declare the exception handlers as noreturn, to avoid

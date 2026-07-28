@@ -34,7 +34,7 @@
 #ifndef __ARCH__POWERPC__DEBUG_H__
 #define __ARCH__POWERPC__DEBUG_H__
 
-class tcb_t;
+struct tcb_t;
 
 #define DEBUG_MAGIC_STR	"KD# "
 #define DEBUG_IS_MAGIC(instr)	((((instr) >> 26) & 0x3f) == 18)
@@ -43,21 +43,20 @@ class tcb_t;
 
 #include INC_GLUE(syscalls.h)
 
-INLINE void spin_forever( int pos=0 )
+INLINE void spin_forever( int pos )
 {
     while( 1 );
 }
 
-INLINE void spin( int pos, int cpu=0 )
+INLINE void spin( int pos, int cpu )
 {
 }
 
-class space_t;
-class tcb_t;
+struct space_t; typedef struct space_t space_t;
+struct tcb_t;   typedef struct tcb_t tcb_t;
 
-class debug_param_t 
+struct debug_param_t
 {
-public:
     word_t exception;
     space_t * space;
     tcb_t * tcb;
@@ -65,6 +64,7 @@ public:
     word_t dar;
     word_t dsisr;
 };
+typedef struct debug_param_t debug_param_t;
 
 #define enter_kdebug(arg...)					\
     asm volatile (						\
