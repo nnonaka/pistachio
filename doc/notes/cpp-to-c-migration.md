@@ -3835,3 +3835,58 @@ absence of complaints.
 `except.o: missing .note.GNU-stack section implies executable stack` remains —
 a hand-written `.S` with no `.note.GNU-stack`, unrelated to `.einit`, and not
 touched here.
+
+
+## §101 — The executable-stack warning: one flag, and what it exposed
+
+    ld: warning: src/glue/v4-powerpc/except.o: missing .note.GNU-stack section
+        implies executable stack
+
+gcc emits an empty `.note.GNU-stack` into every object it compiles from C.
+Hand-written `.S` files carry no such note, and ld reads its absence as "this
+object wants an executable stack". Three powerpc objects lacked it
+(`startup.o`, `kip_sc.o`, `except.o`) and one x86 object did
+(`platform/pc99/smp.o`) — ld names only the first offender per link, so the
+count is not visible from the warning.
+
+The note is meaningless for a freestanding kernel: it describes the stack of a
+process an ELF loader would set up, and nothing loads this image that way. But
+supplying it is how the assembler is meant to say so, and a link that prints a
+known-benign warning is a link where the next real one goes unread.
+
+Fixed in one place rather than 22 files, since `Mk/Makeconf` already has an
+`ASMFLAGS` used only by the `%.o: %.S` rule:
+
+    ASMFLAGS += -Wa,--noexecstack
+
+Both linkers now report nothing at all on powerpc, and on x86 only the
+pre-existing "LOAD segment with RWX permissions", which is inherent to a kernel
+image and predates this work.
+
+### The two ports responded differently, and that is the interesting part
+
+powerpc: image byte-identical but for the 4-byte `.kip` build timestamp; section
+and program headers identical. x86: all 705 symbol bodies byte-identical, but
+one program header changed —
+
+    GNU_STACK  ... RWE   ->   GNU_STACK  ... RW
+
+That is the fix doing exactly what it says, and the difference between the ports
+is the linker script. `platform/ppc44x/linker.lds` has an explicit `PHDRS`
+block, and when PHDRS is given ld emits *only* the listed headers — there is no
+`PT_GNU_STACK` to correct. x86 lets ld synthesise its program headers, so the
+segment exists and its permissions actually track the notes. Same source change,
+visible in one image and invisible in the other, for a reason that has nothing
+to do with either port's assembly.
+
+Worth remembering when a change "has no effect" on the port you happened to
+check: an explicit PHDRS list silently discards whatever ld would have inferred.
+
+### Verification
+
+  - powerpc: clean rebuild, 66/66 objects, link warning-free, headers identical,
+    4 bytes differ (the timestamp).
+  - x86: clean rebuild, 0 errors, 705 symbols with identical bodies, only the
+    GNU_STACK permission bits changed; boots to userland, sigma0 and ROOTTASK
+    created, kdb scheduling queue correct.
+  - Every object in both builds now carries `.note.GNU-stack`.

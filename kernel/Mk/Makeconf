@@ -189,6 +189,15 @@ endif
 CFLAGS = -ffreestanding $(CCFLAGS)
 
 # these for assembly files only
+#
+# --noexecstack emits the empty .note.GNU-stack section that gcc already adds to
+# every object it compiles from C.  Hand-written .S files carry no such note, and
+# ld reads a missing note as "this object wants an executable stack" and warns.
+# The mark is meaningless for a freestanding kernel -- it describes the stack of
+# a process the loader would set up -- but supplying it is how the assembler is
+# meant to say so, and it keeps the link output free of noise that would hide a
+# real warning.
+ASMFLAGS += -Wa,--noexecstack
 ASMFLAGS += $(ASMFLAGS_$(PLATFORM)) $(ASMFLAGS_$(ARCH)) $(ASMFLAGS_$(CPU))
 
 
