@@ -39,7 +39,7 @@
 // ctors.
 tcb_t *_fp_lazy_tcb UNIT("cpulocal");
 
-INLINE void thread_resources_t::deactivate_fpu( tcb_t *tcb )
+void tcb_resources_deactivate_fpu (thread_resources_t *self, tcb_t *tcb)
 {
     set_fp_lazy_tcb( NULL );
     // Disable fpu access for the tcb.
@@ -47,7 +47,7 @@ INLINE void thread_resources_t::deactivate_fpu( tcb_t *tcb )
     regs->srr1_flags = MSR_CLR( regs->srr1_flags, MSR_FP );
 }
 
-INLINE void thread_resources_t::activate_fpu( tcb_t *tcb )
+void tcb_resources_activate_fpu (thread_resources_t *self, tcb_t *tcb)
 {
     set_fp_lazy_tcb( tcb );
     // Enable fpu access for the tcb.
@@ -55,100 +55,100 @@ INLINE void thread_resources_t::activate_fpu( tcb_t *tcb )
     regs->srr1_flags = MSR_SET( regs->srr1_flags, MSR_FP );
 }
 
-void thread_resources_t::reown_fpu( tcb_t *tcb, tcb_t *new_owner )
+void tcb_resources_reown_fpu (thread_resources_t *self, tcb_t *tcb, tcb_t *new_owner)
 {
-    deactivate_fpu(tcb);
-    new_owner->resources.activate_fpu(new_owner);
+    tcb_resources_deactivate_fpu (self, tcb);
+    tcb_resources_activate_fpu (&new_owner->resources, new_owner);
 }
 
 #ifdef CONFIG_X_PPC_SOFTHVM
 #include INC_ARCH(softhvm.h)
-tcb_t *thread_resources_t::last_hvm_tcb;
+tcb_t *thread_resources_last_hvm_tcb;
 
-INLINE void thread_resources_t::enable_hvm_mode(tcb_t *tcb)
+void tcb_resources_enable_hvm_mode (thread_resources_t *self, tcb_t *tcb)
 {
     //TRACEF("Enable HVM mode (%p)\n", tcb);
     ppc_set_spr(SPR_IVPR, ((word_t)memcfg_start_except() & 0xffff0000) + EXCEPT_HVM_OFFSET);
-    ppc_set_pid(tcb->get_arch()->vm->get_pid_for_msr());
-    tcb->get_arch()->vm->load_guest_sprs();
+    ppc_set_pid (ppc_softhvm_get_pid_for_msr ((&tcb->arch)->vm));
+    ppc_softhvm_load_guest_sprs ((&tcb->arch)->vm);
 }
 
-INLINE void thread_resources_t::disable_hvm_mode(tcb_t *tcb)
+void tcb_resources_disable_hvm_mode (thread_resources_t *self, tcb_t *tcb)
 {
     //TRACEF("Disable HVM mode (%p)\n", get_current_tcb());
     ppc_set_spr(SPR_IVPR, (word_t)memcfg_start_except() & 0xffff0000);
 }
 #endif
 
-void thread_resources_t::dump (tcb_t * tcb)
+void tcb_resources_dump (thread_resources_t *self, tcb_t * tcb)
 {
-    if (tcb->resource_bits.have_resource(COPY_AREA))
+    if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))
 	printf("copy ");
-    if (tcb->resource_bits.have_resource(KERNEL_IPC))
+    if (resource_bits_have_resource (&tcb->resource_bits, KERNEL_IPC))
 	printf("kipc ");
-    if (tcb->resource_bits.have_resource(KERNEL_THREAD))
+    if (resource_bits_have_resource (&tcb->resource_bits, KERNEL_THREAD))
 	printf("kthread ");
-    if (tcb->resource_bits.have_resource(FPU))
+    if (resource_bits_have_resource (&tcb->resource_bits, FPU))
 	printf("fpu ");
-    if (tcb->resource_bits.have_resource(SOFTHVM))
+    if (resource_bits_have_resource (&tcb->resource_bits, SOFTHVM))
 	printf("hvm ");
 }
 
-void thread_resources_t::save( tcb_t *tcb )
+void tcb_resources_save (thread_resources_t *self, tcb_t *tcb)
 {
-    if (tcb->resource_bits.have_resource(COPY_AREA))
+    if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))
 	flush_copy_area(tcb);
 #ifdef CONFIG_X_PPC_SOFTHVM
-    if (tcb->resource_bits.have_resource(SOFTHVM)) {
+    if (resource_bits_have_resource (&tcb->resource_bits, SOFTHVM)) {
 	disable_hvm_mode( tcb );
-        last_hvm_tcb = tcb;
+        thread_resources_last_hvm_tcb = tcb;
     }
 #endif
 }
 
-void thread_resources_t::load( tcb_t *tcb )
+void tcb_resources_load (thread_resources_t *self, tcb_t *tcb)
 {
-    if (tcb->resource_bits.have_resource(COPY_AREA))
+    if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))
 	enable_copy_area( tcb );
 #ifdef CONFIG_X_PPC_SOFTHVM
-    if (tcb->resource_bits.have_resource(SOFTHVM)) {
+    if (resource_bits_have_resource (&tcb->resource_bits, SOFTHVM)) {
 	enable_hvm_mode( tcb );
-        space_t *space = tcb->get_space();
-        if (last_hvm_tcb && space != last_hvm_tcb->get_space())
+        space_t *space = tcb_get_space (tcb);
+        if (thread_resources_last_hvm_tcb && space != tcb_get_space (thread_resources_last_hvm_tcb))
         {
             //flush hvm tlb entries
             //printf("hvm space switch %t %p -> %t %p, flushing tlb\n",
-            //     last_hvm_tcb, last_hvm_tcb->get_space(), tcb, space);
-            space->flush_tlb_hvm(space, 0, ~0U);
+            //     thread_resources_last_hvm_tcb, tcb_get_space (thread_resources_last_hvm_tcb), tcb, space);
+            space_flush_tlb_hvm (space, space, 0, ~0U);
         }
     }
 #endif
 }
 
-void thread_resources_t::purge( tcb_t *tcb )
+void tcb_resources_purge (thread_resources_t *self, tcb_t *tcb)
 {
     if( get_fp_lazy_tcb() == tcb )
-	this->spill_fpu( tcb );
+	tcb_resources_spill_fpu (self,  tcb );
 }
 
-void thread_resources_t::init( tcb_t *tcb )
+void tcb_resources_init (thread_resources_t *self, tcb_t *tcb)
 {
-    tcb->resource_bits.init();
-    fpscr = 0;	// TODO: seed with an appropriate value!
+    resource_bits_init (&tcb->resource_bits);
+    self->fpscr = 0;	// TODO: seed with an appropriate value!
 }
 
-void thread_resources_t::free( tcb_t *tcb )
+void tcb_resources_free (thread_resources_t *self, tcb_t *tcb)
 {
     if( get_fp_lazy_tcb() == tcb )
-	this->deactivate_fpu( tcb );
+	tcb_resources_deactivate_fpu (self,  tcb );
 }
 
-void thread_resources_t::spill_fpu( tcb_t *tcb )
+void tcb_resources_spill_fpu (thread_resources_t *self, tcb_t *tcb)
 {
     // Spill the registers.
-    u64_t *start = this->fpu_state;
+    u64_t *start = self->fpu_state;
 #ifdef CONFIG_SUBPLAT_440_BGP
-    ASSERT((reinterpret_cast<word_t>(start) & 0xf) == 0);
+    ASSERT(((word_t)(start) & 0xf) == 0);
     asm volatile (
 	"stfpdx	  0, 0, %[dest]\n"
 	"stfpdux  1, %[dest], %[offset]\n"
@@ -224,27 +224,27 @@ void thread_resources_t::spill_fpu( tcb_t *tcb )
 	      "b" (start)
 	    );
 #endif
-    /* Spill the fpscr.  Temporarily store it to an 8-byte location,
+    /* Spill the self->fpscr.  Temporarily store it to an 8-byte location,
      * so that we can store it as a double and avoid an fp-double to
      * fp-single conversion.  Then we move it to our 4-byte tcb location.
      */
-    this->fpscr = ppc_get_fpscr();
-    this->deactivate_fpu( tcb );
+    self->fpscr = ppc_get_fpscr();
+    tcb_resources_deactivate_fpu (self,  tcb );
 }
 
-void thread_resources_t::restore_fpu( tcb_t *tcb )
+void tcb_resources_restore_fpu (thread_resources_t *self, tcb_t *tcb)
 {
-    /* Restore the fpscr.  We store it in the tcb as a 4-byte quantity,
+    /* Restore the self->fpscr.  We store it in the tcb as a 4-byte quantity,
      * but we need to load it as a floating point double to prevent
      * conversion from fp-single to fp-double.  So temporarily store
      * it in a 8-byte location.
      */
-    ppc_set_fpscr(this->fpscr);
+    ppc_set_fpscr(self->fpscr);
 
     // Load the registers.
-    u64_t *start = this->fpu_state;
+    u64_t *start = self->fpu_state;
 #ifdef CONFIG_SUBPLAT_440_BGP
-    ASSERT((reinterpret_cast<word_t>(start) & 0xf) == 0);
+    ASSERT(((word_t)(start) & 0xf) == 0);
     asm volatile (
 	"lfpdx	 0, 0, %[src]\n"
 	"lfpdux  1, %[src], %[offset]\n"
@@ -320,6 +320,6 @@ void thread_resources_t::restore_fpu( tcb_t *tcb )
 	      "b" (start)
 	    );
 #endif
-    this->activate_fpu( tcb );
+    tcb_resources_activate_fpu (self,  tcb );
 }
 
