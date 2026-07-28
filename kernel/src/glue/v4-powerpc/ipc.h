@@ -34,10 +34,8 @@
 #define __GLUE__V4_POWERPC__IPC_H__
 
 
-class arch_ctrlxfer_item_t
-{ 
-public:
-    enum id_e {
+/* Was a class wrapping nothing but this enum; C enums are file-scope anyway. */
+enum arch_ctrlxfer_id_e {
 	id_gpregs0,	// r0-r15
 	id_gpregs1,	// r16-r31
 	id_gpregsx,	// xer, cr, ctr, lr, ip
@@ -70,7 +68,6 @@ public:
 	id_tlb15,
 #endif
 	id_max,
-    };
 };
 
 #endif /* !__GLUE__V4_POWERPC__IPC_H__ */

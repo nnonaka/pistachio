@@ -35,78 +35,86 @@
 
 #include INC_GLUE(ipc.h)
 
-typedef bitmask_t<u16_t> ctrlxfer_mask_t;
+typedef bitmask_u16_t ctrlxfer_mask_t;
 typedef word_t ctrlxfer_regs_t[16];
 
-class ppc_softhvm_t;
+struct ppc_softhvm_t; typedef struct ppc_softhvm_t ppc_softhvm_t;
 struct except_regs_t;
-class tcb_t;
+struct tcb_t; typedef struct tcb_t tcb_t;
 
 #if defined(CONFIG_X_PPC_SOFTHVM)
-class softhvm_t
-{
-public:
-    enum exit_reason_e {
-	er_program,
-	er_tlb,
-	er_max
-    };
-
-    static msg_tag_t fault_tag(int exc, int untyped, bool internal)
-	{
-	    return msg_tag_t::tag (0, untyped, -((2UL + IPC_CTRLXFER_STDFAULTS + exc) << 4) | 
-				   (internal  ? 1 << 3 : 0));
-	}
-
-    static msg_tag_t pagefault_tag(int exc, int untyped, bool read, bool write, bool exec)
-	{
-	    msg_tag_t tag = fault_tag(exc, untyped, false);
-	    tag.x.label |= ( (read ? 1 << 2 : 0) |
-			     (write ? 1 << 1 : 0) | 
-			     (exec  ? 1 << 0 : 0) );
-	    return tag;
-	}
-
+enum softhvm_exit_reason_e {
+    er_program,
+    er_tlb,
+    er_max
 };
+
+INLINE msg_tag_t softhvm_fault_tag (int exc, int untyped, bool internal)
+{
+    msg_tag_t tag;
+    msg_tag_set (&tag, 0, untyped,
+		 -((2UL + IPC_CTRLXFER_STDFAULTS + exc) << 4) |
+		 (internal ? 1 << 3 : 0));
+    return tag;
+}
+
+INLINE msg_tag_t softhvm_pagefault_tag (int exc, int untyped, bool read, bool write, bool exec)
+{
+    msg_tag_t tag = softhvm_fault_tag (exc, untyped, false);
+    tag.x.label |= ( (read  ? 1 << 2 : 0) |
+		     (write ? 1 << 1 : 0) |
+		     (exec  ? 1 << 0 : 0) );
+    return tag;
+}
 #endif
 
-class arch_ktcb_t
-{
-public:
 #if !defined(CONFIG_X_PPC_SOFTHVM)
-    static const int fault_max = 0;
+#define ARCH_KTCB_FAULT_MAX	0
 #else
-    static const int fault_max = softhvm_t::er_max;
-    ppc_softhvm_t *vm;
-    void init_hvm(tcb_t *tcb);
-
-    bool send_hvm_fault(softhvm_t::exit_reason_e exc,
-			except_regs_t *frame, word_t instr, word_t param, bool internal);
-    bool send_hvm_pagefault(softhvm_t::exit_reason_e exc, except_regs_t *frame,
-                            word_t addr, word_t instr,
-			    word_t tlb0, word_t tlb1, word_t tlb2, u8_t pid, u8_t idx,
-			    bool read, bool write, bool execute);
-
-    word_t get_powerpc_frameregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr);
-    word_t set_powerpc_frameregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr);
-
-    word_t powerpc_ctrlxfer_fpu(tcb_t *dst);
-    word_t get_powerpc_fpuregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr);
-    word_t set_powerpc_fpuregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr);
-    
-    word_t get_powerpc_vmregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr);
-    word_t set_powerpc_vmregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr);
-    word_t get_powerpc_tlbregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr);
-    word_t set_powerpc_tlbregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr);
-    
-#if defined(CONFIG_DEBUG)
-    word_t get_ctrlxfer_reg(word_t id, word_t reg);
+#define ARCH_KTCB_FAULT_MAX	er_max
 #endif
 
-    static get_ctrlxfer_regs_t get_ctrlxfer_regs[arch_ctrlxfer_item_t::id_max];
-    static set_ctrlxfer_regs_t set_ctrlxfer_regs[arch_ctrlxfer_item_t::id_max];
-    
+struct arch_ktcb_t
+{
+#if defined(CONFIG_X_PPC_SOFTHVM)
+    ppc_softhvm_t *vm;
+#else
+    /* No arch-specific ktcb state without SOFTHVM; an empty struct is a GNU C
+       extension of size 0, which would shift every tcb_t field after `arch`. */
+    char __empty;
 #endif
 };
+typedef struct arch_ktcb_t arch_ktcb_t;
+
+#if defined(CONFIG_X_PPC_SOFTHVM)
+void arch_ktcb_init_hvm (arch_ktcb_t *self, tcb_t *tcb);
+
+/* The &dst_mr / &src_mr reference out-parameters become pointers. */
+bool   arch_ktcb_send_hvm_fault (arch_ktcb_t *self, enum softhvm_exit_reason_e exc,
+				 except_regs_t *frame, word_t instr, word_t param, bool internal);
+bool   arch_ktcb_send_hvm_pagefault (arch_ktcb_t *self, enum softhvm_exit_reason_e exc,
+				     except_regs_t *frame, word_t addr, word_t instr,
+				     word_t tlb0, word_t tlb1, word_t tlb2, u8_t pid, u8_t idx,
+				     bool read, bool write, bool execute);
+
+word_t arch_ktcb_get_powerpc_frameregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_powerpc_frameregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+
+word_t arch_ktcb_powerpc_ctrlxfer_fpu (arch_ktcb_t *self, tcb_t *dst);
+word_t arch_ktcb_get_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_powerpc_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+
+word_t arch_ktcb_get_powerpc_vmregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_powerpc_vmregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+word_t arch_ktcb_get_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_powerpc_tlbregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+
+#if defined(CONFIG_DEBUG)
+word_t arch_ktcb_get_ctrlxfer_reg (arch_ktcb_t *self, word_t id, word_t reg);
+#endif
+
+extern get_ctrlxfer_regs_t get_ctrlxfer_regs[id_max];
+extern set_ctrlxfer_regs_t set_ctrlxfer_regs[id_max];
+#endif
 
 #endif /* !__GLUE__V4_POWERPC__KTCB_H__ */
