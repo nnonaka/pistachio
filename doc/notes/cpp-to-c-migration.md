@@ -3957,3 +3957,86 @@ The honest fix is a PHDRS block for `src/glue/v4-x86/x64/linker.lds` plus an
 mappings to be derived from segment flags rather than hardcoded in
 `glue/v4-x86/init.c` — at which point the flags stop being decorative and the
 2 MB cost buys something real. Until then it is churn on the boot path.
+
+
+## §103 — sched-hs, part 1: the headers, and the keystone they were blocking
+
+`SCHED=hs` (Hierarchical Stride Scheduling, `config/rules.cml:120`) is the
+alternative to `SCHED_RR`. Four files in `src/api/v4/sched-hs/` plus
+`kdb/api/v4/schedule-hs.cc` were still C++.
+
+### It was already unbuildable in *both* languages
+
+Worth establishing before touching anything, because it decides what
+verification is even possible. As C, `SCHED=hs` died at 14 objects. As C++ —
+syntax-checked against the same config — `schedule.cc` produced 181 errors,
+all of the same kind:
+
+    error: 'ringlist_t' does not name a type; did you mean 'ringlist_tcb_t'?
+    error: 'bitmask_t' does not name a type; did you mean 'bitmask_u32_t'?
+    error: 'time_t' has no member named 'is_never'
+
+sched-hs is *stranded* C++: the shared infrastructure it is written against
+(`ringlist_t<T>`, `bitmask_t<T>`, `time_t`'s methods) became C some commits ago,
+and nothing rebuilt this policy because no config in `contrib/configs` selects
+it. So there is no working reference binary to compare against, and no
+regression risk either — the conversion is the only thing that can make it build.
+
+### The keystone, again
+
+The same §95 shape. `Mk/Makefile.voodoo` generates `tcb_layout.h` by compiling
+one TU **as C** over the tcb closure, and `sched-hs/ktcb.h` sits in that closure
+via `api/v4/sktcb.h`. A `class` there means `tcb_layout.h` is never generated,
+which means *every* translation unit fails on `#include <tcb_layout.h>` — 3913
+-style noise that says nothing about the real state. Converting `ktcb.h` alone
+takes the build from 14 objects to 42.
+
+The layout it produces is the check that matters. `hs_sched_ktcb_t` came out 40
+bytes larger than `rr_sched_ktcb_t`, and `OFS_TCB_SCHED_STATE_SCHEDULER` moved
+208 -> 248 accordingly: the policy struct is 128 bytes, ending 8-byte aligned
+with no trailing padding, so the §78 tail-padding divergence does not arise
+here. (rr needed an explicit `__tail_pad` for exactly that reason; hs already
+had a `reserved0` doing the job.)
+
+### What the headers became
+
+`ktcb.h`: `struct hs_sched_ktcb_t` plus `hs_sched_*` INLINE accessors, mirroring
+rr's naming. Two things could not stay in the header:
+
+  - `DEFAULT_TIMESLICE_LENGTH`/`DEFAULT_TOTAL_QUANTUM` were `time_t::period(625,3)`
+    and `time_t::never()`. time_t's C helpers live in `api/v4/tcb.h`, far too
+    late in the include order, so both defaults move to `schedule.c` — the same
+    resolution rr used.
+  - `get_domain_prio_queue()` fell off the end of the function when
+    `BUILD_TCB_LAYOUT` was defined (no return statement on that path). The C
+    form returns NULL there instead.
+
+`schedule.h`: `prio_queue_t`, `hs_scheduler_t` and `smp_requeue_t` as structs in
+C++ declaration order, with only those accessors that do not dereference a
+`tcb_t` — the rest cannot be INLINE this early in the include order, exactly as
+rr documents.
+
+### What remains, and why the error count is misleading
+
+Two files: `src/api/v4/sched-hs/schedule.cc` (768 lines) and
+`kdb/api/v4/schedule-hs.cc`. The first must absorb
+`sched-hs/schedule_functions.h` (686 lines) as well, because the pre-migration
+`api/v4/schedule.h` ended with
+
+    #include INC_API_SCHED(schedule_functions.h)
+
+That header is *not* dead code, despite nothing `#include`-ing it by name today:
+it held the per-policy inline bodies of the shared `scheduler_t` methods
+(`schedule`, `deschedule`, `is_scheduler`, `check_schedule_parameters`, ...),
+which is why `schedule.cc` appears to define only five of them. rr folded its
+copy into `sched-rr/schedule.c`; hs needs the same. `sched-rr/schedule_functions.h`
+survives as genuinely dead C++ and should be deleted once hs is done.
+
+Of the 67 remaining errors, 28 are `kdb_class_helper.h: No such file` — a second
+generated header, whose rule cannot run until `kdb/api/v4/schedule-hs.c` exists
+by that name. They are downstream of the unconverted files, not independent
+work.
+
+The x86 rr gate is unaffected throughout: `sched-hs/*` is only reachable with
+`SCHED=hs`, and the gate kernel compares byte-identical apart from its 4-byte
+`.kip` timestamp, 705 symbols with identical bodies.
