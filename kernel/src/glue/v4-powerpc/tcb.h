@@ -79,16 +79,24 @@ INLINE addr_t get_kthread_ip( tcb_t *tcb )
     return (addr_t)tswitch_frame->ip;
 }
 
+/* tcb_get_stack_top is declared in api/v4/tcb.h *after* it includes this
+   header, so its one-line body is spelled out here instead.  Keep the two in
+   step -- the definition lives in glue/v4-powerpc/thread.c. */
+INLINE word_t * tcb_stack_top (tcb_t *tcb)
+{
+    return (word_t *) (((word_t)tcb + TOTAL_TCB_SIZE) & ~(8-1));
+}
+
 INLINE syscall_regs_t *get_user_syscall_regs( tcb_t *tcb )
 {
     return (syscall_regs_t *)
-	((word_t) tcb_get_stack_top(tcb) - sizeof(syscall_regs_t));
+	((word_t) tcb_stack_top(tcb) - sizeof(syscall_regs_t));
 }
 
 INLINE except_regs_t *get_user_except_regs( tcb_t *tcb )
 {
     return (except_regs_t *)
-	((word_t) tcb_get_stack_top(tcb) - sizeof(except_regs_t));
+	((word_t) tcb_stack_top(tcb) - sizeof(except_regs_t));
 }
 
 
@@ -129,17 +137,19 @@ INLINE ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault)
 {  
     word_t idx = fault - 2;
     return (idx < IPC_CTRLXFER_STDFAULTS + ARCH_KTCB_FAULT_MAX) ?
-	self->fault_ctrlxfer[idx] : ctrlxfer_mask_t(0);
+	self->fault_ctrlxfer[idx] : (ctrlxfer_mask_t) { .maskvalue = 0 };
 }
 
 INLINE word_t tcb_append_ctrlxfer_item (tcb_t *self, msg_tag_t tag, word_t offset)
 {
-    word_t fault = (0x1000 - (tag.get_label() >> 4));
-    if (tcb_get_fault_ctrlxfer_items(self, fault))
+    word_t fault = (0x1000 - (msg_tag_get_label (&tag) >> 4));
+    if (tcb_get_fault_ctrlxfer_items(self, fault).maskvalue)
     {
+	msg_item_t item;
 	TRACE_CTRLXFER_DETAILS( "append ctrlxfer item %d", fault);
-	flags += kernel_ctrlxfer_msg;
-	msg_item_t item = ctrlxfer_item_t::kernel_fault_item(fault);
+	/* tcb_flags_add and TCB_FLAG_* come later in api/v4/tcb.h. */
+	self->flags.maskvalue |= (1UL << 2);   /* TCB_FLAG_KERNEL_CTRLXFER_MSG */
+	item = ctrlxfer_kernel_fault_item (fault);
 	tcb_set_mr (self, offset++, item.raw);
 	return 1;
     }

@@ -114,7 +114,7 @@ INLINE word_t  pgent_rights (pgent_t *self, space_t * s, word_t pgsize)
 
 INLINE word_t  pgent_attributes (pgent_t *self, space_t * s, word_t pgsize)
 {
-    return (raw & PPC_PAGE_CACHE_INHIBIT) ? 1 : 0;
+    return (self->raw & PPC_PAGE_CACHE_INHIBIT) ? 1 : 0;
 }
 
 INLINE word_t  pgent_reference_bits (pgent_t *self, space_t *s, word_t pgsize, addr_t vaddr)
@@ -236,8 +236,8 @@ INLINE pgent_t * pgent_next (pgent_t *self, space_t * s, word_t pgsize, word_t n
 INLINE void  pgent_dump_misc (pgent_t *self, space_t * s, word_t pgsize)
 {
     printf("%s",
-	   map.caching == 1 ? "inhibit " : 
-	   map.caching == 2 ? "coherent " :
-	   map.caching == 3 ? "guarded " :
-	   map.caching == 4 ? "write-through " : "");
+	   self->map.caching == 1 ? "inhibit " :
+	   self->map.caching == 2 ? "coherent " :
+	   self->map.caching == 3 ? "guarded " :
+	   self->map.caching == 4 ? "write-through " : "");
 }

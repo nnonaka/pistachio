@@ -98,6 +98,16 @@
 # error "The page hash area overlaps the cpu data area."
 #endif
 
+#elif defined(CONFIG_PPC_MMU_TLB)
+
+#define CONFIG_MAX_NUM_ASIDS	64
+/* #define CONFIG_PREEMPT_ASIDS */
+#endif
+
+/* The KTCB area does not depend on which MMU variant is selected, but these
+   used to sit inside the CONFIG_PPC_MMU_SEGMENTS branch above -- so on a
+   CONFIG_PPC_MMU_TLB build (ppc44x) they were simply undefined, while the
+   overlap check below still referenced KTCB_AREA_END. */
 #define KTCB_AREA_START		0xE0000000
 #define KTCB_AREA_SIZE		(1 << (VALID_THREADNO_BITS + KTCB_BITS))
 #define KTCB_AREA_END		(KTCB_AREA_START + KTCB_AREA_SIZE)
@@ -106,11 +116,6 @@
 # error "The cpu area overlaps the KTCB area."
 #endif
 
-#elif defined(CONFIG_PPC_MMU_TLB)
-
-#define CONFIG_MAX_NUM_ASIDS	64
-/* #define CONFIG_PREEMPT_ASIDS */
-#endif
 
 #define COPY_AREA_START		0xF0000000
 #if defined(CONFIG_PPC_MMU_TLB)

@@ -87,42 +87,11 @@ enum pgsize_e {
     size_max	= size_4m
 };
 
-/* Was the private linknode pair.  The public four-argument set_linknode below
-   keeps the plain name -- that is the one generic/linear_ptab_walker.c calls --
-   so these raw word accessors take a suffix rather than overloading it. */
-word_t     pgent_get_linknode_raw (pgent_t *self);
-void       pgent_set_linknode_raw (pgent_t *self, word_t val);
-bool       pgent_is_valid (pgent_t *self, space_t * s, word_t pgsize);
-bool       pgent_is_writable (pgent_t *self, space_t * s, word_t pgsize);
-bool       pgent_is_readable (pgent_t *self, space_t * s, word_t pgsize);
-bool       pgent_is_executable (pgent_t *self, space_t * s, word_t pgsize);
-bool       pgent_is_subtree (pgent_t *self, space_t * s, word_t pgsize);
-bool       pgent_is_kernel (pgent_t *self, space_t * s, word_t pgsize);
-paddr_t    pgent_address (pgent_t *self, space_t * s, word_t pgsize);
-pgent_t *  pgent_subtree (pgent_t *self, space_t * s, word_t pgsize);
-mapnode_t * pgent_mapnode (pgent_t *self, space_t * s, word_t pgsize, addr_t vaddr);
-addr_t     pgent_vaddr (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map);
-word_t     pgent_rights (pgent_t *self, space_t * s, word_t pgsize);
-word_t     pgent_reference_bits (pgent_t *self, space_t *s, word_t pgsize, addr_t vaddr);
-word_t     pgent_attributes (pgent_t *self, space_t * s, word_t pgsize);
-void       pgent_flush (pgent_t *self, space_t * s, word_t pgsize, bool kernel, addr_t vaddr);
-void       pgent_clear (pgent_t *self, space_t * s, word_t pgsize, bool kernel, addr_t vaddr);
-void       pgent_make_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel);
-void       pgent_remove_subtree (pgent_t *self, space_t * s, word_t pgsize, bool kernel);
-void       pgent_set_entry (pgent_t *self, space_t * s, word_t pgsize, paddr_t paddr, word_t rwx, word_t attrib, bool kernel);
-void       pgent_set_writable (pgent_t *self, space_t * s, word_t pgsize);
-void       pgent_set_readonly (pgent_t *self, space_t * s, word_t pgsize);
-void       pgent_update_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
-void       pgent_revoke_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
-void       pgent_set_rights (pgent_t *self, space_t *s, word_t pgsize, word_t rwx);
-void       pgent_reset_reference_bits (pgent_t *self, space_t *s, word_t pgsize);
-void       pgent_update_reference_bits (pgent_t *self, space_t *s, word_t pgsz, word_t rwx);
-void       pgent_set_accessed (pgent_t *self, space_t *s, word_t pgsize, word_t flag);
-void       pgent_set_dirty (pgent_t *self, space_t *s, word_t pgsize, word_t flag);
-void       pgent_set_attributes (pgent_t *self, space_t * s, word_t pgsize, word_t attr);
-void       pgent_set_linknode (pgent_t *self, space_t * s, word_t pgsize, mapnode_t * map, addr_t vaddr);
-pgent_t *  pgent_next (pgent_t *self, space_t * s, word_t pgsize, word_t num);
-void       pgent_dump_misc (pgent_t *self, space_t * s, word_t pgsize);
+/* The operations on pgent_t are INLINE definitions in
+   arch/powerpc/pgent-swtlb_functions.h, which arch/powerpc/pgent.h includes
+   straight after this file.  They are deliberately not prototyped here: a
+   non-static declaration followed by a static-inline definition is a conflict
+   in C, and every consumer reaches both headers through pgent.h. */
 
 
 #endif /* !__ARCH__POWERPC__PGENT_SWTLB_H__ */
