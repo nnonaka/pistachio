@@ -5364,3 +5364,59 @@ The next probe is to keep bisecting the five remaining options, cheapest first
 
 Gate: 0 errors, 709 symbols with identical bodies. The other six building
 configs rebuild unchanged.
+
+
+## §124 — fullkdb's triple fault: `rdpmc`, and QEMU does not implement it
+
+Bisected to a single option and then to a single instruction. **It is not a
+migration fault.**
+
+### The bisect
+
+`x86-x64-p4-fullkdb` differs from the booting `x86-x64-p4` in nine options.
+Disabling all nine boots; disabling either half boots; disabling
+`CONFIG_TBUF_PERFMON` alone boots. `CONFIG_TRACEBUFFER` alone also boots, but
+only because `TBUF_PERFMON` depends on it — `TBUF_PERFMON` is the minimal
+culprit.
+
+An earlier round of this bisect gave contradictory answers (single options
+faulting, pairs booting, which reads like a size threshold). That was a broken
+harness, not a real signal: it detected "booted" by grepping for the
+`CONFIG_VERBOSE_INIT` banner, in runs whose build directory still carried
+hand-edits from previous experiments. Re-running with the tar re-extracted each
+time and the roottask banner as the marker gave a clean single-option answer.
+Worth remembering that a bisect over configurations needs the build directory
+reset every iteration, exactly like a `git bisect` needs a clean tree.
+
+### The instruction
+
+`qemu -d int` shows **18 × `v=06`** — #UD, invalid opcode — followed by `v=08`,
+a double fault. Resolving the first faulting IP:
+
+    ffffffffc0612ef5:  0f 33    rdpmc
+    ...inside __tbuf_record_event
+
+With `CONFIG_TBUF_PERFMON`, `arch/x86/tracebuffer.h` reads
+`x86_rdpmc(0)`/`x86_rdpmc(1)` on **every trace record**. QEMU's TCG does not
+implement the performance counters and raises #UD. Tracepoints fire during
+early init, the fault handler traces as well, so the #UD recurses eighteen
+times into a double fault and then a triple fault — which is why QEMU exits
+before a single character of output.
+
+On a real Pentium 4 with the counters configured this is a normal instruction.
+The configuration is not broken; it is asking for hardware the emulator does
+not provide.
+
+### Consequence for the tally
+
+`x86-x64-p4-fullkdb` should be counted as **building and correct**, with the
+caveat that it cannot be boot-tested under QEMU. Booting it here requires
+`CONFIG_TBUF_PERFMON=n`, which was verified to reach userland.
+
+    build, boot verified (7)   p4-smp  p4  p3  k8  p4-nokdb  p4-fp  p4-statictcbs
+    build, boots without
+      TBUF_PERFMON (1)         p4-fullkdb   -- rdpmc unimplemented in QEMU
+    build, do not boot (2)     p4-newmdb  p4-iofp   (§121-§122)
+    do not build (1)           p4-cm
+
+Eight of eleven x64 configurations are now known-good, against one at §95.
