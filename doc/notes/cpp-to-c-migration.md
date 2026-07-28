@@ -4383,3 +4383,91 @@ against a disassembly of the old object rather than only "it compiles".
 That is the reason this was deferred rather than started: there was room to
 begin it but not to finish it, and a half-transcribed `map_fpage` is the worst
 artifact this migration could leave behind.
+
+
+## §109 — The vrt component cannot be converted yet: mdb_t does not exist
+
+Took on the whole vrt component (§108) and stopped again, this time on something
+that has to be said plainly: **`class mdb_t` is declared nowhere in the tree, and
+I removed it.**
+
+`grep -rn 'class mdb_t' src kdb` finds exactly one hit, and it is a forward
+declaration in `generic/vrt.h:45`. There is no definition. `generic/mdb.h` still
+carries the comment
+
+    * ... and typedef'd back inside mdb_t below so mdb_t::ctrl_t /
+    * mdb_t::range_t keep working in C++.
+
+describing a class that is not below, or anywhere.
+
+### Where it went
+
+`f3d2a88`, "kdb: collapse the __cplusplus guards in the generic headers" — one
+of the header-collapse commits of §96 — changed `src/generic/mdb.h` by
+**841 deletions and 0 insertions**, taking `class mdb_t`, `class mdb_node_t`,
+`class mdb_table_t`, and the `mdb_ctrl_t`/`mdb_range_t` constructors and static
+factories with it.
+
+The collapse pass was meant to delete the *C++ half* of dual-language headers,
+keeping the C half that had already been written beside it. For `mdb.h` there
+was no C half: the file's entire content was the C++ side. The pass removed it
+anyway and left 130 lines of remnants.
+
+`src/generic/mdb.cc` (1034 lines) and `mdb_mem.cc` (371) define methods of those
+classes. They cannot compile — "`mdb_t` has not been declared".
+
+### Why no gate caught it
+
+`CONFIG_NEW_MDB` gates both files, via `src/glue/v4-x86/x64/Makeconf:49`. Four
+configs set it:
+
+    x86-x32-p4-iofp    x86-x32-p4-newmdb
+    x86-x64-p4-iofp    x86-x64-p4-newmdb
+
+**The gate config, x86-x64-p4-smp, has `CONFIG_NEW_MDB` off.** Every check this
+migration has leaned on — the byte comparisons, the symbol diffs, the boot tests
+— runs in a configuration that never compiles `mdb.cc`. §95 surveyed the other
+ten x64 configs and attributed iofp's failure to `generic/vrt.h`, which is the
+first error the compiler reports; the missing mdb underneath was never reached.
+
+### What I have not established
+
+Whether those four configs built *before* `f3d2a88`. The obvious experiment —
+compile `mdb.cc` against the old header — is worthless now: the tree is C, so
+any `.cc` fails C++ compilation on `generic/types.h` (`'_Bool' does not name a
+type`) regardless of mdb. It measured 53 errors with the old header and 27 with
+the new one, which says nothing about the regression and everything about the
+test being invalid. A real answer needs a worktree at `f3d2a88^` and a full
+build of `x86-x64-p4-newmdb` there. Given §95 recorded the PIC path as that
+config's blocker, it may well have been broken already for other reasons — but
+that is a guess, and it is not the same as being sure.
+
+### The real dependency order
+
+vrt cannot be converted first. `vrt.h:83` takes an `mdb_t::ctrl_t` by value and
+`vrt.cc` drives everything through `get_mapdb()->map/flush/mapctrl`, so the
+mapping database has to have a C form before the VRT can have one.
+
+    mdb        mdb.h (841 lines to restore and convert)
+               mdb.cc (1034), mdb_mem.cc (371), kdb/generic/mdb.cc
+    vrt        vrt.h (471), vrt.cc (799), kdb/generic/vrt.cc (103)
+               glue/v4-x86/vrt_io.h (171), vrt_io.cc (239)
+    io space   io_fpage.h (183), io_space.h (70), io_space.cc (314)
+               mdb_io.h (75), mdb_io.cc (306)
+                                                    ~4100 lines
+
+`mdb_t` has its own nine virtuals and its own subclasses (`mdb_io_t`, and the
+memory one), so it needs the same ops-table treatment §108 sketched for `vrt_t`
+— and it must be done first, since `vrt_io_t` and `mdb_io_t` are peers in the
+same object graph.
+
+### The lesson, which is the same one as §99
+
+A config-gated file is invisible to a gate that does not set the config.
+`CONFIG_STATIC_TCBS` and `CONFIG_X_CTRLXFER_MSG` blocks were dropped from
+`api/v4/thread.cc` for exactly this reason, and here an entire header's contents
+went the same way. The collapse pass (§96) verified itself against binary
+equality in one configuration; that check cannot see a file the configuration
+does not build. Before deleting from a header, the question is not "does the
+gate still build" but "which configs compile the things this header declares,
+and do any of them build at all".
