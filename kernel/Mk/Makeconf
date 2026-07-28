@@ -126,6 +126,40 @@ CPP=		$(TOOLPREFIX)cpp
 endif
 
 API?=	v4
+
+# SCHED picks the scheduling policy: src/api/$(API)/sched-$(SCHED)/schedule.c
+# and kdb/api/$(API)/schedule-$(SCHED).c.
+#
+# config/Makefile already derives it from .config into Makeconf.local, but that
+# is a snapshot refreshed only when a *config target runs.  Edit .config (or
+# hand-patch config/config.h) without re-running one and Makeconf.local keeps
+# the stale value: the kernel is then built from one policy's sources while
+# config.h advertises the other, which compiles and links and goes wrong only
+# at run time.  .config is included above, so derive SCHED from the options
+# themselves and let the two be incapable of disagreeing.
+#
+# The option names are not uniform -- round-robin is SCHED_RR but hierarchical
+# stride is X_SCHED_HS (it is still marked experimental) -- so the mapping is
+# spelled out rather than pattern-matched.
+# NB: plain conditionals, not a nested $(if ...) -- a line-continued $(if)
+# keeps the leading whitespace of the continuation in its value, which yields
+# `sched- rr/' in the source paths.
+SCHED_FROM_CONFIG :=
+ifeq "$(CONFIG_X_SCHED_HS)" "y"
+SCHED_FROM_CONFIG := hs
+else ifeq "$(CONFIG_SCHED_RR)" "y"
+SCHED_FROM_CONFIG := rr
+endif
+
+# An explicit SCHED= on the command line still wins, so a policy can be built
+# against a config that does not select it (which is how sched-hs was first
+# brought up again).
+ifneq "$(origin SCHED)" "command line"
+ifneq "$(SCHED_FROM_CONFIG)" ""
+SCHED := $(SCHED_FROM_CONFIG)
+endif
+endif
+
 ifeq "$(SCHED)" ""
 SCHED=	rr
 endif

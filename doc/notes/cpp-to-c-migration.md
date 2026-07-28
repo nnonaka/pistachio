@@ -4112,12 +4112,96 @@ boots to userland.
 
 ### A build-system gap this exposed
 
-`Mk/Makeconf:130` defaults `SCHED` to `rr` and nothing derives it from the
-config: a config with `X_SCHED_HS=y` still builds `sched-rr` unless you also
-pass `SCHED=hs` on the make line, and conversely `SCHED=hs` leaves
-`CONFIG_SCHED_RR` defined in `config.h`. Both halves of that were exercised here
-(the policy builds clean with `CONFIG_X_SCHED_HS=1` and `CONFIG_SCHED_RR`
-undefined), but the two knobs should be wired together.
+`Mk/Makeconf:130` defaults `SCHED` to `rr`, and building sched-hs needed
+`SCHED=hs` on the make line even with `CONFIG_X_SCHED_HS` set. **Corrected in
+§105: the derivation does exist** (`config/Makefile:70`), and the actual defect
+is narrower than stated here.
 
 `sched-rr/schedule_functions.h` remains as dead C++ — nothing includes it, and
 its contents live in `sched-rr/schedule.c`. It can be deleted.
+
+
+## §105 — Wiring SCHED to the config option: the derivation existed
+
+§104 claimed "nothing derives SCHED from the config". That was wrong, and the
+way it was wrong is instructive: I had hand-patched `config/config.h` to select
+hs and then concluded from the resulting build that no wiring existed. The
+wiring is in `config/Makefile:70`, and it is correct —
+
+    /^CONFIG_[_X]*SCHED_[^_]*=y/ { if ($4 == "y") SCHED=$3; else SCHED=$4 }
+
+with `-F'[_=]'`, `CONFIG_SCHED_RR=y` gives fields `CONFIG|SCHED|RR|y` so
+`SCHED=$3="rr"`, and `CONFIG_X_SCHED_HS=y` gives `CONFIG|X|SCHED|HS|y` so
+`SCHED=$4="hs"`. Both verified by running the awk directly. The irregular option
+naming (`SCHED_RR` but `X_SCHED_HS`) is exactly what the `$4 == "y"` test is
+for.
+
+The claim came from reasoning about a build instead of reading the rule — the
+same failure as §99's "`tcb_ctrlxfer` has never existed", which came from a
+`grep | head`. Both times a five-second check would have prevented a wrong note.
+
+### The defect that is real
+
+That awk writes into `$(BUILDDIR)/Makeconf.local`, and the rule that runs it is
+a prerequisite of the `*config` targets only:
+
+    menuconfig batchconfig ttyconfig xconfig: $(BUILDDIR)/Makeconf.local
+
+So `Makeconf.local` holds a **snapshot** of the config, refreshed only when the
+configurator runs. Change `.config` (or `config.h`) without re-running one and
+the snapshot goes stale: the kernel is then compiled from one policy's sources
+while `config.h` advertises the other. That combination compiles, links, and is
+wrong only at run time — the same silent-disagreement shape as §99's
+`CONFIG_STATIC_TCBS`.
+
+`Mk/Makeconf:46` already does `-include $(BUILDDIR)/config/.config`, so the
+`CONFIG_*` options are in scope as make variables. SCHED is now derived from
+them directly, which makes the two incapable of disagreeing:
+
+    SCHED_FROM_CONFIG :=
+    ifeq "$(CONFIG_X_SCHED_HS)" "y"
+    SCHED_FROM_CONFIG := hs
+    else ifeq "$(CONFIG_SCHED_RR)" "y"
+    SCHED_FROM_CONFIG := rr
+    endif
+
+    ifneq "$(origin SCHED)" "command line"
+    ...
+    endif
+
+An explicit `SCHED=` on the command line still wins — that is how sched-hs was
+brought up before any config selected it — and `Makeconf.local`'s value remains
+the fallback for a tree with no `.config`.
+
+One trap worth recording: the first version used a line-continued nested
+`$(if ...)`, which keeps the continuation's leading whitespace *inside the
+value*, yielding `SCHED = " rr"` and source paths like `sched- rr/`. It went
+unnoticed at first because the rr tree had nothing to rebuild, so the bad path
+was never expanded into a compile. Plain `ifeq` conditionals avoid it.
+
+### Verification
+
+  - rr tree (`CONFIG_SCHED_RR=y`): `SCHED := rr`, full rebuild from scratch,
+    706 symbols with identical bodies against the pre-change kernel, 3 bytes
+    differing (the `.kip` timestamp), boots and `showqueue` prints rr's
+    "accounted tcb" form.
+  - hs tree (`CONFIG_X_SCHED_HS=y`, `Makeconf.local` deliberately left stale at
+    `SCHED=rr`): `SCHED := hs`, clean build with **no** `SCHED=` override, 73
+    objects, 0 errors, boots and `showqueue` prints hs's "scheduled queue /
+    priority queue / pass / domain tcb" form.
+  - `SCHED=hs` on the command line still overrides both.
+
+### A self-inflicted lesson
+
+While checking that the override still worked I ran `make -p SCHED=hs` in the
+**rr gate build tree**. `make -p` prints the database *and still builds the
+default goal* unless `-n` is also given, so that command compiled sched-hs into
+the gate tree, overwriting its kernel and regenerating `kdb_class_helper.h` for
+hs's command set. The next rr build then failed on `cmd_show_sched_empty`
+undeclared, and a symdiff briefly reported "EQUIVALENT" because it was comparing
+a contaminated tree against a copy of itself.
+
+Repaired by deleting the generated headers and objects and rebuilding; the
+result compares equivalent to a reference taken before the contamination. Use
+`make -pn` to interrogate the database, and take reference copies *before* any
+command that might build.
