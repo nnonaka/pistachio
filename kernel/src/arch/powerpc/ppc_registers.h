@@ -292,9 +292,8 @@ INLINE void ppc_set_dcr( word_t dcrn, word_t value )
     asm volatile("mtdcrx %0,%1": :"r" (dcrn), "r" (value) : "memory");
 }
 
-class ppc_esr_t
+struct ppc_esr_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -317,14 +316,14 @@ public:
 	    word_t cond_reg_field	: 3;
 	} x;
     };
-
-    word_t read()
-	{ raw = ppc_get_spr(SPR_ESR); return raw; }
 };
+typedef struct ppc_esr_t ppc_esr_t;
 
-class ppc_tcr_t
+INLINE word_t ppc_esr_read (ppc_esr_t *self)
+{ self->raw = ppc_get_spr(SPR_ESR); return self->raw; }
+
+struct ppc_tcr_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -338,22 +337,25 @@ public:
 	    word_t			: 22;
 	};
     };
-    ppc_tcr_t()
-	{ raw = 0; }
-    void write()
-	{ ppc_set_spr(SPR_TCR, raw); }
-    void read()
-	{ raw = ppc_get_spr(SPR_TCR); }
-
-    u64_t get_watchdog_period()
-	{ return 1ULL << (21 + (watchdog_period * 4)); }
-    u64_t get_fixed_interval_period()
-	{ return 1ULL << (13 + (fixed_interval_period * 4)); }
 };
+typedef struct ppc_tcr_t ppc_tcr_t;
 
-class ppc_tsr_t
+/* The C++ class had a constructor zeroing raw.  C has none, so every
+   declaration must initialise explicitly -- see PPC_TCR_INIT. */
+#define PPC_TCR_INIT	((ppc_tcr_t) { .raw = 0 })
+
+INLINE void ppc_tcr_write (ppc_tcr_t *self)
+{ ppc_set_spr(SPR_TCR, self->raw); }
+INLINE void ppc_tcr_read (ppc_tcr_t *self)
+{ self->raw = ppc_get_spr(SPR_TCR); }
+
+INLINE u64_t ppc_tcr_get_watchdog_period (ppc_tcr_t *self)
+{ return 1ULL << (21 + (self->watchdog_period * 4)); }
+INLINE u64_t ppc_tcr_get_fixed_interval_period (ppc_tcr_t *self)
+{ return 1ULL << (13 + (self->fixed_interval_period * 4)); }
+
+struct ppc_tsr_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -366,25 +368,26 @@ public:
 	};
     };
 
-    static ppc_tsr_t dec_irq()
-	{ 
-	    ppc_tsr_t tsr;
-	    tsr.raw = 0;
-	    tsr.decrementer_irq_status = 1;
-	    return tsr;
-	}
-
-    void write()
-	{ ppc_set_spr(SPR_TSR, raw); }
-
-    bool pending_irqs()
-	{ 
-	    return watchdog_irq_status ||
-		   decrementer_irq_status ||
-		   fixed_interval_irq_status; 
-	}
-
 } __attribute__((packed));
+typedef struct ppc_tsr_t ppc_tsr_t;
+
+INLINE ppc_tsr_t ppc_tsr_dec_irq (void)
+{
+    ppc_tsr_t tsr;
+    tsr.raw = 0;
+    tsr.decrementer_irq_status = 1;
+    return tsr;
+}
+
+INLINE void ppc_tsr_write (ppc_tsr_t *self)
+{ ppc_set_spr(SPR_TSR, self->raw); }
+
+INLINE bool ppc_tsr_pending_irqs (ppc_tsr_t *self)
+{
+    return self->watchdog_irq_status ||
+	   self->decrementer_irq_status ||
+	   self->fixed_interval_irq_status;
+}
 
 
 INLINE u64_t ppc_get_fpscr()
