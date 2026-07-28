@@ -25,7 +25,7 @@
 
 #define TOTAL_QUANTUM_EXPIRED (~0ULL)
 /* Defined in api/v4/schedule.c; the EXTERN_TRACEPOINT that used to cover this
-   lives in the C++-only sched-rr/schedule_functions.h. */
+   was in sched-rr/schedule_functions.h, now removed (see notes §106). */
 EXTERN_TRACEPOINT(SCHEDULE_IDLE);
 DECLARE_TRACEPOINT(TOTAL_QUANTUM_EXPIRED);
 DECLARE_TRACEPOINT(SCHEDULE_WAKEUP_TIMEOUT);
@@ -1000,9 +1000,9 @@ void sched_start (cpuid_t cpu)		{ scheduler_start (cur_sched (), cpu); }
 
 #if defined(CONFIG_DEBUG)
 /*
- *  Debug dumps for the kdb showtcb commands.  These were INLINEs in
- *  sched-rr/schedule_functions.h; their only caller (kdb/api/v4/tcb.c) is now
- *  C, so the bodies live here rather than in a C++-only header.
+ *  Debug dumps for the kdb showtcb commands.  These were INLINEs in the
+ *  since-removed sched-rr/schedule_functions.h; their only caller
+ *  (kdb/api/v4/tcb.c) is C, so the bodies live here.
  */
 
 void sched_ktcb_dump_priority (sched_ktcb_t *self)

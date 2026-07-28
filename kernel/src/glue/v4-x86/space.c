@@ -30,7 +30,8 @@
 #include INC_GLUE(space.h)
 
 /* for the tcb_t/time_t bridge wrappers relocated from thread.cc: sched_state
-   set_timeout (schedule.h -> schedule_functions.h) and acceptor_t. */
+   set_timeout (was schedule.h -> the policy's schedule_functions.h, now in the
+   policy's schedule.c) and acceptor_t. */
 #include INC_API(schedule.h)
 #include INC_API(generic-archmap.h)
 

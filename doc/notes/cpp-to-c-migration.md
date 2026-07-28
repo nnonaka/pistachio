@@ -4205,3 +4205,39 @@ Repaired by deleting the generated headers and objects and rebuilding; the
 result compares equivalent to a reference taken before the contamination. Use
 `make -pn` to interrogate the database, and take reference copies *before* any
 command that might build.
+
+
+## §106 — Deleting sched-rr/schedule_functions.h
+
+The last C++ file in either scheduling policy. It held the round-robin
+specialisations of the shared `scheduler_t` methods, included by the
+pre-migration `api/v4/schedule.h` via `#include INC_API_SCHED(schedule_functions.h)`.
+That include went away when `api/v4/schedule.h` became C, and its contents were
+folded into `sched-rr/schedule.c` — so the file has been unreachable since,
+compiled by nothing, and kept only as a reading reference while sched-hs was
+converted against it (§103, §104).
+
+Checked before deleting: no `#include` names it anywhere in the tree. The six
+remaining textual references were all comments, and three of them described it
+in the present tense as somewhere code "lives" — those would have sent a reader
+after a file that no longer exists:
+
+  - `sched-rr/schedule.c:28` — "the EXTERN_TRACEPOINT ... lives in the C++-only
+    sched-rr/schedule_functions.h"
+  - `sched-rr/schedule.c:1004` — "the bodies live here rather than in a C++-only
+    header"
+  - `glue/v4-x86/space.c:33` — "set_timeout (schedule.h -> schedule_functions.h)",
+    an include chain that no longer exists
+
+All three now say where the code actually is. The rest were already past-tense
+provenance ("were INLINEs in ..."), which stays useful: it explains why
+`schedule.c` has the shape it does, and `git log` still has the file.
+
+`src/api/v4/` is now free of C++ in both policies.
+
+### Verification
+
+rr rebuilds with 0 errors, 706 symbols with identical bodies, and boots to
+userland with `showqueue` printing its "accounted tcb" form; hs rebuilds to 73
+objects, 0 errors, unchanged 340968-byte image. Deleting an unreferenced file
+should be a no-op in the binary, and it measurably is.
