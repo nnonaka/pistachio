@@ -114,9 +114,9 @@ fdt_header_t *fdt_next_subtree_node (fdt_t *self, fdt_node_t *node, bool cont)
 
 fdt_header_t *fdt_find_subtree_node (fdt_t *self, fdt_node_t *node, char *name)
 {
-    fdt_header_t *curr = find_first_subtree_node(node);
+    fdt_header_t *curr = fdt_find_first_subtree_node (self, node);
     while (curr && strcmp(curr->name, name) != 0)
-	curr = find_fdt_next_subtree_node (self, curr);
+	curr = fdt_find_next_subtree_node (self, curr);
     return curr;
 }
 

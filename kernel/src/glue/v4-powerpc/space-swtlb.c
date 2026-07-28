@@ -227,9 +227,12 @@ NOINLINE bool space_handle_tlb_miss (space_t *self, addr_t lookup_vaddr, addr_t 
 	      pg->map.read ? 'R' : ' ', pg->map.write ? 'W' : ' ',
 	      pg->map.execute ? 'X' : ' ', pg->map.caching, pg->map.erpn);
 
-    ppc_tlb0_t tlb0 (vaddr, size);
-    ppc_tlb1_t tlb1 (paddr);
+    ppc_tlb0_t tlb0;
+    ppc_tlb1_t tlb1;
     ppc_tlb2_t tlb2;
+
+    ppc_tlb0_init_vaddr_size (&tlb0, vaddr, size, true, 0);
+    ppc_tlb1_init_paddr (&tlb1, paddr);
 
     switch (pg->map.caching)
     {
@@ -273,9 +276,12 @@ addr_t space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool 
     if (vaddr & (size - 1) != 0)
 	vaddr = (vaddr + size) & ~(size - 1);
     
-    ppc_tlb0_t tlb0(vaddr, log2sz);
-    ppc_tlb1_t tlb1(paddr_align);
+    ppc_tlb0_t tlb0;
+    ppc_tlb1_t tlb1;
     ppc_tlb2_t tlb2;
+
+    ppc_tlb0_init_vaddr_size (&tlb0, vaddr, log2sz, true, 0);
+    ppc_tlb1_init_paddr (&tlb1, paddr_align);
     ppc_tlb2_init_device (&tlb2);
     ppc_tlb2_set_kernel_perms (&tlb2, true, true, false);
     if (!kernel)
@@ -510,8 +516,11 @@ addr_t setup_console_mapping(paddr_t paddr, int log2size)
     if (vaddr & (size - 1) != 0)
 	vaddr = (vaddr + size) & ~(size - 1);
 
-    ppc_tlb0_t tlb0(vaddr, log2size);
-    ppc_tlb1_t tlb1(paddr_align);
+    ppc_tlb0_t tlb0;
+    ppc_tlb1_t tlb1;
+
+    ppc_tlb0_init_vaddr_size (&tlb0, vaddr, log2size, true, 0);
+    ppc_tlb1_init_paddr (&tlb1, paddr_align);
     ppc_tlb2_t tlb2;
     ppc_tlb2_init_device (&tlb2);
     ppc_tlb2_set_kernel_perms (&tlb2, true, true, false);
