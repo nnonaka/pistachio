@@ -108,18 +108,11 @@ struct schedule_req_t
     tcb_t* tcb;
     bool valid;
 
-#if defined(__cplusplus)
-    void init() { time_control = 0; prio_control = 0; preemption_control = 0;  processor_control = 0; valid = false; }
-    schedule_req_t (void) { init();  }
-#endif
 };
 typedef struct schedule_req_t schedule_req_t;
 
 struct schedule_request_queue_t
 {
-#if defined(__cplusplus)
-    static const word_t schedule_queue_len = SCHEDULE_QUEUE_LEN;
-#endif
     schedule_req_t entries[SCHEDULE_QUEUE_LEN];
     word_t first_alloc;
     word_t first_free;
@@ -127,44 +120,6 @@ struct schedule_request_queue_t
 
     char pad2[CACHE_LINE_SIZE - sizeof(spinlock_t)];
 
-#if defined(__cplusplus)
-    schedule_request_queue_t (void) { lock.init(); first_alloc = first_free = 0; }
-
-    schedule_req_t *reserve_request()
-	{
-	    lock.lock();
-	    if ( ((first_free + 1) % schedule_queue_len) == first_alloc )
-	    {
-		lock.unlock();
-		return NULL;
-	    }
-	    word_t idx = first_free;
-	    first_free = (first_free + 1) % schedule_queue_len;
-	    return &entries[idx];
-	}
-
-    schedule_req_t process_request ()
-	{
-	    ASSERT(!is_empty());
-
-	    lock.lock();
-	    schedule_req_t req = entries[first_alloc];
-	    entries[first_alloc].valid = false;
-	    first_alloc = (first_alloc + 1) % schedule_queue_len;
-	    lock.unlock();
-
-	    return req;
-	}
-
-
-    void commit_request ()
-	{
-	    lock.unlock();
-	}
-
-
-    bool is_empty() { return  (first_alloc == first_free); };
-#endif /* __cplusplus */
 
 };
 typedef struct schedule_request_queue_t schedule_request_queue_t;
@@ -173,7 +128,6 @@ typedef struct schedule_request_queue_t schedule_request_queue_t;
    api/v4/schedule.c) so C and the C++ schedule_requests_pending inline agree. */
 extern schedule_request_queue_t schedule_request_queue[CONFIG_SMP_MAX_CPUS];
 
-#if !defined(__cplusplus)
 /* C forms of the schedule_request_queue_t methods (mirror the C++ inlines;
    the data + spinlock are C-visible). */
 INLINE bool schedule_request_queue_is_empty (schedule_request_queue_t *self)
@@ -204,7 +158,6 @@ INLINE schedule_req_t schedule_request_queue_process_request (schedule_request_q
 
 INLINE void schedule_request_queue_commit_request (schedule_request_queue_t *self)
 { spinlock_unlock (&self->lock); }
-#endif /* !__cplusplus */
 
 /* current-scheduler wrappers taking schedule_req_t (defined above) by pointer;
    for the SYS_SCHEDULE path in api/v4/schedule.c.  Defined in
@@ -218,242 +171,10 @@ END_DECLS
 /* The RR policy scheduler types are dual-repped, so this is C-includable now. */
 #include INC_API_SCHED(schedule.h)
 
-#if !defined(__cplusplus)
 /* C rep of scheduler_t: derives from policy_scheduler_t with no added instance
    data, so it has that base's layout (composed as __base at offset 0). */
 typedef struct scheduler_t { policy_scheduler_t __base; } scheduler_t;
-#endif
 
-#if defined(__cplusplus)
-
-class scheduler_t : public policy_scheduler_t
-{
-public:
-    
-    /**
-     * initializes the scheduler, must be called before init
-     */
-    void init(bool bootcpu = true ) __asm__ ("scheduler_init");
-
-    /**
-     * starts the scheduling, does not return
-     * @param cpu processor the scheduler starts on
-     */
-    void start(cpuid_t cpu = 0) __asm__ ("scheduler_start");
-
-    /**
-     * dispatches a thread 
-     * @param tcb the thread control block of the thread to be dispatched
-     */
-    void dispatch_thread(tcb_t * tcb);
-
-
-    /**
-     * sets the thread currently accounted
-     * @param tcb the thread
-     */
-    void set_accounted_tcb(tcb_t *tcb);
-    
-    /**
-     * delivers the thread currently accounted
-     * @return the thread
-     */
-    tcb_t *get_accounted_tcb();
-    
-    /**
-     * check if a thread is allowed to schedule another thread 
-     * @param tcb the next control block
-     * @param dest_tcb the destination control block
-     * @return true if next was scheduled, false otherwise
-     */
-    bool is_scheduler(tcb_t *tcb, tcb_t *dest_tcb);
-
-    
-    /**
-     * schedule a runnable thread
-     * @return true if a runnable thread was found, false otherwise
-     */
-    bool schedule();
-    
-    /**
-     * schedule a thread 
-     * @param next the potential next control block
-     * @param flags policy-specific flags
-     * @return true if next was scheduled, false otherwise
-     */
-    bool schedule(tcb_t *dest, const sched_flags_t flags=sched_default);
-
-    /**
-     * deschedule a thread 
-     * @param next the potential next control block
-     * @param flags hint, which tcb should run next
-     */
-    void deschedule(tcb_t *tcb);
-
-    /**
-     * perform scheduling decision between  two runnable threads
-     * @param dest1 the 1st potential next thread control block
-     * @param dest2 the 2nd potential next thread control block
-     * @param flags policy-specific flags
-     * @return true if next1 was scheduled, false otherwise
-     */
-    bool schedule(tcb_t *dest1, tcb_t *dest2, const sched_flags_t flags=sched_default);
-
-    /**
-     * schedule an interrupt (if handler is not waiting)
-     * @param irq the irq's thread control block
-     * @param handler the handler's thread control block
-     * @return true if next was scheduled, false otherwise
-     */
-    bool schedule_interrupt(tcb_t *irq, tcb_t *handler);
-
-#if defined(CONFIG_SMP)
-    /**
-     * schedule a runnable thread on a different cpu
-     * @param tcb the current thread control block
-     */
-    void remote_schedule(tcb_t * tcb);
-    
-    /**
-     * migrate a runnable thread to a different cpu
-     * @param tcb the current thread control block
-     * @param cpu the destination cpu
-     */
-    void move_tcb(tcb_t *tcb, cpuid_t cpu);
-#endif
-    
-
-    /**
-     * handles the timer interrupt event, walks the wait lists 
-     * and makes a scheduling decission
-     */
-    void handle_timer_interrupt();
-
-    /**
-     * Idle thread function
-     */
-    void idle();
-
-
-    /**
-     * Function called when threads execute a halting instruction
-     * @return if call could be handled
-     */
-    bool idle_hlt();
-
-    /**
-     * delivers the current time relative to the system 
-     * startup in microseconds
-     * @return absolute time 
-     */
-    u64_t get_current_time();
-
-    /**
-     * add a scheduling request on that processor
-     * @param tcb the destination thread control block
-     * @param prio_control	  prio control word
-     * @param time_control	  time control word
-     * @param preemption_control  preemption control word
-     * @param processor_control	  processor control word
-     * @return error word
-     * 
-     */
-    word_t add_schedule_request(schedule_req_t &req);
-    
-    /**
-     * check if scheduling requests are pending on that cpu
-     * 
-     * @param cpu
-     * @return if requests are pending
-     */
-    bool schedule_requests_pending(cpuid_t cpu) 
-	{ 
-	    ASSERT(cpu < CONFIG_SMP_MAX_CPUS);
-	    return !schedule_request_queue[cpu].is_empty(); 
-	}
-   
-    /**
-     * process all scheduling request local to the scheduler 
-     */
-    void process_schedule_requests();
-
-    /**
-     * calculate scheduler return values
-     */
-    word_t return_schedule_parameter(word_t num, schedule_req_t &req);
-
-    /**
-     * check if a schedule parameters of a request are valid 
-     * @param scheduler	  the issueing scheduler
-     * @param req	  the schedule request
-     * @return		  error word
-     * 
-     */
-    word_t check_schedule_parameters(tcb_t *scheduler, schedule_req_t &req);
-
-    /**
-     * commit schedule parameters of a request
-     * @param req	  the schedule request
-     *
-     * (public so the C wrapper sched_commit_schedule_parameters can reach it.)
-     */
-    void commit_schedule_parameters(schedule_req_t &req);
-
-private:
-    /**
-     * searches the for the next runnable thread
-     * @param p    policy specific param
-     *
-     * @return next thread to be scheduled
-     */
-    tcb_t * find_next_thread(policy_sched_next_thread_t *p=NULL);
-};
-
-/**
- * @return the current scheduler 
- * the default implementation features exactly one scheduler at a time.
- */
-INLINE scheduler_t * get_current_scheduler()
-{
-    extern scheduler_t scheduler;
-    return &scheduler;
-}
-
-/* global declarations */
-extern void init_all_threads(void);
-
-#if defined(CONFIG_SMP)
-#include INC_API(smp.h)
-/* C linkage: referenced as a callback pointer from api/v4/interrupt.c. */
-BEGIN_DECLS
-extern void do_xcpu_send_irq(cpu_mb_entry_t * entry);
-END_DECLS
-#endif
-
-#if defined(CONFIG_DEBUG)
-INLINE word_t flags_stringword(sched_flags_t f)
-{
-    word_t ret = 0;
-    char *s = (char *) &ret;
-    
-    s[0] = FLAG_IS_SET(f,sched_chk_flag) ? 'C' : 
-	(FLAG_IS_SET(f,sched_ds1_flag) ? '1' :
-	 (FLAG_IS_SET(f,sched_ds2_flag) ? '2' : '~'));
-    s[1] = FLAG_IS_SET(f,sched_c2r_flag) ? 'R' : '~';
-    s[2] = FLAG_IS_SET(f,sched_timeout_flag) ? 'T' : '~';
-#if defined(CONFIG_SCHED_RR)
-    s[3] = FLAG_IS_SET(f,rr_tsdonate_flag) ? 'O' : '~';
-#endif
-    return ret;
-}
-#endif
-
-#include INC_API_SCHED(schedule_functions.h)
-
-
-
-
-#endif /* __cplusplus */
 
 #endif /*__API__V4__SCHEDULE_H__*/
 

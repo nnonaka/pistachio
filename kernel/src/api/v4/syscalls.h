@@ -178,25 +178,6 @@ END_DECLS
 #define EXREGS_CTRL_SCHEDULER_FLAG	13
 
 struct exregs_ctrl_t {
-#if defined(__cplusplus)
-    enum flag_e {
-	halt_flag        	= EXREGS_CTRL_HALT_FLAG,
-	recv_flag	 	= EXREGS_CTRL_RECV_FLAG,
-	send_flag	 	= EXREGS_CTRL_SEND_FLAG,
-	sp_flag	         	= EXREGS_CTRL_SP_FLAG,
-	ip_flag	         	= EXREGS_CTRL_IP_FLAG,
-	flags_flag	 	= EXREGS_CTRL_FLAGS_FLAG,
-	uhandle_flag	 	= EXREGS_CTRL_UHANDLE_FLAG,
-	pager_flag	 	= EXREGS_CTRL_PAGER_FLAG,
-	haltflag_flag    	= EXREGS_CTRL_HALTFLAG_FLAG,
-	ctrlxfer_conf_flag    	= EXREGS_CTRL_CTRLXFER_CONF_FLAG,
-	ctrlxfer_read_flag    	= EXREGS_CTRL_CTRLXFER_READ_FLAG,
-	ctrlxfer_write_flag    	= EXREGS_CTRL_CTRLXFER_WRITE_FLAG,
-	exchandler_flag  	= EXREGS_CTRL_EXCHANDLER_FLAG,
-	scheduler_flag   	= EXREGS_CTRL_SCHEDULER_FLAG,
-
-    };
-#endif
 
     union {
 	struct {
@@ -219,39 +200,9 @@ struct exregs_ctrl_t {
 	word_t raw;
     };
 
-#if defined(__cplusplus)
-    exregs_ctrl_t (void) {}
-    exregs_ctrl_t (word_t r) { raw = r; }
-
-    bool is_set(flag_e flag) { return raw  & (1UL << flag); }
-    void set(flag_e flag) { raw  |= (1UL << flag); }
-
-    char *string()
-	{
-	    static char s[] =  "~~~~~~~~~~~~~~";
-
-	    s[0]  =  halt    		? 'h' : '~';
-	    s[1]  =  recv    		? 'r' : '~';
-	    s[2]  =  send    		? 's' : '~';
-	    s[3]  =  sp      		? 's' : '~';
-	    s[4]  =  ip      		? 'i' : '~';
-	    s[5]  =  flags   		? 'f' : '~';
-	    s[6]  =  uhandle 		? 'u' : '~';
-	    s[7]  =  pager   		? 'p' : '~';
-	    s[8]  =  haltflag		? 'h' : '~';
-	    s[9]  =  ctrlxfer_conf	? 'C' : '~';
-	    s[10] =  ctrlxfer_read	? 'R' : '~';
-	    s[11] =  ctrlxfer_write	? 'W' : '~';
-	    s[12] =  exchandler		? 'e' : '~';
-	    s[13] =  scheduler		? 's' : '~';
-
-	    return s;
-	}
-#endif /* __cplusplus */
 };
 typedef struct exregs_ctrl_t exregs_ctrl_t;
 
-#if !defined(__cplusplus)
 INLINE bool exregs_ctrl_is_set (const exregs_ctrl_t *self, word_t flag)
 { return (self->raw & (1UL << flag)) != 0; }
 INLINE void exregs_ctrl_set (exregs_ctrl_t *self, word_t flag)
@@ -279,7 +230,6 @@ INLINE char * exregs_ctrl_string (const exregs_ctrl_t *self)
 
     return s;
 }
-#endif /* !__cplusplus */
 
 /* schedule_ctrl_t is dual-repped: the union is C-visible (api/v4/schedule.c
    uses schedule_req_t by value, which embeds these); methods stay C++. */
@@ -316,33 +266,11 @@ struct schedule_ctrl_t {
 
    } __attribute__((packed));
 
-#if defined(__cplusplus)
-    inline void operator = (word_t raw)
-	{ this->raw = raw; }
-
-    inline bool operator == (schedule_ctrl_t ctrl)
-	{ return (this->raw == ctrl.raw); }
-
-    inline bool operator != (schedule_ctrl_t ctrl)
-	{ return (this->raw != ctrl.raw); }
-
-    word_t get_raw()
-	{ return this->raw; }
-
-    static schedule_ctrl_t nilctrl()
-	{
-	    schedule_ctrl_t ctrl;
-	    ctrl.raw = (~0UL);
-	    return ctrl;
-	}
-#endif /* __cplusplus */
 
 };
 typedef struct schedule_ctrl_t schedule_ctrl_t;
 
-#if !defined(__cplusplus)
 INLINE word_t schedule_ctrl_get_raw (const schedule_ctrl_t *self) { return self->raw; }
-#endif
 
 /*
  * Error code values

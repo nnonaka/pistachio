@@ -45,25 +45,9 @@ struct preempt_flags_t
 	} flags;
     };
 
-#if defined(__cplusplus)
-    bool is_signaled()	{ return flags.signaled; }
-    bool is_delayed()	{ return flags.delayed; }
-    bool is_pending()	{ return flags.pending; }
-    preempt_flags_t set_pending() 
-	{ 
-	    flags.pending = true; 
-	    return (*this); 
-	}
-    preempt_flags_t clear_pending()
-	{
-	    flags.pending = false;
-	    return (*this);
-	}
-#endif /* __cplusplus */
 } __attribute__((packed));
 typedef struct preempt_flags_t preempt_flags_t;
 
-#if !defined(__cplusplus)
 /* C forms of the preempt_flags_t predicates (the union above is C-visible). */
 INLINE bool preempt_flags_is_signaled (preempt_flags_t *self) { return self->flags.signaled; }
 INLINE bool preempt_flags_is_delayed (preempt_flags_t *self)  { return self->flags.delayed; }
@@ -72,6 +56,5 @@ INLINE preempt_flags_t preempt_flags_set_pending (preempt_flags_t *self)
 { self->flags.pending = true; return *self; }
 INLINE preempt_flags_t preempt_flags_clear_pending (preempt_flags_t *self)
 { self->flags.pending = false; return *self; }
-#endif /* !__cplusplus */
 
 #endif /* !__API__V4__PREEMPT_H__ */

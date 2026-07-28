@@ -39,22 +39,6 @@ END_DECLS
 
 struct cpu_t {
     word_t id;
-#if defined(__cplusplus)
-    cpu_t()
-	{ id = ~0UL; }
-
-    bool is_valid()
-	{ return this->id < ~0UL; }
-
-    void set_id(word_t id)
-	{ this->id = id; }
-
-    word_t get_id()
-	{ return id; }
-
-    static cpu_t * get(cpuid_t cpuid);
-    static bool add_cpu(word_t id);
-#endif /* __cplusplus */
 };
 typedef struct cpu_t cpu_t;
 
@@ -77,16 +61,6 @@ INLINE bool    cpu_add_cpu (word_t id)
 INLINE void    cpu_set_id (cpu_t *self, word_t id) { self->id = id; }
 INLINE bool    cpu_is_valid (cpu_t *self)	{ return self->id < ~0UL; }
 
-#if defined(__cplusplus)
-INLINE cpu_t * cpu_t::get (cpuid_t cpuid)	{ return cpu_get(cpuid); }
-INLINE bool cpu_t::add_cpu (word_t id)
-{
-    if (cpu_count >= CONFIG_SMP_MAX_CPUS)
-	return false;
-    cpu_descriptors[cpu_count++].id = id;
-    return true;
-}
-#endif /* __cplusplus */
 
 INLINE cpuid_t get_current_cpu()
 {

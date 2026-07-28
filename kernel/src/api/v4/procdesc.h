@@ -47,13 +47,6 @@ struct procdesc_t
      */
     word_t arch1;
 
-#if defined(__cplusplus)
-    void set_external_frequency(word_t freq)
-	{ external_freq = freq; }
-
-    void set_internal_frequency(word_t freq)
-	{ internal_freq = freq; }
-#endif
 };
 typedef struct procdesc_t procdesc_t;
 

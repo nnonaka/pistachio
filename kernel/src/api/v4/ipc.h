@@ -37,12 +37,8 @@
 #include <debug.h>
 #include <kdb/tracepoints.h>
 
-#if defined(__cplusplus)
-class tcb_t;
-#else
 struct tcb_t;
 typedef struct tcb_t tcb_t;
-#endif
 
 
 /**
@@ -76,74 +72,6 @@ typedef struct tcb_t tcb_t;
 
 struct msg_tag_t
 {
-#if defined(__cplusplus)
-public:
-    inline msg_tag_t () { }
-    inline msg_tag_t (word_t raw)
-	{ this->raw = raw; }
-
-    word_t get_label() { return x.label; }
-    word_t get_typed() { return x.typed; }
-    word_t get_untyped() { return x.untyped; }
-
-    void clear_flags() { raw &= ~(0xf << 12);}
-    void clear_receive_flags() { raw &= ~(0xe << 12); }
-
-    void set(word_t typed, word_t untyped, word_t label)
-	{
-	    this->raw = 0;
-	    this->x.typed = typed & 0x3f;
-	    this->x.untyped = untyped & 0x3f;
-	    /* only the low BITS_WORD-16 bits of the label are part of the
-	     * tag -- the well-known labels are written as e.g. -2UL << 4 */
-	    this->x.label = label & (~0UL >> 16);
-	}
-	    
-    bool is_error() { return x.error; }
-    void set_error() { x.error = 1; }
-    
-    bool is_redirected() { return x.redirected; }
-    void set_redirected() { x.redirected = 1; }
-    
-    bool is_propagated() { return x.propagated; }
-    void set_propagated(bool val = true) { x.propagated = val; }
-
-    bool is_xcpu() { return x.xcpu; }
-    void set_xcpu() { x.xcpu = 1; }
-
-    static msg_tag_t error_tag() 
-	{ 
-	    msg_tag_t tag = 0; 
-	    tag.set_error(); 
-	    return tag;
-	}
-
-    static msg_tag_t tag(word_t typed, word_t untyped, word_t label)
-	{
-	    msg_tag_t tag;
-	    tag.set(typed, untyped, label);
-	    return tag;
-	}
-
-    static msg_tag_t irq_tag(word_t untyped = 0)
-	{
-	    return tag(0, untyped, -1UL << 4);
-	}
-
-   
-    static msg_tag_t preemption_tag()
-	{
-	    return tag (0, 2, (-3UL << 4));
-	}
-   
-    static msg_tag_t pagefault_tag(bool read, bool write, bool exec)
-	{
-	    return tag (0, 2, (-2UL << 4) | 
-			(read  ? 1 << 2 : 0) | 
-			(write ? 1 << 1 : 0) | 
-			(exec  ? 1 << 0 : 0));
-	}
-#endif /* __cplusplus */
 
     union {
 	word_t raw;
@@ -161,14 +89,6 @@ public:
 };
 typedef struct msg_tag_t msg_tag_t;
 
-#if defined(__cplusplus)
-INLINE msg_tag_t msgtag (word_t rawtag)
-{
-    msg_tag_t t;
-    t.raw = rawtag;
-    return t;
-}
-#else /* !__cplusplus */
 /* C forms of the msg_tag_t methods (the raw/x union is C-visible); mirror the
    like-named C++ methods for api/v4/thread.c. */
 INLINE word_t msg_tag_get_untyped (const msg_tag_t *self)	{ return self->x.untyped; }
@@ -195,55 +115,9 @@ INLINE msg_tag_t msg_tag_preemption_tag (void)
 { msg_tag_t t; msg_tag_set (&t, 0, 2, (-3UL << 4)); return t; }
 INLINE msg_tag_t msg_tag_irq_tag (void)
 { msg_tag_t t; msg_tag_set (&t, 0, 0, (-1UL << 4)); return t; }
-#endif /* __cplusplus */
 
 struct msg_item_t
 {
-#if defined(__cplusplus)
-public:
-    inline bool is_map_item() 
-	{ return type == 4; }
-
-    inline bool is_grant_item() 
-	{ return type == 5; }
-
-    inline bool is_string_item() 
-	{ return (type & 4) == 0; }
-
-    inline bool is_ctrlxfer_item() 
-	{ return type == 6; }
-
-    inline bool more_strings()
-	{ return (continued); }
-
-    inline bool get_string_cache_hints() 
-	{ ASSERT(is_string_item()); return (type & 3); }
-
-    inline word_t get_string_length()
-	{ ASSERT(is_string_item()); return (length); }
-
-    inline word_t get_string_ptr_count()
-	{ ASSERT(is_string_item()); return (num_ptrs + 1); }
-
-    inline bool is_string_compound()
-	{ ASSERT(is_string_item()); return (continuation); }
-
-    inline word_t get_snd_base()
-	{ return raw & (~0x3ff); }
-
-    inline bool more_ctrlxfer_items()
-	{ return (continued); }
-
-    
-    inline word_t get_ctrlxfer_id()
-	{ ASSERT(is_ctrlxfer_item()); return id; }
-    
-    inline word_t get_ctrlxfer_mask()
-	{ ASSERT(is_ctrlxfer_item()); return mask; }
-    
-    inline void operator = (word_t raw) 
-	{ this->raw = raw; }
-#endif /* __cplusplus */
     union {
 	word_t raw;
 	union {
@@ -272,7 +146,6 @@ public:
 };
 typedef struct msg_item_t msg_item_t;
 
-#if !defined(__cplusplus)
 /* C forms of the msg_item_t methods (the anonymous bitfield union is
    C-visible; mirror the C++ inline bodies exactly). */
 INLINE bool   msg_item_is_map_item (const msg_item_t *self)	{ return self->type == 4; }
@@ -284,36 +157,9 @@ INLINE word_t msg_item_get_string_ptr_count (const msg_item_t *self){ return sel
 INLINE bool   msg_item_is_string_compound (const msg_item_t *self)  { return self->continuation; }
 INLINE word_t msg_item_get_string_cache_hints (const msg_item_t *self) { return self->type & 3; }
 INLINE word_t msg_item_get_snd_base (const msg_item_t *self)	{ return self->raw & (~0x3ffUL); }
-#endif /* !__cplusplus */
 
 struct acceptor_t
 {
-#if defined(__cplusplus)
-public:
-    inline acceptor_t () { }
-    inline acceptor_t (word_t raw)
-	{ this->raw = raw; }
-    
-    inline void clear()
-	{ this->raw = 0; }
-
-    inline void operator = (word_t raw) 
-	{ this->raw = raw; }
-
-    inline bool accept_strings()
-	{ return x.strings; }
-
-    inline bool accept_ctrlxfer()
-	{ return x.ctrlxfer; }
-
-    inline word_t get_rcv_window()
-	{ return x.rcv_window << 4; }
-
-    inline void set_rcv_window(fpage_t fpage)
-	{ word_t window = fpage.raw >> 4; x.rcv_window = window & (~0UL >> 4); };
-
-    fpage_t get_arch_specific_rcvwindow(tcb_t *dest);
-#endif /* __cplusplus */
     union {
 	word_t raw;
 	struct {
@@ -328,13 +174,11 @@ public:
 };
 typedef struct acceptor_t acceptor_t;
 
-#if !defined(__cplusplus)
 /* C forms of the acceptor_t methods (the raw/x union is C-visible). */
 INLINE void acceptor_set_rcv_window (acceptor_t *self, fpage_t fpage)
 { word_t window = fpage.raw >> 4; self->x.rcv_window = window & (~0UL >> 4); }
 INLINE bool   acceptor_accept_strings (const acceptor_t *self)	{ return self->x.strings; }
 INLINE word_t acceptor_get_rcv_window (const acceptor_t *self)	{ return self->x.rcv_window << 4; }
-#endif
 
 /* get_arch_specific_rcvwindow calls into the arch mapping layer, so it is a
    real wrapper (defined in glue thread.cc with the map.h chain in scope). */

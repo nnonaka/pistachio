@@ -35,27 +35,11 @@
 #include <bitmask.h>
 
 
-#if defined(__cplusplus)
-class tcb_t;
-#else
 struct tcb_t;
 typedef struct tcb_t tcb_t;
-#endif
 
 /* Empty base (no data); EBO makes it 0 bytes in the derived, so C omits it
    entirely (the derived thread_resources_t just carries its own fields). */
-#if defined(__cplusplus)
-class generic_thread_resources_t
-{
-public:
-    void dump(tcb_t * tcb) { }
-    void save(tcb_t * tcb) { }
-    void load(tcb_t * tcb) { }
-    void purge(tcb_t * tcb) { }
-    void init(tcb_t * tcb) { }
-    void free(tcb_t * tcb) { }
-};
-#endif
 
 #include INC_GLUE(resources.h)
 
@@ -72,75 +56,9 @@ struct resource_bits_t
 {
     bitmask_word_t	resource_bits;
 
-#if defined(__cplusplus)
-public:
-
-    /**
-     * Intialize resources (i.e., clear all resources).
-     */
-    inline void init (void)
-	{ resource_bits.clear(); }
-
-    /**
-     * Clear all resources.
-     */
-    inline void clear (void)
-	{ resource_bits.clear(); }
-
-    /**
-     * Add resource to resource bits.
-     * @param t		type of resource
-     * @return new resource bits
-     */
-    inline resource_bits_t operator += (resource_type_e t)
-	{ 
-	    resource_bits += (int) t;
-	    return *this;
-	}
-
-    /**
-     * Remove resource from resource bits.
-     * @param t		type of resource
-     * @return new resource bits
-     */
-    inline resource_bits_t operator -= (resource_type_e t)
-	{
-	    resource_bits -= (int) t;
-	    return *this;
-	}
-
-    /**
-     * Check if any resouces are registered.
-     * @return true if any resources are registered, false otherwise
-     */
-    bool have_resources (void)
-	{
-	    return (word_t) resource_bits != 0;
-	}
-
-    /**
-     * Check if indicated resource is registered.
-     * @param t		type of resource
-     * @return true if resource is registered, false otherwise
-     */
-    bool have_resource (resource_type_e t)
-	{
-	    return resource_bits.is_set ((int) t);
-	}
-
-    /**
-     * Convert resource bits to a word (e.g., for printing).
-     * @return the resource mask
-     */
-    inline operator word_t (void)
-	{
-	    return (word_t) resource_bits;
-	}
-#endif /* __cplusplus */
 };
 typedef struct resource_bits_t resource_bits_t;
 
-#if !defined(__cplusplus)
 /* C accessors for resource_bits_t: the C++ methods (init/have_resource/+=/-=)
    above poke bitmask_word_t::maskvalue, which is private to the C++ bitmask_t,
    so C reaches the plain struct member directly. Semantics match bitmask.h.
@@ -156,7 +74,6 @@ INLINE void resource_bits_remove (resource_bits_t *self, word_t t)
     { self->resource_bits.maskvalue &= ~(1UL << t); }
 INLINE bool resource_bits_have_resources (resource_bits_t *self)
     { return self->resource_bits.maskvalue != 0; }
-#endif /* !__cplusplus */
 
 #endif
 

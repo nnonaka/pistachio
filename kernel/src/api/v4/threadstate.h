@@ -65,92 +65,6 @@ struct thread_state_t
     /* thread_state_e in C++; stored as its word-wide backing type so the
        member is plain C (the enum itself is C++-only, guarded below). */
     word_t state;
-#if defined(__cplusplus)
-public:
-    enum thread_state_e
-    {
-	running			= THREAD_STATE_RUNNING,
-	waiting_forever		= THREAD_STATE_WAITING_FOREVER,
-	waiting_timeout		= THREAD_STATE_WAITING_TIMEOUT,
-	waiting_tunneled_pf	= THREAD_STATE_WAITING_TUNNELED_PF,
-	locked_waiting		= THREAD_STATE_LOCKED_WAITING,
-	locked_running		= THREAD_STATE_LOCKED_RUNNING,
-	locked_running_ipc_done	= THREAD_STATE_LOCKED_RUNNING_IPC_DONE,
-	locked_running_nested	= THREAD_STATE_LOCKED_RUNNING_NESTED,
-	polling			= THREAD_STATE_POLLING,
-	halted			= THREAD_STATE_HALTED,
-	aborted			= THREAD_STATE_ABORTED,
-	xcpu_waiting_deltcb    	= THREAD_STATE_XCPU_WAITING_DELTCB,
-	xcpu_waiting_exregs    	= THREAD_STATE_XCPU_WAITING_EXREGS,
-    };
-
-    /* constructors */
-    thread_state_t() {}; 
-    thread_state_t(thread_state_e state) { this->state = state; }
-    thread_state_t(word_t state) { this->state = (thread_state_e) state; }
-
-    /* state manipulation */
-    bool is_runnable();
-    bool is_sending()
-	{ return state == polling || state == locked_running; }
-    bool is_receiving()
-	{ return state == waiting_forever || state == waiting_timeout ||
-	      state == locked_waiting; }
-    bool is_halted()
-	{ return state == halted; }
-    bool is_aborted()
-	{ return state == aborted; }
-    bool is_running()
-	{ return state == running; }
-    bool is_waiting()
-	{ return state == waiting_forever || state == waiting_timeout; }
-    bool is_waiting_forever()
-	{ return state == waiting_forever; }
-    bool is_waiting_with_timeout()
-	{ return state == waiting_timeout; }
-    bool is_polling()
-	{ return state == polling; }
-    bool is_polling_or_waiting()
-	{ return is_polling() || is_waiting(); }
-    bool is_locked_running()
-	{ return state == locked_running; }
-    bool is_locked_waiting()
-	{ return state == locked_waiting; }
-    bool is_xcpu_waiting()
-	{ return state == xcpu_waiting_deltcb ||
-	      state == xcpu_waiting_exregs; }
-
-    
-    /* operators */
-    bool operator == (const thread_state_t thread_state)
-	{
-	    return this->state == thread_state.state;
-	}
-
-    bool operator == (const thread_state_e state)
-	{
-	    return this->state == state;
-	}
-
-    bool operator != (const thread_state_t thread_state)
-	{
-	    return this->state != thread_state.state;
-	}
-
-    bool operator != (const thread_state_e state)
-	{
-	    return this->state != state;
-	}
-
-    operator word_t()
-	{
-	    return (word_t)this->state;
-	}
-
-    /* debugging */
-    const char * string (void);
-
-#endif /* __cplusplus */
 };
 typedef struct thread_state_t thread_state_t;
 
@@ -176,18 +90,7 @@ INLINE const char * thread_state_string (word_t state)
     }
 }
 
-#if defined(__cplusplus)
-INLINE const char * thread_state_t::string (void)
-{ return thread_state_string ((word_t) state); }
-#endif
 
-#if defined(__cplusplus)
-INLINE bool thread_state_t::is_runnable()
-{
-    /* invers logic - lowestmost bit no set means runnable */
-    return !((word_t)this->state & 1);
-}
-#else /* !__cplusplus */
 /* C predicates on thread_state_t (state is a plain word here); mirror the
    like-named C++ methods for api/v4/thread.c and friends. */
 INLINE bool thread_state_is_runnable (const thread_state_t *self)
@@ -217,6 +120,5 @@ INLINE bool thread_state_is_locked_waiting (const thread_state_t *self)
     { return self->state == THREAD_STATE_LOCKED_WAITING; }
 INLINE bool thread_state_is_xcpu_waiting (const thread_state_t *self)
     { return self->state == THREAD_STATE_XCPU_WAITING_DELTCB || self->state == THREAD_STATE_XCPU_WAITING_EXREGS; }
-#endif /* __cplusplus */
 
 #endif /* __API__V4__THREADSTATE_H__ */

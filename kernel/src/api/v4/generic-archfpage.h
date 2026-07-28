@@ -35,13 +35,8 @@
 
 #include INC_API(config.h)
 
-#if defined(__cplusplus)
-class fpage_t;
-class tcb_t;
-#else
 struct fpage_t;
 struct tcb_t;
-#endif
 
 
 /**
@@ -54,88 +49,6 @@ struct arch_fpage_t
     /* data members */
     word_t raw;
     /* member functions */
-#if defined(__cplusplus)
-public:
-
-    /**
-     * sets the flexpage
-     */
-    void set(word_t base, word_t log2size, bool read, bool write, bool exec)
-	{
-	    
-	}
-    /**
-     * @return true if the flexpage is a nil fpage
-     */
-    bool is_valid_page (void) { return false; }
-
-    /**
-     * @return true if flexpage covers the whole arch-specific space
-     */
-    bool is_complete_page() { return false; }
-
-
-    /**
-     * @return base address of the fpage
-     * get_base does not size-align the address
-     */
-    addr_t get_base() {  return NULL; }
-
-    /**
-     * @return size aligned address of the fpage
-     */
-    addr_t get_address() {  return NULL; }
-    
-    /**
-     * @return size of the flexpage
-     */
-    word_t get_size() {  return 0; }
-
-    /**
-     * @return log2 size of the fpage
-     */
-    word_t get_size_log2() {  return 0; }
-    
-    /**
-     * @return true if the read bit is set
-     */
-    bool is_read() {  return false; }
-
-    /** 
-     * @return true if the write bit is set
-     */
-    bool is_write() {  return false; }
-
-    /**
-     * @return true if the execute bit is set
-     */
-    bool is_execute() {  return false; }
-
-    /**
-     * @return true if read, write and execute bits are set
-     */
-    bool is_rwx() {  return true; }
-
-    /**
-     * sets all permission bits in the fpage
-     */
-    void set_rwx() {   }
-
-    /**
-     * sets specific permission bits in the fpage
-     */
-    void set_rwx(word_t rwx) {  }
-
-    /**
-     * @return access rights of fpage
-     */
-    word_t get_rwx() 	{  return false; }
-
-    /**
-     * @return delivers an fpage covering the complete arch-specific space
-     */
-    static arch_fpage_t complete() { return (arch_fpage_t) { raw:0}; }
-#endif /* __cplusplus */
 
 };
 typedef struct arch_fpage_t arch_fpage_t;

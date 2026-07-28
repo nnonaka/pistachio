@@ -44,40 +44,6 @@
 
 struct threadid_t
 {
-#if defined(__cplusplus)
-public:
-    /* Method bodies are defined out-of-line below and forward to the
-       threadid_* C free functions -- the single source of truth shared by
-       both C and C++ (see after the struct). */
-    static threadid_t anythread();
-    static threadid_t anylocalthread();
-    static threadid_t nilthread();
-    static threadid_t irqthread(word_t irq);
-    static const threadid_t idlethread();
-    static threadid_t threadid(word_t threadno, word_t version);
-
-    bool is_global();
-    bool is_local();
-    bool is_interrupt();
-
-    /* check for specific (well known) thread ids */
-    bool is_nilthread();
-    bool is_anythread();
-    bool is_anylocalthread();
-
-    word_t get_threadno();
-    word_t get_version();
-    word_t get_irqno();
-    void set_global_id(word_t threadno, word_t version);
-
-    word_t get_raw();
-    void set_raw(word_t raw);
-    void set(threadid_t tid);
-
-    /* operators */
-    bool operator == (const threadid_t & tid);
-    bool operator != (const threadid_t & tid);
-#endif /* __cplusplus */
     /* Data is public: the threadid_* free functions are non-members. */
     union {
 	word_t raw;
@@ -188,51 +154,12 @@ INLINE bool threadid_equals (const threadid_t *a, const threadid_t *b)     { ret
 INLINE bool threadid_not_equals (const threadid_t *a, const threadid_t *b) { return a->raw != b->raw; }
 
 
-#if defined(__cplusplus)
-/* C++ methods forward to the free functions above. */
-INLINE threadid_t threadid_t::anythread ()      { return threadid_anythread (); }
-INLINE threadid_t threadid_t::anylocalthread () { return threadid_anylocalthread (); }
-INLINE threadid_t threadid_t::nilthread ()      { return threadid_nilthread (); }
-INLINE threadid_t threadid_t::irqthread (word_t irq) { return threadid_irqthread (irq); }
-INLINE const threadid_t threadid_t::idlethread () { return threadid_idlethread (); }
-INLINE threadid_t threadid_t::threadid (word_t threadno, word_t version)
-	{ return threadid_global (threadno, version); }
-
-INLINE bool threadid_t::is_global ()	{ return threadid_is_global (this); }
-INLINE bool threadid_t::is_local ()	{ return threadid_is_local (this); }
-INLINE bool threadid_t::is_interrupt ()	{ return threadid_is_interrupt (this); }
-INLINE bool threadid_t::is_nilthread ()	{ return threadid_is_nilthread (this); }
-INLINE bool threadid_t::is_anythread ()	{ return threadid_is_anythread (this); }
-INLINE bool threadid_t::is_anylocalthread () { return threadid_is_anylocalthread (this); }
-
-INLINE word_t threadid_t::get_threadno () { return threadid_get_threadno (this); }
-INLINE word_t threadid_t::get_version ()  { return threadid_get_version (this); }
-INLINE word_t threadid_t::get_irqno ()    { return threadid_get_irqno (this); }
-INLINE void threadid_t::set_global_id (word_t threadno, word_t version)
-	{ threadid_set_global_id (this, threadno, version); }
-
-INLINE word_t threadid_t::get_raw ()	{ return threadid_get_raw (this); }
-INLINE void threadid_t::set_raw (word_t raw) { threadid_set_raw (this, raw); }
-INLINE void threadid_t::set (threadid_t tid) { threadid_set (this, tid); }
-
-INLINE bool threadid_t::operator == (const threadid_t & tid) { return threadid_equals (this, &tid); }
-INLINE bool threadid_t::operator != (const threadid_t & tid) { return threadid_not_equals (this, &tid); }
-
-INLINE threadid_t threadid (word_t rawid) { return threadid_from_raw (rawid); }
-#endif /* __cplusplus */
 
 /* special thread ids */
-#if defined(__cplusplus)
-#define NILTHREAD	(threadid_t::nilthread())
-#define ANYTHREAD	(threadid_t::anythread())
-#define ANYLOCALTHREAD	(threadid_t::anylocalthread())
-#define IDLETHREAD	(threadid_t::idlethread())
-#else
 #define NILTHREAD	(threadid_nilthread())
 #define ANYTHREAD	(threadid_anythread())
 #define ANYLOCALTHREAD	(threadid_anylocalthread())
 #define IDLETHREAD	(threadid_idlethread())
-#endif
 
 
 #endif /* !__API__V4__THREAD_H__ */

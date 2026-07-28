@@ -45,54 +45,6 @@
 /* time */
 struct time_t
 {
-#if defined(__cplusplus)
-public:
-    u64_t get_microseconds();
-    
-    static time_t never()
-    {
-	time_t ret;
-	ret.raw = 0;
-	return ret;
-    }
-    
-    static time_t zero()
-    {
-	time_t ret;
-	ret.time.mantissa = 0;
-	ret.time.exponent = 1;
-	ret.time.type = 0;
-	return ret;
-    }
-    
-    static time_t period(u16_t mantissa, u16_t exponent)
-    {
-	time_t ret;
-	ret.time.mantissa = mantissa & 0x3ff;
-	ret.time.exponent = exponent & 0x1f;
-	ret.time.type = 0;
-	return ret;
-    }
-    
-    static time_t point(u16_t mantissa, u16_t exponent)
-    {
-	time_t ret;
-	ret.time.mantissa = mantissa & 0x3ff;
-	ret.time.exponent = exponent & 0x1f;
-	ret.time.type = 1;
-	return ret;
-    }
-    
-    void set_raw(u16_t raw) { this->raw = raw; }
-
-    bool is_never() { return raw == 0; }
-    bool is_zero() { return zero().raw == raw; }
-    bool is_period() { return time.type == 0; }
-    bool is_point() { return time.type == 1; }
-
-    bool operator< (time_t & r);
-    operator u16_t() { return raw ; }
-#endif /* __cplusplus */
 
     union {
 	u16_t raw;
@@ -106,7 +58,6 @@ public:
 } __attribute__((packed));
 typedef struct time_t time_t;
 
-#if !defined(__cplusplus)
 /* C forms of the time_t predicates (raw/bitfields are C-visible); mirrors the
    C++ is_never/is_zero.  get_microseconds and operator< are wrapped in C++
    (time_get_microseconds/time_lt, declared in api/v4/tcb.h). */
@@ -121,28 +72,11 @@ INLINE bool time_is_zero (const time_t *self)
     z.time.type = 0;
     return z.raw == self->raw;
 }
-#endif /* !__cplusplus */
 
-#if defined(__cplusplus)
-INLINE u64_t time_t::get_microseconds()
-{
-    return (1 << time.exponent) * time.mantissa;
-}
-#endif /* __cplusplus */
 
 
 struct timeout_t
 {
-#if defined(__cplusplus)
-public:
-    static timeout_t never()
-	{return (timeout_t){{raw: 0}};}
-
-    inline time_t get_rcv() { return x.rcv_timeout; }
-    inline time_t get_snd() { return x.snd_timeout; }
-    inline void set_raw(word_t raw) { this->raw = raw; }
-    inline bool is_never() { return this->raw == never().raw; }
-#endif /* __cplusplus */
     union {
 	struct {
 #if TIME_BITS_WORD == 64
@@ -165,11 +99,9 @@ public:
 };
 typedef struct timeout_t timeout_t;
 
-#if !defined(__cplusplus)
 INLINE timeout_t timeout_never (void) { timeout_t t; t.raw = 0; return t; }
 INLINE time_t timeout_get_rcv (const timeout_t *self) { return self->x.rcv_timeout; }
 INLINE time_t timeout_get_snd (const timeout_t *self) { return self->x.snd_timeout; }
-#endif
 
 
 typedef u16_t cpuid_t;

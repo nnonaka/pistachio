@@ -90,21 +90,10 @@ struct memory_info_t
 	word_t raw;
     };
 
-#if defined(__cplusplus)
-    word_t get_num_descriptors (void) { return n; }
-
-    memdesc_t * get_memdesc (word_t n);
-    bool insert (memdesc_t::type_e type, word_t subtype,
-		 bool virt, addr_t low, addr_t high);
-    bool insert (memdesc_t::type_e type, bool virt, addr_t low, addr_t high)
-	{ return insert (type, 0, virt, low, high); }
-#endif
 };
 typedef struct memory_info_t memory_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t memory_info_get_num_descriptors (memory_info_t *self) { return self->n; }
-#endif
 
 /**
  * Info for utcb size and allocation
@@ -118,25 +107,13 @@ struct utcb_info_t
 				: BITS_WORD - 22
 	);
 
-#if defined(__cplusplus)
-    word_t get_minimal_size()
-	{ return 1 << size; }
-    word_t get_utcb_alignment()
-	{ return 1 << alignment; }
-    word_t get_utcb_size()
-	{ return get_utcb_alignment() * multiplier; }
-    bool is_valid_utcb_location(word_t utcb_location)
-	{ return (((1 << alignment) - 1) & utcb_location) == 0; }
-#endif
 };
 typedef struct utcb_info_t utcb_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t utcb_info_get_minimal_size (const utcb_info_t *self) { return 1 << self->size; }
 INLINE word_t utcb_info_get_utcb_alignment (const utcb_info_t *self) { return 1 << self->alignment; }
 INLINE word_t utcb_info_get_utcb_size (const utcb_info_t *self) { return (1 << self->alignment) * self->multiplier; }
 INLINE bool utcb_info_is_valid_utcb_location (const utcb_info_t *self, word_t loc) { return (((1 << self->alignment) - 1) & loc) == 0; }
-#endif
 
 /**
  * info for kernel interface page size
@@ -148,17 +125,11 @@ struct kip_area_info_t
 		: BITS_WORD - 6
 	);
 
-#if defined(__cplusplus)
-    word_t get_size() { return (1 << size); }
-    word_t get_size_log2() { return size; }
-#endif
 };
 typedef struct kip_area_info_t kip_area_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t kip_area_info_get_size (const kip_area_info_t *self) { return 1 << self->size; }
 INLINE word_t kip_area_info_get_size_log2 (const kip_area_info_t *self) { return self->size; }
-#endif
 
 /**
  * clock_info_t: info for precision of system clock and scheduler
@@ -171,17 +142,11 @@ struct clock_info_t
 				: BITS_WORD - 32
 	);
 
-#if defined(__cplusplus)
-    word_t get_read_precision (void)	 { return read_precision;	}
-    word_t get_schedule_precision (void) { return schedule_precision;	}
-#endif
 };
 typedef struct clock_info_t clock_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t clock_info_get_read_precision (const clock_info_t *self) { return self->read_precision; }
 INLINE word_t clock_info_get_schedule_precision (const clock_info_t *self) { return self->schedule_precision; }
-#endif
 
 /**
  * thread_info_t: info for thread number ranges
@@ -195,23 +160,14 @@ struct thread_info_t
 			: BITS_WORD - 32
 	);
 
-#if defined(__cplusplus)
-    word_t get_user_base (void)			{ return user_base;	}
-    word_t get_system_base (void)		{ return system_base;	}
-    word_t get_significant_threadbits (void)	{ return t;		}
-    void set_user_base(word_t base)		{ user_base = base & 0xfff;	}
-    void set_system_base(word_t base)		{ system_base = base & 0xfff;	}
-#endif
 };
 typedef struct thread_info_t thread_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t thread_info_get_user_base (const thread_info_t *self)	{ return self->user_base; }
 INLINE word_t thread_info_get_system_base (const thread_info_t *self)	{ return self->system_base; }
 INLINE word_t thread_info_get_significant_threadbits (const thread_info_t *self) { return self->t; }
 INLINE void   thread_info_set_system_base (thread_info_t *self, word_t base)	{ self->system_base = base & 0xfff; }
 INLINE void   thread_info_set_user_base (thread_info_t *self, word_t base) { self->user_base = base & 0xfff; }
-#endif
 
 /**
  * info for supported page access rights and page sizes
@@ -224,18 +180,12 @@ struct page_info_t
 	size_mask	:  BITS_WORD - 7 - 3
 	);
 
-#if defined(__cplusplus)
-    word_t get_access_rights (void)	{ return rwx;			};
-    word_t get_page_size_mask (void)	{ return size_mask << 10;	}
-#endif
 };
 typedef struct page_info_t page_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t page_info_get_access_rights (const page_info_t *self)  { return self->rwx; }
 /* (word_t) cast: size_mask is a 54-bit bitfield -- see the note in memdesc.h. */
 INLINE word_t page_info_get_page_size_mask (const page_info_t *self) { return (word_t) self->size_mask << 10; }
-#endif
 
 /**
  * info for processor descriptor array
@@ -247,18 +197,11 @@ struct processor_info_t
 			: BITS_WORD - 16 - 4,
 	size		: 4
 	);
-#if defined(__cplusplus)
-    word_t get_num_processors (void)	{ return processors + 1;	};
-    word_t get_procdesc_size (void)	{ return 1 << size;		};
-    procdesc_t * get_procdesc (word_t num);
-#endif
 };
 typedef struct processor_info_t processor_info_t;
 
-#if !defined(__cplusplus)
 INLINE word_t processor_info_get_num_processors (const processor_info_t *self) { return self->processors + 1; }
 INLINE word_t processor_info_get_procdesc_size (const processor_info_t *self)  { return 1 << self->size; }
-#endif
 
 /**
  * endianess and word size for current API
@@ -271,12 +214,6 @@ struct api_flags_t
 			: BITS_WORD - 4
 	);
 
-#if defined(__cplusplus)
-    word_t get_endian (void)	{ return endian;	}
-    word_t get_word_size (void)	{ return word_size;	}
-    /** conversion to word_t */
-    operator word_t() { return ((word_size << 2) | endian); }
-#endif
 };
 typedef struct api_flags_t api_flags_t;
 
@@ -292,16 +229,9 @@ struct api_version_t
 			: BITS_WORD - 32
 	);
 
-#if defined(__cplusplus)
-    word_t get_version (void)		{ return version;	}
-    word_t get_subversion (void)	{ return subversion;	}
-    /** conversion to word_t */
-    operator word_t() { return ((version << 24) | (subversion << 16)); }
-#endif
 };
 typedef struct api_version_t api_version_t;
 
-#if !defined(__cplusplus)
 /* C forms of the api_version_t / api_flags_t "conversion to word_t" operators. */
 INLINE word_t api_version_get_version (const api_version_t *self)    { return self->version; }
 INLINE word_t api_version_get_subversion (const api_version_t *self) { return self->subversion; }
@@ -309,7 +239,6 @@ INLINE word_t api_flags_get_endian (const api_flags_t *self)         { return se
 INLINE word_t api_flags_get_word_size (const api_flags_t *self)      { return self->word_size; }
 INLINE word_t api_version_to_word (const api_version_t *self) { return (self->version << 24) | (self->subversion << 16); }
 INLINE word_t api_flags_to_word (const api_flags_t *self)     { return (self->word_size << 2) | self->endian; }
-#endif
 
 /**
  * The KIP magic - the "L4�K" byte string
@@ -335,12 +264,6 @@ typedef word_t syscall_t;
  */
 struct kernel_interface_page_t
 {
-#if defined(__cplusplus)
-    /* --- functions --- */
-    void init();
-    kernel_descriptor_t * get_kernel_descriptor()
-	{ return (kernel_descriptor_t*)((addr_word_t)this + kernel_desc_ptr); }
-#endif
 
     /* --- member variables --- */
     magic_word_t	magic;
@@ -441,19 +364,12 @@ struct kernel_id_t
 		: BITS_WORD - 32
 	);
 
-#if defined(__cplusplus)
-    word_t get_subid (void)	{ return subid;	}
-    word_t get_id (void)	{ return id;	}
-    word_t get_raw (void)	{ return (id << 24) | (subid << 16); }
-#endif
 };
 typedef struct kernel_id_t kernel_id_t;
 
-#if !defined(__cplusplus)
 INLINE word_t kernel_id_get_subid (const kernel_id_t *self) { return self->subid; }
 INLINE word_t kernel_id_get_id (const kernel_id_t *self)    { return self->id; }
 INLINE word_t kernel_id_get_raw (const kernel_id_t *self)   { return (self->id << 24) | (self->subid << 16); }
-#endif
 
 /**
  * kernel generation date
@@ -467,19 +383,12 @@ struct kernel_gen_date_t
 		: BITS_WORD - 16
 	);
 
-#if defined(__cplusplus)
-    word_t get_day (void)	{ return day;		}
-    word_t get_month (void)	{ return month;		}
-    word_t get_year (void)	{ return year + 2000;	}
-#endif
 };
 typedef struct kernel_gen_date_t kernel_gen_date_t;
 
-#if !defined(__cplusplus)
 INLINE word_t kernel_gen_date_get_day (const kernel_gen_date_t *self)   { return self->day; }
 INLINE word_t kernel_gen_date_get_month (const kernel_gen_date_t *self) { return self->month; }
 INLINE word_t kernel_gen_date_get_year (const kernel_gen_date_t *self)  { return self->year + 2000; }
-#endif
 
 /**
  * kernel version
@@ -493,19 +402,12 @@ struct kernel_version_t
 			: BITS_WORD - 32
 	);
 
-#if defined(__cplusplus)
-    word_t get_subsubver (void)	{ return subsubver;	}
-    word_t get_subver (void)	{ return subver;	}
-    word_t get_ver (void)	{ return ver;		}
-#endif
 };
 typedef struct kernel_version_t kernel_version_t;
 
-#if !defined(__cplusplus)
 INLINE word_t kernel_version_get_subsubver (const kernel_version_t *self) { return self->subsubver; }
 INLINE word_t kernel_version_get_subver (const kernel_version_t *self)    { return self->subver; }
 INLINE word_t kernel_version_get_ver (const kernel_version_t *self)       { return self->ver; }
-#endif
 
 struct kernel_supplier_t
 {
@@ -530,15 +432,10 @@ struct kernel_descriptor_t
     kernel_supplier_t	kernel_supplier;
     char		version_parts[0];
 
-#if defined(__cplusplus)
-    char * get_version_string (void) { return version_parts; }
-#endif
 };
 typedef struct kernel_descriptor_t kernel_descriptor_t;
 
-#if !defined(__cplusplus)
 INLINE char * kernel_descriptor_get_version_string (kernel_descriptor_t *self) { return self->version_parts; }
-#endif
 
 
 /*
@@ -557,17 +454,6 @@ void         kernel_interface_page_init (kernel_interface_page_t *self);
 void init_hello (void);
 END_DECLS
 
-#if defined(__cplusplus)
-INLINE procdesc_t * processor_info_t::get_procdesc (word_t num)
-	{ return processor_info_get_procdesc (this, num); }
-INLINE memdesc_t * memory_info_t::get_memdesc (word_t num)
-	{ return memory_info_get_memdesc (this, num); }
-INLINE bool memory_info_t::insert (memdesc_t::type_e type, word_t subtype,
-				   bool virt, addr_t low, addr_t high)
-	{ return memory_info_insert (this, (word_t) type, subtype, virt, low, high); }
-INLINE void kernel_interface_page_t::init ()
-	{ kernel_interface_page_init (this); }
-#endif
 
 
 #endif /* !__API__V4__KERNELINTERFACE_H__ */

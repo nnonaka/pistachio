@@ -30,173 +30,6 @@ typedef void (*requeue_callback_t)(tcb_t* tcb);
 
 struct rr_sched_ktcb_t
 {
-#if defined(__cplusplus)
-public:
-
-    /**
-     * delivers the current priority of a thread
-     * @return the total quantum
-     */
-
-    u64_t get_total_quantum()
-	{ return total_quantum; }
-
-    /**
-     * sets the total time quantum of the thread
-     * @param quantum the total quantum
-     */
-    
-    void set_total_quantum(u64_t quantum)
-	{ total_quantum = quantum; }
-
-    u64_t account_quantum(u32_t t)
-	{ 
-	    total_quantum -= t; 
-	    return total_quantum;
-	} 
-    
-    void init_total_quantum(time_t quantum)
-	{
-	    if (quantum.is_never())
-		total_quantum = 0;
-	    else
-	    {
-		// quantum can only be specified as a time period
-		ASSERT(quantum.is_period()); 
-		total_quantum = quantum.get_microseconds();
-	    }
-	    // give a fresh timeslice according to the spec
-	    current_timeslice = timeslice_length;
-	}
-    
-    /**
-     * delivers the current timeslice of a thread
-     * @return the timeslice
-     */
-    
-    s64_t get_timeslice()
-	{ return current_timeslice; } 
-
-    s64_t account_timeslice(u32_t t)
-	{ 
-	    current_timeslice -= t; 
-	    return current_timeslice;
-	} 
-    
-    void renew_timeslice(u32_t t)
-	{ current_timeslice += t; } 
-    
-    /**
-     * delivers the current timeslice length of a thread
-     * @return the timeslice
-     */
-    
-    u64_t get_timeslice_length()
-	{ return timeslice_length; } 
-    
-    /**
-     * initializes the timeslice and timeslice length of a thread 
-     * @param timeslice timeslice length (xmust be a time period)
-     */
-
-    void init_timeslice(time_t timeslice)
-	{
-	    ASSERT(timeslice.is_period()); 
-	    current_timeslice = timeslice_length = timeslice.get_microseconds();
-	}
-
-    /**
-     * sets maximum delay for delayed preemption
-     */
-
-    void set_maximum_delay (u16_t usec)
-	{ current_max_delay = usec; }
-
-    /**
-     * delivers the current maximum for delayed preemption of a thread
-     * @return the delay 
-     */
-    
-    u16_t get_maximum_delay ()
-	{ return current_max_delay; }
-
-
-    /**
-     * initialize the current maximum for delayed preemption of a thread
-     * @param usec length of delay
-     */
-    void init_maximum_delay (u16_t usec)
-	{ current_max_delay = max_delay = usec;	}
-
-    /**
-     * delivers the initia value of maximum for delayed preemption of a thread
-     * @param usec length of delay
-     */
-    u16_t get_init_maximum_delay ()
-	{ return max_delay; }
-
-    
-    /**
-     * sets the priority of a thread
-     * @param prio priority of thread
-     */
-
-    void set_priority(prio_t prio)
-	{
-	    priority = prio;
-	    /* keep sensitive and current prio in-sync to reduce checking overhead */
-	    if (sensitive_prio < prio)
-		set_sensitive_prio (prio);
-	}
-    
-    
-    /**
-     * delivers the current priority of a thread
-     * @return the priority 
-     */
-    prio_t get_priority() 
-        { return priority; };
-
-    /**
-     * sets sensitive prio for delayed preemption
-     */
-    
-    void set_sensitive_prio (prio_t prio)
-	{ sensitive_prio = prio; }
-
-    /**
-     * delivers the current sensitive priority of a thread
-     * @return the sensitive priority 
-     */
-
-    prio_t get_sensitive_prio ()
-	{ return sensitive_prio; }
-
-
-    /**
-     * delivers the current timeout of a thread
-     * @return the timeout 
-     */
-    u64_t get_timeout() 
-          { return absolute_timeout; } 
-
-
-    /**
-     * @return true if the timeout has expired
-     */
-    bool has_timeout_expired(u64_t time)
-	{
-	    return (absolute_timeout <= time);
-	}
-    
-    /**
-     * delay preemption
-     * @param current   current TCB
-     * @param tcb       destination TCB
-     * @return true if preemption was delayed, otherwise false
-     */
-    bool delay_preemption ( tcb_t * tcb );
-#endif /* __cplusplus */
   
     
 #if defined(CONFIG_SMP)
@@ -209,9 +42,6 @@ public:
     ringlist_tcb_t	wait_list;
     
 
-#if defined(__cplusplus)
-protected:
-#endif
    
     u64_t		total_quantum;
     u64_t		timeslice_length;
@@ -231,18 +61,13 @@ protected:
        at 88.  Filling the hole makes both languages agree.  See notes §78. */
     u16_t		__tail_pad;
     
-#if defined(__cplusplus)
-    friend class prio_queue_t;
-#endif
     
    
    
 };
 typedef struct rr_sched_ktcb_t rr_sched_ktcb_t;
 
-#if !defined(__cplusplus)
-/* C forms of the rr_sched_ktcb_t accessors (the data above is C-visible; only
-   the methods are __cplusplus-guarded).  Used by api/v4/sched-rr/schedule.c.
+/* Accessors for rr_sched_ktcb_t, used by api/v4/sched-rr/schedule.c.
    `self' is the policy base -- reach it as &tcb->sched_state.base. */
 INLINE u64_t rr_sched_get_total_quantum (rr_sched_ktcb_t *self)		{ return self->total_quantum; }
 INLINE void  rr_sched_set_total_quantum (rr_sched_ktcb_t *self, u64_t q){ self->total_quantum = q; }
@@ -285,7 +110,6 @@ INLINE void   rr_sched_init_timeslice (rr_sched_ktcb_t *self, time_t timeslice)
 	(s64_t) ((1 << timeslice.time.exponent) * timeslice.time.mantissa);
 }
 INLINE u16_t  rr_sched_get_maximum_delay (rr_sched_ktcb_t *self)	{ return self->current_max_delay; }
-#endif /* !__cplusplus */
 
 typedef rr_sched_ktcb_t policy_sched_ktcb_t;
 
