@@ -53,7 +53,7 @@ EXTERN_KMEM_GROUP(kmem_space);
 //#define TRACE_TLB(x...)	TRACEF(x)
 #define TRACE_TLB(x...)
 
-word_t space_t::pinned_mapping;
+word_t space_pinned_mapping;
 // used by initialization code...
 word_t swtlb_high_water;
 
@@ -70,7 +70,7 @@ static struct {
 UNIT("cpulocal") ppc_swtlb_t swtlb;
 
 // ASID management
-UNIT("cpulocal") asid_manager_t<space_t, CONFIG_MAX_NUM_ASIDS> asid_manager;
+UNIT("cpulocal") asid_manager_t asid_manager;
 
 #if 0
 void dump_tlb()
@@ -81,14 +81,14 @@ void dump_tlb()
 	ppc_tlb1_t tlb1;
 	ppc_tlb2_t tlb2;
 	ppc_mmucr_t mmucr;
-	tlb0.read(i);
-	tlb1.read(i);
-	tlb2.read(i);
+	ppc_tlb0_read (&tlb0, i);
+	ppc_tlb1_read (&tlb1, i);
+	ppc_tlb2_read (&tlb2, i);
 
 	printf("%02d: %c [%02x:%d] %08x sz:%08x [%04x:%08x] U:%c%c%c S:%c%c%c  C:[%c%c%c%c%c]\n",
-	       i, tlb0.is_valid() ? 'V' : 'I', mmucr.read().get_search_id(),
-	       tlb0.trans_space, tlb0.get_vaddr(), tlb0.get_size(),
-	       (word_t)(tlb1.get_paddr() >> 32), (word_t)(tlb1.get_paddr()),
+	       i, ppc_tlb0_is_valid (&tlb0) ? 'V' : 'I', ppc_mmucr_read (&mmucr).get_search_id(),
+	       tlb0.trans_space, ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0),
+	       (word_t)(ppc_tlb1_get_paddr (&tlb1) >> 32), (word_t)(ppc_tlb1_get_paddr (&tlb1)),
 	       tlb2.user_execute ? 'X' : '-', tlb2.user_write ? 'W' : '-', 
 	       tlb2.user_read ? 'R' : '-', tlb2.super_execute ? 'X' : '-', 
 	       tlb2.super_write ? 'W' : '-', tlb2.super_read ? 'R' : '-',
@@ -99,31 +99,31 @@ void dump_tlb()
 }
 #endif
 
-bool space_t::sync_kernel_space(addr_t addr)
+bool space_sync_kernel_space (space_t *self, addr_t addr)
 {
     /* nothing to sync; we handle the kernel space in the TLB miss
      * handler */
     return false;
 }
 
-void space_t::init(fpage_t utcb_area, fpage_t kip_area)
+void space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area)
 {
 	int i;
-	this->utcb_area = utcb_area;
-    this->kip_area = kip_area;
+	self->utcb_area = utcb_area;
+    self->kip_area = kip_area;
 
-    this->add_mapping( kip_area.get_base(), (paddr_t)virt_to_phys(get_kip()), 
-		       size_4k, false, false );
+    space_add_mapping (self,  fpage_get_base (&kip_area), (paddr_t)virt_to_phys(get_kip()), 
+		       size_4k, false, false, cache_standard );
 
     // XXX: do upon migration!
     for (i = 0; i < CONFIG_SMP_MAX_CPUS; i++)
-	get_asid(i)->init();
+	asid_init (space_get_asid_cpu (self, i));
 }
 
-void SECTION(".init.memory") space_t::init_kernel_mappings()
+void SECTION(".init.memory") space_init_kernel_mappings (space_t *self)
 {
     int i;
-    this->pinned_mapping = PINNED_AREA_START;
+    space_pinned_mapping = PINNED_AREA_START;
 
     //initialize translation table
     for (i=0; i < TRANSLATION_TABLE_ENTRIES; ++i) {
@@ -134,7 +134,7 @@ void SECTION(".init.memory") space_t::init_kernel_mappings()
 
 }
 
-void SECTION(".init.memory") space_t::init_cpu_mappings(cpuid_t cpu)
+void SECTION(".init.memory") space_init_cpu_mappings (space_t *self, cpuid_t cpu)
 {
     extern char _begin_cpu_local[], _end_cpu_local[];
     extern char _cpu_phys[];
@@ -146,7 +146,7 @@ void SECTION(".init.memory") space_t::init_cpu_mappings(cpuid_t cpu)
     // determine size
     int log2size = 10;
     for (; (1 << log2size) < (_end_cpu_local - _begin_cpu_local) || 
-	     !ppc_tlb0_t::is_valid_pagesize(log2size); log2size++);
+	     !ppc_tlb0_is_valid_pagesize(log2size); log2size++);
     
     if (cpu == 0)
 	page = phys_to_virt(_cpu_phys);
@@ -160,25 +160,25 @@ void SECTION(".init.memory") space_t::init_cpu_mappings(cpuid_t cpu)
 	       page, virt_to_phys(page), CPU_AREA_START, log2size, 
 	       swtlb_high_water, cpu);
 
-    tlb0.init_vaddr_size(CPU_AREA_START, log2size);
-    tlb1.init_paddr((paddr_t)virt_to_phys(page));
-    //tlb2.init_cpu_local();
-    tlb2.init_shared_smp();
-    tlb2.set_kernel_perms(true, true, false);
+    ppc_tlb0_init_vaddr_size (&tlb0, CPU_AREA_START, log2size, true, 0);
+    ppc_tlb1_init_paddr (&tlb1, (paddr_t)virt_to_phys(page));
+    //ppc_tlb2_init_cpu_local (&tlb2);
+    ppc_tlb2_init_shared_smp (&tlb2);
+    ppc_tlb2_set_kernel_perms (&tlb2, true, true, false);
 
-    ppc_mmucr_t::write_search_id(0);
-    tlb0.write(swtlb_high_water);
-    tlb1.write(swtlb_high_water);
-    tlb2.write(swtlb_high_water);
+    ppc_mmucr_write_search_id(0, 0);
+    ppc_tlb0_write (&tlb0, swtlb_high_water);
+    ppc_tlb1_write (&tlb1, swtlb_high_water);
+    ppc_tlb2_write (&tlb2, swtlb_high_water);
 
     /* 
      * CPU local mappings exist now 
      */
     TRACE_INIT("\tASID manager init %x -> %x (CPU %d)\n", 1, CONFIG_MAX_NUM_ASIDS-1, cpu);
-    asid_manager.init(1, CONFIG_MAX_NUM_ASIDS - 1);
-    ASSERT(this == get_kernel_space());
-    this->cpu[cpu].asid.init_kernel(0);
-    swtlb.init(swtlb_high_water - 1);
+    asid_manager_init (&asid_manager, 1, CONFIG_MAX_NUM_ASIDS - 1);
+    ASSERT(self == get_kernel_space());
+    asid_init_kernel (&self->cpu[cpu].asid, 0);
+    ppc_swtlb_init (&swtlb, swtlb_high_water - 1);
 
 #ifdef CONFIG_SMP
     /* safe all kernel mappings except CPU local */
@@ -199,8 +199,7 @@ void SECTION(".init.memory") space_t::init_cpu_mappings(cpuid_t cpu)
 #endif
 }
 
-NOINLINE bool space_t::handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vaddr, 
-					bool user, bool global )
+NOINLINE bool space_handle_tlb_miss (space_t *self, addr_t lookup_vaddr, addr_t install_vaddr, bool user, bool global)
 {
     pgent_t * pg;
     word_t pgsize;
@@ -214,9 +213,9 @@ NOINLINE bool space_t::handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vadd
 
     size_t  size  = page_shift (pgsize);
     word_t  vaddr = (word_t) install_vaddr;
-    paddr_t paddr = pg->address (this, pgsize) | (vaddr & ((1ul << size) - 1));
+    paddr_t paddr = pgent_address (pg, self, pgsize) | (vaddr & ((1ul << size) - 1));
 
-    while (!ppc_tlb0_t::is_valid_pagesize (size))
+    while (!ppc_tlb0_is_valid_pagesize (size))
         size--;
 
     vaddr &= ~((1ul << size) - 1);
@@ -234,35 +233,35 @@ NOINLINE bool space_t::handle_tlb_miss( addr_t lookup_vaddr, addr_t install_vadd
 
     switch (pg->map.caching)
     {
-    case cache_standard:  tlb2.init_shared_smp(); break;
-    case cache_inhibited: tlb2.init_device(); break;
-    case cache_guarded: tlb2.init_guarded(); break;
+    case cache_standard:  ppc_tlb2_init_shared_smp (&tlb2); break;
+    case cache_inhibited: ppc_tlb2_init_device (&tlb2); break;
+    case cache_guarded: ppc_tlb2_init_guarded (&tlb2); break;
     default: UNIMPLEMENTED();
     }
     if (user)
-	tlb2.set_user_perms(pg->map.read, pg->map.write, pg->map.execute);
-    tlb2.set_kernel_perms(pg->map.read, pg->map.write, 0);
+	ppc_tlb2_set_user_perms (&tlb2, pg->map.read, pg->map.write, pg->map.execute);
+    ppc_tlb2_set_kernel_perms (&tlb2, pg->map.read, pg->map.write, 0);
 
-    ppc_mmucr_t::write_search_id(global ? 0 : ppc_get_pid());
-    word_t tlb_index = swtlb.allocate();
+    ppc_mmucr_write_search_id(global ? 0 : ppc_get_pid(), 0);
+    word_t tlb_index = ppc_swtlb_allocate (&swtlb);
 
     TRACE_TLB("inserting TLB entry %d: %08x, %08x, %08x\n",
 	      tlb_index, tlb0.raw, tlb1.raw, tlb2.raw);
 
-    tlb0.write(tlb_index);
-    tlb1.write(tlb_index);
-    tlb2.write(tlb_index);
+    ppc_tlb0_write (&tlb0, tlb_index);
+    ppc_tlb1_write (&tlb1, tlb_index);
+    ppc_tlb2_write (&tlb2, tlb_index);
 
     return true;
 }
 
-addr_t space_t::map_device_pinned(paddr_t paddr, word_t size, bool kernel, word_t attrib)
+addr_t space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool kernel, word_t attrib)
 {
     word_t log2sz;
-    word_t vaddr = pinned_mapping;
+    word_t vaddr = space_pinned_mapping;
 
     for (log2sz = 1; log2sz < 32; log2sz++)
-	if ((1U << log2sz) >= size && ppc_tlb0_t::is_valid_pagesize(log2sz))
+	if ((1U << log2sz) >= size && ppc_tlb0_is_valid_pagesize(log2sz))
 	    break;
 
     if (log2sz >= 32)
@@ -277,91 +276,102 @@ addr_t space_t::map_device_pinned(paddr_t paddr, word_t size, bool kernel, word_
     ppc_tlb0_t tlb0(vaddr, log2sz);
     ppc_tlb1_t tlb1(paddr_align);
     ppc_tlb2_t tlb2;
-    tlb2.init_device();
-    tlb2.set_kernel_perms(true, true, false);
+    ppc_tlb2_init_device (&tlb2);
+    ppc_tlb2_set_kernel_perms (&tlb2, true, true, false);
     if (!kernel)
-        tlb2.set_user_perms(true, true, false);
+        ppc_tlb2_set_user_perms (&tlb2, true, true, false);
 
-    word_t tlb_index = swtlb.allocate_pinned();
-    tlb0.write(tlb_index);
-    tlb1.write(tlb_index);
-    tlb2.write(tlb_index);
+    word_t tlb_index = ppc_swtlb_allocate_pinned (&swtlb);
+    ppc_tlb0_write (&tlb0, tlb_index);
+    ppc_tlb1_write (&tlb1, tlb_index);
+    ppc_tlb2_write (&tlb2, tlb_index);
 
     TRACE_TLB("mapping pinned device: %x.%08x, sz=%x, %x.%08x, [%08x, %08x, %08x]\n",
 	      (word_t)(paddr >> 32), (word_t)paddr, size, (word_t)(paddr_align >> 32),
 	      (word_t)paddr_align, tlb0.raw, tlb1.raw, tlb2.raw);
 
-    pinned_mapping = vaddr + size;
+    space_pinned_mapping = vaddr + size;
 
     return addr_offset((addr_t)vaddr, paddr - paddr_align);
 }
 
-asid_t *space_t::get_asid()
+asid_t *space_get_asid (space_t *self)
 {
     return get_asid(get_current_cpu());
 }
 
-void space_t::allocate_asid()
+void space_allocate_asid (space_t *self)
 {
-    asid_manager.allocate_asid(this);
+    asid_manager_allocate_asid (&asid_manager, self);
 }
 
-void space_t::flush_tlb( space_t *curspace, addr_t start, addr_t end )
+void space_flush_tlb (space_t *self, space_t *curspace)
 {
-    asid_t *asid = get_asid();
-    if (!asid->is_valid())
+    space_flush_tlb_range (self, curspace, (addr_t)0, (addr_t)~0U);
+}
+
+void space_flush_tlb_range (space_t *self, space_t *curspace, addr_t start, addr_t end)
+{
+    asid_t *asid = space_get_asid (self);
+    if (!asid_is_valid (asid))
 	return;
 
-    TRACEF("flush_tlb %p, [%p-%p]\n", this, start, end);
+    TRACEF("flush_tlb %p, [%p-%p]\n", self, start, end);
 
-    word_t hw_asid = asid->get();
+    word_t hw_asid = asid_get (asid);
     for (word_t idx = 0; idx < swtlb.high_water; idx++)
     {
 	ppc_tlb0_t tlb0;
 	ppc_mmucr_t mmucr;
-	tlb0.read(idx);
-	mmucr.read();
+	ppc_tlb0_read (&tlb0, idx);
+	ppc_mmucr_read (&mmucr);
 
-	if (!tlb0.is_valid())
+	if (!ppc_tlb0_is_valid (&tlb0))
 	    continue;
 
-	if (mmucr.get_search_id() == hw_asid &&
-	    (addr_t)tlb0.get_vaddr() >= start && 
-	    addr_offset((addr_t)tlb0.get_vaddr(), tlb0.get_size() - 1) <= end )
+	if (ppc_mmucr_get_search_id (&mmucr) == hw_asid &&
+	    (addr_t)ppc_tlb0_get_vaddr (&tlb0) >= start && 
+	    addr_offset((addr_t)ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0) - 1) <= end )
 	{
-	    ppc_tlb0_t::invalid().write(idx);
-	    swtlb.set_free(idx);
+	    {
+		ppc_tlb0_t inv = ppc_tlb0_invalid ();
+		ppc_tlb0_write (&inv, idx);
+	    }
+	    ppc_swtlb_set_free (&swtlb, idx);
 	}
     }
 }
 
-void space_t::flush_tlbent( space_t *curspace, addr_t addr, word_t log2size )
+void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t log2size)
 {
-    asid_t *asid = get_asid();
-    if (!asid->is_valid())
+    asid_t *asid = space_get_asid (self);
+    if (!asid_is_valid (asid))
 	return;
 
     word_t idx;
-    ppc_mmucr_t::write_search_id(asid->get());
+    ppc_mmucr_write_search_id(asid_get (asid), 0);
     isync();
 
     if (ppc_tlbsx((word_t)addr, idx))
     {
 	TRACEF("invalidating TLB entry %d\n", idx);
-	ppc_tlb0_t::invalid().write(idx);
-	swtlb.set_free(idx);
+	{
+	    ppc_tlb0_t inv = ppc_tlb0_invalid ();
+	    ppc_tlb0_write (&inv, idx);
+	}
+	ppc_swtlb_set_free (&swtlb, idx);
     }
 }
 
-void space_t::arch_free()
+void space_arch_free (space_t *self)
 {
-    flush_tlb(this, (addr_t)USER_AREA_START, (addr_t)USER_AREA_END);
+    space_flush_tlb_range (self, self, (addr_t)USER_AREA_START, (addr_t)USER_AREA_END);
 }
 
 #define RELOC(s0addr, physaddr, size) \
     case s0addr ... s0addr + size - 1: paddr = physaddr + reinterpret_cast<paddr_t>(addr_offset(addr, -s0addr)); break;
 
-paddr_t space_t::sigma0_translate(addr_t addr, word_t size)
+paddr_t space_sigma0_translate (addr_t addr, word_t size)
 {
 	word_t i;
 	paddr_t paddr = (paddr_t)addr;
@@ -375,7 +385,7 @@ paddr_t space_t::sigma0_translate(addr_t addr, word_t size)
     return paddr;
 }
 
-word_t space_t::sigma0_attributes(pgent_t *pg, paddr_t addr, word_t size)
+word_t space_sigma0_attributes (pgent_t *pg, paddr_t addr, word_t size)
 {
     /* device memory is guarded */
     //if (sigma0_translate(addr, size) >= 0x100000000ULL)
@@ -389,7 +399,7 @@ word_t space_t::sigma0_attributes(pgent_t *pg, paddr_t addr, word_t size)
  *		    Paging initialization; unpaged mode!
  **********************************************************************/
 
-extern "C" SECTION(".einit") void init_paging( int cpu )
+EXTERN_C SECTION(".einit") void init_paging( int cpu )
 {
     u32_t curr_entry;
     word_t index;
@@ -398,7 +408,7 @@ extern "C" SECTION(".einit") void init_paging( int cpu )
     ppc_set_pid(0);
 
     /* set search id to global */
-    ppc_mmucr_t::write_search_id(0);
+    ppc_mmucr_write_search_id(0, 0);
 
     ppc_tlbsx((u32_t)&init_paging, curr_entry); /* can't fail */
 
@@ -407,7 +417,10 @@ extern "C" SECTION(".einit") void init_paging( int cpu )
     {
 	if (index == curr_entry)
 	    continue;
-	ppc_tlb0_t::invalid().write(index);
+	{
+	    ppc_tlb0_t inv = ppc_tlb0_invalid ();
+	    ppc_tlb0_write (&inv, index);
+	}
     }
 
     ppc_tlb0_t tlb0;
@@ -421,29 +434,30 @@ extern "C" SECTION(".einit") void init_paging( int cpu )
 #ifdef CONFIG_SUBPLAT_440_BGP
     mmucr.u2_store_without_allocate = 1;
 #endif
-    mmucr.write();
+    ppc_mmucr_write (&mmucr);
 
     for (log2size = KERNEL_AREA_LOG2SIZE; 
-         !ppc_tlb0_t::is_valid_pagesize(log2size);
+         !ppc_tlb0_is_valid_pagesize(log2size);
          log2size--);
 
     index = PPC_MAX_TLB_ENTRIES - 1;
 
-    tlb0.init_vaddr_size(KERNEL_OFFSET, log2size);
-    tlb1.init_paddr(0ULL);
-    tlb2.init_shared_smp();
-    tlb2.set_kernel_perms(true, true, true);
-    tlb2.set_user_perms(false, false, true);
+    ppc_tlb0_init_vaddr_size (&tlb0, KERNEL_OFFSET, log2size, true, 0);
+    ppc_tlb1_init_paddr (&tlb1, 0ULL);
+    ppc_tlb2_init_shared_smp (&tlb2);
+    ppc_tlb2_set_kernel_perms (&tlb2, true, true, true);
+    ppc_tlb2_set_user_perms (&tlb2, false, false, true);
 
     // map the kernel area
-    for (; tlb0.get_vaddr() < KERNEL_AREA_END; 
-	 tlb0 += (1 << log2size), tlb1 += (1 << log2size), index--)
+    for (; ppc_tlb0_get_vaddr (&tlb0) < KERNEL_AREA_END; 
+	 ppc_tlb0_add_offset (&tlb0, 1 << log2size),
+	     ppc_tlb1_add_offset (&tlb1, 1 << log2size), index--)
     {
 	if (index == curr_entry)
 	    index--;
-	tlb0.write(index);
-	tlb1.write(index);
-	tlb2.write(index);
+	ppc_tlb0_write (&tlb0, index);
+	ppc_tlb1_write (&tlb1, index);
+	ppc_tlb2_write (&tlb2, index);
     }
     isync();
 
@@ -499,13 +513,13 @@ addr_t setup_console_mapping(paddr_t paddr, int log2size)
     ppc_tlb0_t tlb0(vaddr, log2size);
     ppc_tlb1_t tlb1(paddr_align);
     ppc_tlb2_t tlb2;
-    tlb2.init_device();
-    tlb2.set_kernel_perms(true, true, false);
+    ppc_tlb2_init_device (&tlb2);
+    ppc_tlb2_set_kernel_perms (&tlb2, true, true, false);
 
-    ppc_mmucr_t::write_search_id(0);
-    tlb0.write(swtlb_high_water);
-    tlb1.write(swtlb_high_water);
-    tlb2.write(swtlb_high_water);
+    ppc_mmucr_write_search_id(0, 0);
+    ppc_tlb0_write (&tlb0, swtlb_high_water);
+    ppc_tlb1_write (&tlb1, swtlb_high_water);
+    ppc_tlb2_write (&tlb2, swtlb_high_water);
     isync();
 
     swtlb_high_water--;
@@ -519,12 +533,15 @@ SECTION(".init") void setup_kernel_mappings( void )
     /* flush boot mapping */
     u32_t entry;
     ppc_tlb0_t tlb0;
-    ppc_tlbsx((u32_t)&init_paging, entry);
-    tlb0.read(entry);
+    ppc_tlbsx((u32_t)&init_paging, &entry);
+    ppc_tlb0_read (&tlb0, entry);
 
     TRACE_INIT("Flush boot mapping %x, vaddr=%x, size=%x (%x)\n", 
-               entry, tlb0.get_vaddr(), tlb0.get_size(), tlb0.raw);
-    ppc_tlb0_t::invalid().write(entry);
+               entry, ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0), tlb0.raw);
+    {
+	ppc_tlb0_t inv = ppc_tlb0_invalid ();
+	ppc_tlb0_write (&inv, entry);
+    }
 }
 
 /**********************************************************************
@@ -544,8 +561,8 @@ EXCDEF( isi_handler )
     space_t *space = get_current_space();
     ASSERT(space);
 
-    space->handle_pagefault( (addr_t)srr0, (addr_t)srr0, 
-	    space_t::execute, ppc_is_kernel_mode(srr1) );
+    space_handle_pagefault (space,  (addr_t)srr0, (addr_t)srr0, 
+	    SPACE_ACCESS_EXECUTE, ppc_is_kernel_mode(srr1) );
 
     return_except();
 }
@@ -554,18 +571,18 @@ EXCDEF( dsi_handler )
 {
     word_t dear = ppc_get_spr(SPR_DEAR);
     ppc_esr_t esr;
-    esr.read();
+    ppc_esr_read (&esr);
 
     TRACEPOINT(PPC_EXCEPT_DSI,
 	       "DSI MISS: IP: %08x, ESR: %08x, DEAR: %p", 
 	       srr0, esr.raw, dear);
 
     tcb_t *tcb = get_current_tcb();
-    space_t *space = tcb->get_space();
+    space_t *space = tcb_get_space (tcb);
     ASSERT(space);
 
-    space->handle_pagefault( (addr_t)dear, (addr_t)srr0, 
-	    esr.x.store ?  space_t::write : space_t::read,
+    space_handle_pagefault (space,  (addr_t)dear, (addr_t)srr0, 
+	    esr.x.store ?  SPACE_ACCESS_WRITE : SPACE_ACCESS_READ,
 	    ppc_is_kernel_mode(srr1) );
 
     return_except();
@@ -575,7 +592,7 @@ EXCDEF( dtlb_miss_handler )
 {
     addr_t dear = (addr_t)ppc_get_spr(SPR_DEAR);
     bool kernel_mode = ppc_is_kernel_mode(srr1);
-    ppc_esr_t esr; esr.read();
+    ppc_esr_t esr; ppc_esr_read (&esr);
     bool user = false;
     
     
@@ -584,40 +601,40 @@ EXCDEF( dtlb_miss_handler )
 	       srr0, esr.raw, dear);
 
     tcb_t *tcb = get_current_tcb();
-    space_t *space = tcb->get_space();
+    space_t *space = tcb_get_space (tcb);
     if (!space) 
     {
-        ASSERT(space->is_kernel_paged_area(dear));
+        ASSERT(space_is_kernel_paged_area (dear));
         space = get_kernel_space();
     }
    
-    if (space->is_user_area(dear))
+    if (space_is_user_area (dear))
     {
-	if ( EXPECT_TRUE(space->handle_tlb_miss(dear, dear, true)) )
+	if ( EXPECT_TRUE(space_handle_tlb_miss (space, dear, dear, true, false)) )
 	    return_except();
 	user = true;
     }
     else if (EXPECT_FALSE(kernel_mode))
     {
-	if (space->is_kernel_paged_area(dear))
+	if (space_is_kernel_paged_area (dear))
 	{
-	    if (!get_kernel_space()->handle_tlb_miss(dear, dear, user, true))
+	    if (!space_handle_tlb_miss (get_kernel_space(), dear, dear, user, true))
 		panic("kernel accessed unmapped device @ %08x (IP=%08x)", dear, srr0);
 	    return_except();
 	}
-	else if (space->is_copy_area(dear))
+	else if (space_is_copy_area (dear))
 	{
 	    // Resolve the fault using the partner's address space!
-	    tcb_t *partner = tcb_t::get_tcb( tcb->get_partner() );
+	    tcb_t *partner = tcb_get_tcb (tcb_get_partner (tcb));
 	    if( partner )
 	    {
-		addr_t real_fault = tcb->copy_area_real_address( (addr_t)dear );
+		addr_t real_fault = tcb_copy_area_real_address (tcb,  (addr_t)dear );
 		TRACE_TLB("copy area DTLB miss: %p -> %p\n", dear, real_fault);
-		if (!partner->get_space()->handle_tlb_miss(real_fault, dear, user))
+		if (!space_handle_tlb_miss (tcb_get_space (partner), real_fault, dear, user, false))
 		{
-		    space->handle_pagefault(dear, (addr_t)srr0, space_t::write, 
+		    space_handle_pagefault (space, dear, (addr_t)srr0, SPACE_ACCESS_WRITE, 
 					    ppc_is_kernel_mode(srr1));
-		    partner->get_space()->handle_tlb_miss(real_fault, dear, user);
+		    space_handle_tlb_miss (tcb_get_space (partner), real_fault, dear, user, false);
 		}
 		return_except();
 	    }
@@ -629,13 +646,13 @@ EXCDEF( dtlb_miss_handler )
 	}
     }
 
-    space->handle_pagefault( dear, (addr_t)srr0,
-			     esr.x.store ?  space_t::write : space_t::read,
+    space_handle_pagefault (space,  dear, (addr_t)srr0,
+			     esr.x.store ?  SPACE_ACCESS_WRITE : SPACE_ACCESS_READ,
 			     ppc_is_kernel_mode(srr1) );
 
     // pro-actively try to load the TLB; if miss wasn't fulfilled we
     // are in trouble anyhow...
-    space->handle_tlb_miss(dear, dear, user);
+    space_handle_tlb_miss (space, dear, dear, user, false);
 
     return_except();
 }
@@ -643,26 +660,26 @@ EXCDEF( dtlb_miss_handler )
 EXCDEF( itlb_miss_handler )
 {
     ppc_esr_t esr; 
-    esr.read();
+    ppc_esr_read (&esr);
 
     TRACEPOINT(PPC_ITLB_MISS,
 	       "ITLB MISS: IP: %08x, LR: %08x, ESR: %08x",
 	       srr0, frame->lr, esr.raw);
 
-    space_t *space = get_current_tcb()->get_space();
+    space_t *space = tcb_get_space (get_current_tcb());
 
     ASSERT(space);
     ASSERT(!ppc_is_kernel_mode(srr1));
 
     // first try to refill TLB
-    if ( EXPECT_FALSE(!space->handle_tlb_miss((addr_t)srr0, (addr_t)srr0, true)) )
+    if ( EXPECT_FALSE(!space_handle_tlb_miss (space, (addr_t)srr0, (addr_t)srr0, true, false)) )
     {
-	space->handle_pagefault( (addr_t)srr0, (addr_t)srr0,
-				 space_t::execute, ppc_is_kernel_mode(srr1) );
+	space_handle_pagefault (space,  (addr_t)srr0, (addr_t)srr0,
+				 SPACE_ACCESS_EXECUTE, ppc_is_kernel_mode(srr1) );
 
 	// pro-actively try to load the TLB; if miss wasn't fulfilled we
 	// are in trouble anyhow...
-	space->handle_tlb_miss((addr_t)srr0, (addr_t)srr0, true);
+	space_handle_tlb_miss (space, (addr_t)srr0, (addr_t)srr0, true, false);
     }
 
     return_except();
