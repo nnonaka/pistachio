@@ -3890,3 +3890,70 @@ check: an explicit PHDRS list silently discards whatever ld would have inferred.
     GNU_STACK permission bits changed; boots to userland, sigma0 and ROOTTASK
     created, kdb scheduling queue correct.
   - Every object in both builds now carries `.note.GNU-stack`.
+
+
+## §102 — The RWX segment warning: suppressed, and why that is the right answer
+
+    ld: warning: x86-kernel has a LOAD segment with RWX permissions
+
+Unlike §100 and §101, this one is **suppressed rather than fixed**, so the
+reasoning matters more than the change.
+
+binutils 2.39 added this check for userspace binaries, where the program loader
+applies `p_flags` as mapping permissions and a writable-executable mapping is a
+real exposure. Nothing does that here: kickstart copies PT_LOAD segments to
+their physical addresses, and the kernel installs its own page tables. The ELF
+permission bits are never read by anything in the boot path.
+
+### What satisfying it would actually cost
+
+Three of the five x64 LOAD segments are RWX, each for a different reason:
+
+    00  .text .rodata .kip     .kip is writable data inside the code segment
+    03  .data .kdebug .sets    .kdebug is code inside the data segment
+    04  .init                  ALLOC CODE, not READONLY -- mixed by content
+
+The linker script has no PHDRS block, so ld synthesises segments by merging
+contiguous sections and unioning their flags. Segments break only where a
+`KERNEL_PAGE_SIZE` (2 MB) alignment leaves a gap — which is why `.syscalls` and
+`.cpulocal` each got a clean segment and the rest did not.
+
+Segments 00 and 03 could be separated: add a PHDRS block with explicit
+`FLAGS()`, and give `.kip` and `.kdebug` their own 2 MB slots so no page belongs
+to two differently-permissioned segments. Segment 04 could not — `.init` is a
+single section holding 32-bit startup code, page tables, `.init.data`,
+`.init.memory` and the constructor list together. Separating it means splitting
+the boot trampoline into code and data sections.
+
+And the warning fires if *any* segment is RWX, so the partial fix buys nothing.
+The full one reshapes the physical memory map handed to the boot loader, to
+correct permission bits nothing consults.
+
+### The change
+
+`Mk/Makeconf`, alongside the LDFLAGS definition:
+
+    LD_NO_WARN_RWX := $(shell $(LD) --help 2>/dev/null | \
+                        grep -q -e --no-warn-rwx-segments && echo --no-warn-rwx-segments)
+    LDFLAGS += $(LD_NO_WARN_RWX)
+
+Probed rather than assumed: binutils before 2.39 does not know the option and
+would fail the link. Verified that the probe yields empty for an `ld` that does
+not advertise it.
+
+### Verification
+
+A flag that only suppresses a diagnostic must not alter the output, and does
+not: x86 headers identical, 705 symbols with identical bodies, 4 bytes differing
+— the `.kip` build timestamp. Boots to userland, sigma0 and ROOTTASK created.
+powerpc relinks clean under the same global LDFLAGS.
+
+Both kernels now link with **no diagnostics at all**.
+
+### If this should be revisited
+
+The honest fix is a PHDRS block for `src/glue/v4-x86/x64/linker.lds` plus an
+`.init` split. That is worth doing if the x86 port ever wants its own kernel
+mappings to be derived from segment flags rather than hardcoded in
+`glue/v4-x86/init.c` — at which point the flags stop being decorative and the
+2 MB cost buys something real. Until then it is churn on the boot path.

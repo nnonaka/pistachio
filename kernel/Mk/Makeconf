@@ -204,6 +204,28 @@ ASMFLAGS += $(ASMFLAGS_$(PLATFORM)) $(ASMFLAGS_$(ARCH)) $(ASMFLAGS_$(CPU))
 LIBDIRS += $(LIBGCCDIR)
 LIBS += $(LIBS_$(ARCH))
 LDFLAGS += -static -O2 $(LDFLAGS_$(ARCH)) $(addprefix -L,$(LIBDIRS))
+
+# binutils 2.39 and later warn about LOAD segments with RWX permissions.  That
+# check is aimed at userspace binaries, where the program loader applies p_flags
+# as mapping permissions.  Nothing does that to a kernel image: the boot loader
+# copies PT_LOAD segments to their physical addresses, and the kernel installs
+# its own page tables -- the ELF permission bits are never read.
+#
+# Nor is the layout accidental.  On x64 three segments are RWX, each for a
+# different reason: .kip is writable data sharing the text segment, .kdebug is
+# code sharing the data segment, and .init interleaves 32-bit startup code with
+# page tables and constructors in a single section.  The first two could be
+# separated only by giving each its own KERNEL_PAGE_SIZE (2 MB) slot, and .init
+# could not be separated by placement at all -- it would have to be split into
+# code and data sections, restructuring the boot trampoline.  That is a real
+# change to the physical memory map handed to the boot loader, in exchange for
+# permission bits nothing consults.
+#
+# So the check is suppressed rather than satisfied.  Probed rather than assumed,
+# because binutils before 2.39 does not know the option and would fail the link.
+LD_NO_WARN_RWX := $(shell $(LD) --help 2>/dev/null | \
+		    grep -q -e --no-warn-rwx-segments && echo --no-warn-rwx-segments)
+LDFLAGS += $(LD_NO_WARN_RWX)
 KLDFLAGS += $(LDFLAGS)  $(KLDFLAGS_$(ARCH))
 LDSCRIPT = $(SRCDIR)/src/platform/$(PLATFORM)/linker.lds
 
