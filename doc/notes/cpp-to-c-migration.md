@@ -4471,3 +4471,78 @@ equality in one configuration; that check cannot see a file the configuration
 does not build. Before deleting from a header, the question is not "does the
 gate still build" but "which configs compile the things this header declares,
 and do any of them build at all".
+
+
+## §110 — Restoring mdb.h and mdb_mem.h in C
+
+§109 established that `f3d2a88` deleted `class mdb_t`, `mdb_node_t`,
+`mdb_tableent_t`, `mdb_table_t` from `generic/mdb.h` (841 lines, 0 added) and
+`class mdb_mem_t`, `mdb_mem_misc_t` from `generic/mdb_mem.h` (61 lines, 0
+added). Both headers are now restored, in C.
+
+### First, the measurement §109 owed
+
+Built `x86-x64-p4-newmdb` from a worktree at `f3d2a88^`. **`src/generic/mdb.o`
+was produced** — 17744 bytes — so `mdb.cc` did compile before that commit and
+does not now. The regression is real, not merely a pre-existing breakage I
+walked into.
+
+(The config as a whole failed there too, with 192 errors in `mdb_mem.cc`,
+`kdb/generic/mdb.cc`, `linear_ptab.h`, `space.c` and others — the tree was
+mid-migration. `mdb.cc` itself was clean. An earlier grep of that log for
+`generic/mdb.cc` counted 7 errors and looked like contrary evidence; they were
+all in *kdb*/generic/mdb.cc, matched as a substring.)
+
+### The shape of the C form
+
+`mdb_t` had 16 virtuals and no data members — a C++ object that was nothing but
+a vptr. So:
+
+    struct mdb_t { const mdb_ops_t *ops; };
+
+reproduces it exactly, and `mdb_mem_t`, which derived from `mdb_t` and added no
+data either, needs no wrapper struct at all: it is an `mdb_t` whose `ops` is
+`mdb_mem_ops`. Same for `mdb_io_t` when the io layer follows.
+
+`mdb_node_t` deliberately had *no* virtuals — the C++ comment says a vtable per
+mapping node would cost a word on every mapping — and instead carried
+non-virtual forwarders taking an `mdb_t *`. The C form keeps that property
+exactly: the node has no ops pointer, and `mdb_node_clear (node, mdb)` expands
+to `mdb->ops->clear (mdb, node)`.
+
+Verified rather than assumed: `BITS_WORD` is 64, `sizeof(mdb_tableent_t)` is 8,
+`mdb_node_t` 40, `mdb_table_t` 32 — matching the bitfield layouts.
+
+### Two things the compiler caught
+
+**A false narrowing warning.** `(mdb_table_t *) (self->ptr << 1)` drew
+`-Wint-to-pointer-cast`, because GCC compares against the *declared bitfield
+width* (`BITS_WORD - 1` = 63) rather than the promoted expression type. A
+`_Static_assert (sizeof (e->ptr << 1) == 8)` proves the shift really is
+word-sized, so the arithmetic was never wrong; an explicit `(word_t)` cast
+records that.
+
+**A name collision that matters.** `mdb_map` and `mdb_flush` are *already
+exported* by `generic/mapping.c` — the **old** mapping database, which every
+`CONFIG_NEW_MDB=n` config builds, including the gate. Both headers are in scope
+together, so the obvious names for `mdb_t::map` and `mdb_t::flush` clash with
+different signatures. The new-MDB tree operations are therefore
+`mdb_tree_map`, `mdb_tree_mapctrl`, `mdb_tree_flush`, `mdb_tree_delete_node`.
+Renaming the old ones would have been the tidier-looking choice and the wrong
+one: they are in the configuration that actually works.
+
+### Verification
+
+The gate config builds with 0 errors, 706 symbols with identical bodies, and
+boots to userland. That is the right check for this step: restoring
+declarations must not perturb a configuration that never compiled the code they
+declare.
+
+### What remains
+
+`generic/mdb.cc` (1034), `generic/mdb_mem.cc` (371) and `kdb/generic/mdb.cc`
+still define methods of the now-C types and remain unconverted. They were
+already non-compiling before this step and still are, so nothing regressed and
+nothing is silently wrong — the failure stays loud until they follow. That is
+the distinction from the vrt split §108 refused: there, converting the header
+alone would have produced code that compiled and dispatched through NULL.
