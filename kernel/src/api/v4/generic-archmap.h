@@ -42,6 +42,15 @@
  * handles architecture-specific mappings
  */
 
+/*
+ * The architecture that implements arch mappings supplies these instead --
+ * on x86 that is CONFIG_X86_IO_FLEXPAGES, whose glue/v4-x86/io_space.h
+ * declares them extern.  api/v4/thread.c and space.c include this header
+ * unconditionally, so the no-op forms have to stand aside; as C++ inlines they
+ * could coexist with the extern declarations, in C they cannot.  Notes §117.
+ */
+#if !defined(CONFIG_X86_IO_FLEXPAGES)
+
 INLINE void arch_map_fpage (tcb_t * src, fpage_t snd_fpage, word_t snd_base,
 			    tcb_t * dst, fpage_t rcv_fpage, bool grant) 
 
@@ -54,6 +63,8 @@ INLINE void arch_map_fpage (tcb_t * src, fpage_t snd_fpage, word_t snd_base,
  */
 
 INLINE void arch_unmap_fpage (tcb_t * from, fpage_t fpage, bool flush) { }
+
+#endif /* !CONFIG_X86_IO_FLEXPAGES */
 
 
 /*

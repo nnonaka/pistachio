@@ -34,7 +34,7 @@ SOURCES += $(addprefix src/platform/pc99/, startup.S)
 ifeq ("$(CONFIG_IOAPIC)","y")
 SOURCES += src/platform/generic/intctrl-apic.c
 else
-SOURCES += src/platform/generic/intctrl-pic.cc
+SOURCES += src/platform/generic/intctrl-pic.c
 endif
 
 ifeq ("$(CONFIG_SMP)","y")

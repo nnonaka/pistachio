@@ -57,6 +57,23 @@
  * Written with direct port I/O (RTC index port 0x70, data port 0x71) rather
  * than the rtc_t<0x70> template so it is callable from both C and C++.
  */
+/*
+ * C forms of the former rtc_t<base>::read/write.  The template is gone; these
+ * hardcode the standard index/data pair (0x70/0x71), which is the only base
+ * the tree ever instantiated.  Notes §117.
+ */
+INLINE u8_t rtc_read (u8_t reg)
+{
+    out_u8 (0x70, reg);
+    return in_u8 (0x71);
+}
+
+INLINE void rtc_write (u8_t reg, u8_t val)
+{
+    out_u8 (0x70, reg);
+    out_u8 (0x71, val);
+}
+
 INLINE void wait_for_second_tick(void)
 {
     word_t reg;

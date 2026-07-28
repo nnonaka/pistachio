@@ -38,60 +38,78 @@
 
 #include INC_PLAT(8259.h)
 
-class intctrl_t : public generic_intctrl_t {
- private:
-    i8259_pic_t<0x20> master;
-    i8259_pic_t<0xa0> slave;
-
- public:
-    void init_arch();
-    void init_cpu() { /* dummy */ };
-
-    /* forward mask to the appropriate PIC */
-    void mask(word_t irq) {
-	(irq < 8) ? master.mask(irq) : slave.mask(irq-8);
-    };
-
-    /* forward mask to the appropriate PIC */
-    bool unmask(word_t irq) {
-	(irq < 8) ? master.unmask(irq) : slave.unmask(irq-8);
-	return false;
-    };
-
-    /* check if interrupt is masked on  PIC */
-    bool is_masked(word_t irq) {
-	return (irq >= 8) ? slave.is_masked(irq-8) : master.is_masked(irq);
-    }	
-
-    void enable(word_t irq)	{ unmask(irq); }
-    void disable(word_t irq)	{ mask(irq); }
-    bool is_enabled(word_t irq) { return !is_masked(irq); }
-
-    void ack(word_t irq) {
-	if (irq >= 8)
-	{
-	    slave.ack(irq-8);
-	    master.ack(2);
-	}
-	else
-	    master.ack(irq);
-    };
-	
-    void mask_and_ack(word_t irq) {
-	mask(irq);
-	ack(irq);
-    };
-
-    word_t get_number_irqs() { return 16; }
-
-    bool is_irq_available(word_t irq);
-
-    void set_cpu(word_t irq, word_t cpu) { /* dummy */ };
-
-private:
-    void handle_irq(word_t irq) __asm__("intctrl_t_handle_irq");
-  
-	
+/* was class intctrl_t : public generic_intctrl_t.  generic_intctrl_t was an
+   interface description with no data, so nothing is embedded here. */
+struct intctrl_t {
+    i8259_pic_t	master;
+    i8259_pic_t	slave;
 };
+typedef struct intctrl_t intctrl_t;
+
+extern intctrl_t intctrl;
+
+INLINE intctrl_t * get_interrupt_ctrl (void) { return &intctrl; }
+
+BEGIN_DECLS
+void intctrl_t_init_arch (intctrl_t *self);
+/* handle_irq keeps its asm name: the HW_IRQ stubs branch to it. */
+void intctrl_t_handle_irq (intctrl_t *self, word_t irq) __asm__("intctrl_t_handle_irq");
+END_DECLS
+
+INLINE void intctrl_t_init_cpu (intctrl_t *self)	{ (void) self; /* dummy */ }
+
+/* forward mask to the appropriate PIC */
+INLINE void intctrl_t_mask (intctrl_t *self, word_t irq)
+{
+    (irq < 8) ? i8259_mask (&self->master, irq) : i8259_mask (&self->slave, irq - 8);
+}
+
+/* forward unmask to the appropriate PIC */
+INLINE bool intctrl_t_unmask (intctrl_t *self, word_t irq)
+{
+    (irq < 8) ? i8259_unmask (&self->master, irq) : i8259_unmask (&self->slave, irq - 8);
+    return false;
+}
+
+/* check if interrupt is masked on PIC */
+INLINE bool intctrl_t_is_masked (intctrl_t *self, word_t irq)
+{
+    return (irq >= 8) ? i8259_is_masked (&self->slave, irq - 8)
+		      : i8259_is_masked (&self->master, irq);
+}
+
+INLINE void intctrl_t_enable (intctrl_t *self, word_t irq)  { intctrl_t_unmask (self, irq); }
+INLINE void intctrl_t_disable (intctrl_t *self, word_t irq) { intctrl_t_mask (self, irq); }
+INLINE bool intctrl_t_is_enabled (intctrl_t *self, word_t irq)
+{ return ! intctrl_t_is_masked (self, irq); }
+
+INLINE void intctrl_t_ack (intctrl_t *self, word_t irq)
+{
+    if (irq >= 8)
+    {
+	i8259_ack (&self->slave, irq - 8);
+	i8259_ack (&self->master, 2);
+    }
+    else
+	i8259_ack (&self->master, irq);
+}
+
+INLINE void intctrl_t_mask_and_ack (intctrl_t *self, word_t irq)
+{
+    intctrl_t_mask (self, irq);
+    intctrl_t_ack (self, irq);
+}
+
+INLINE word_t intctrl_t_get_number_irqs (intctrl_t *self)  { (void) self; return 16; }
+
+INLINE void intctrl_t_set_cpu (intctrl_t *self, word_t irq, word_t cpu)
+{ (void) self; (void) irq; (void) cpu; /* dummy */ }
+
+/* was declared here and defined INLINE in glue/v4-x86/intctrl.h */
+INLINE bool intctrl_t_is_irq_available (intctrl_t *self, word_t irq)
+{
+    (void) self;
+    return (irq != 8 && irq != 2);
+}
 
 #endif /* !__PLATFORM__GENERIC__INTCTRL_PIC_H__ */

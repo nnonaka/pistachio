@@ -40,11 +40,7 @@
 #include <platform/generic/intctrl-apic.h>
 #else /* !defined(CONFIG_IOAPIC) */
 #include <platform/generic/intctrl-pic.h>
-
-INLINE bool intctrl_t::is_irq_available(word_t irq)
-{
-    return (irq != 8 && irq != 2);
-}
+/* is_irq_available is INLINE in intctrl-pic.h (notes §117). */
 # endif /* !defined(CONFIG_IOAPIC) */
 
 /**

@@ -46,6 +46,7 @@
 #include INC_API(schedule.h)
 #include INC_API(interrupt.h)	/* thread_control_interrupt */
 #include INC_GLUE(space.h)
+#include INC_GLUE(debug.h)	/* DEBUG_SCREEN, for spin_forever_c */
 
 #if defined(CONFIG_DEBUG)
 /* Defined per architecture; declared extern in glue/v4-x86/thread.c too. */
@@ -208,7 +209,7 @@ void   handle_ipc_timeout_c (word_t state)	{ handle_ipc_timeout (state); }
 
 void   spin_forever_c (int pos)
 {
-#if defined(CONFIG_SPIN_WHEELS)
+#if defined(CONFIG_SPIN_WHEELS) && defined(CONFIG_DEBUG)
     while (1)
 	((u16_t *) (DEBUG_SCREEN))[pos] += 1;
 #else

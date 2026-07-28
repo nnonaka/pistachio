@@ -55,7 +55,9 @@ fpage_t space_mapctrl (space_t *self, fpage_t fpage, mdb_ctrl_t ctrl, word_t att
 void space_handle_pagefault (space_t *self, addr_t addr, addr_t ip, word_t access, bool kernel);
 space_t * space_top_pdir_to_space (word_t ptab);
 
+#if defined(CONFIG_SMP)
 space_t * active_cpu_space_get (cpuid_t cpu);
+#endif
 
 /* sign-extend an address to canonical form (x86_space_t::sign_extend). */
 static inline word_t sign_ext (addr_t addr) { return (word_t) addr | X86_X64_SIGN_EXTENSION; }
@@ -737,11 +739,18 @@ pgent_t * x86_top_pdir_get_kernel_pdp_pgent (x86_top_pdir_t *self)
 x86_kernel_pdp_t * x86_top_pdir_get_kernel_pdp (x86_top_pdir_t *self)
 { return (x86_kernel_pdp_t *) x86_top_pdir_get_kernel_pdp_pgent (self); }
 
+/* active_cpu_space itself is defined inside the CONFIG_SMP block above, and
+   the only caller (tcb_switch_to in thread.c) is guarded the same way; without
+   this guard a uniprocessor build referenced a global that does not exist.
+   In C++ these were members of a class declared only in the SMP branch of
+   space.h, so the guard came for free.  Notes §117. */
+#if defined(CONFIG_SMP)
 void active_cpu_space_set (cpuid_t cpu, space_t *s)
 { if (s) active_cpu_space.active_space[cpu].space = s; }
 
 space_t * active_cpu_space_get (cpuid_t cpu)
 { return active_cpu_space.active_space[cpu].space; }
+#endif
 
 
 bool space_has_cpu_top_pdir (space_t *self, cpuid_t cpu)

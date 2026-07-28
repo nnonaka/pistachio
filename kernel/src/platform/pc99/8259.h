@@ -36,141 +36,145 @@
 
 /**
  * Driver for i8259 PIC
- * @param base	the base address of the registers
  *
- * The template parameter BASE enables compile-time resolution of the
- * PIC's control register addresses.
+ * Was `template<u16_t base> class i8259_pic_t'.  The template parameter gave
+ * compile-time resolution of the control register addresses; in C the base is
+ * an ordinary field, so out_u8 takes it in %dx rather than as an immediate.
+ * There are exactly two instances (master 0x20, slave 0xa0), both touched only
+ * on init/mask/ack paths, so the lost immediate costs nothing measurable.
+ * See notes §117.
  *
  * Note:
- *   Depending on whether I8259_CACHE_PICSTATE is defined or not
- *   objects will cache the mask register or not. Thus it is not wise
- *   to blindly instanciate them all over the place because the cached
- *   state would not be shared. Making the cached state static
- *   wouldn't work either because there are two PICs in a
- *   PC99. Intended use is a single object per PIC.
+ *   Depending on whether I8259_CACHE_PICSTATE is defined or not objects will
+ *   cache the mask register or not.  Thus it is not wise to blindly
+ *   instanciate them all over the place because the cached state would not be
+ *   shared.  Intended use is a single object per PIC.
  *
  * Assumptions:
- * - BASE can be passed as port to in_u8/out_u8
- * - The PIC's A0=0 register is located at BASE
- * - The PIC's A0=1 register is located at BASE+1
+ * - base can be passed as port to in_u8/out_u8
+ * - The PIC's A0=0 register is located at base
+ * - The PIC's A0=1 register is located at base+1
  * - PICs in unbuffered cascade mode
- *
- * Uses:
- * - out_u8, in_u8
  */
 
-// Enable PIC state caching
+/* Enable PIC state caching */
 #define I8259_CACHE_PICSTATE
 
-template<u16_t base> class i8259_pic_t {
- private:
-
+struct i8259_pic_t {
+    u16_t	base;
 #if defined(I8259_CACHE_PICSTATE)
-    u8_t mask_cache;
-#endif    
- public:
-
-    /**
-     *	Unmask interrupt
-     *	@param irq	interrupt line to unmask
-     */
-    void unmask(word_t irq)
-	{
-#if !defined(I8259_CACHE_PICSTATE)
-	    u8_t mask_cache = in_u8(base+1);
+    u8_t	mask_cache;
 #endif
-	    mask_cache &= ~(1 << (irq)); 
-	    out_u8(base+1, mask_cache);   
-	}
-
-    /**
-     *	Mask interrupt
-     *	@param irq	interrupt line to mask
-     */
-    void mask(word_t irq)
-	{
-#if !defined(I8259_CACHE_PICSTATE)
-	    u8_t mask_cache = in_u8(base+1);
-#endif
-	    mask_cache |= (1 << (irq)); 
-	    out_u8(base+1, mask_cache);   
-	}
-
-    /**
-     *	Send specific EOI
-     *	@param irq	interrupt line to ack
-     */
-    void ack(word_t irq)
-	{
-	    out_u8(base, 0x60 + irq);   
-	}
-
-    /**	
-     *  Check if interrupt is masked	
-     *  @param irq      interrupt line
-     *
-     *  @return         true when masked, false otherwise
-     */	
-    bool is_masked(word_t irq)	
-	{	
-#if !defined(I8259_CACHE_PICSTATE)
-	    u8_t mask_cache = in_u8(base+1);
-#endif
-	    return (mask_cache & (1 << irq));	
-	}
-
-    /**
-     *	initialize PIC
-     *	@param vector_base	8086-style vector number base
-     *	@param slave_info	slave mask for master or slave id for slave
-     *
-     *	Initializes the PIC in 8086-mode:
-     *  - not special-fully-nested mode
-     *	- reporting vectors VECTOR_BASE...VECTOR_BASE+7
-     *	- all inputs masked
-     */
-    void init(u8_t vector_base, u8_t slave_info)
-	{
-#if !defined(I8259_CACHE_PICSTATE)
-	    u8_t
-#endif	 
-	    mask_cache = 0xFF;
-	    /*
-	      ICW1:
-	        0x10 | NEED_ICW4 | CASCADE_MODE | EDGE_TRIGGERED
-	    */
-	    out_u8(base, 0x11);
-
-	    /*
-	      ICW2:
-	      - 8086 mode irq vector base
-	        PIN0->IRQ(base), ..., PIN7->IRQ(base+7)
-	    */
-	    out_u8(base+1, vector_base);
-
-	    /*
-	      ICW3:
-	       - master: slave list
-	         Set bits mark input PIN as connected to a slave
-	       - slave: slave id
-	         This PIC is connected to the master's pin SLAVE_ID
-	       Note: The caller knows whether its a master or not -
-	             the handling is the same.
-	    */
-	    out_u8(base+1, slave_info);
-
-	    /*
-	      ICW4:
-	        8086_MODE | NORMAL_EOI | NONBUFFERED_MODE | NOT_SFN_MODE
-	     */
-	    out_u8(base+1, 0x01); /* mode - *NOT* fully nested */
-
-	    /*
-	      OCW1:
-	       - set initial mask
-	    */
-	    out_u8(base+1, mask_cache);
-	}
 };
+typedef struct i8259_pic_t i8259_pic_t;
+
+/*
+ * The cached and uncached forms differ in where mask_cache lives: a field, or
+ * a local read back from the port.  Reading it into a local named the same way
+ * keeps the two bodies identical below, as the C++ did with its #if inside
+ * each method.
+ */
+#if defined(I8259_CACHE_PICSTATE)
+#define I8259_LOAD_MASK(self)	/* cached in self->mask_cache */
+#define I8259_MASK(self)	((self)->mask_cache)
+#else
+#define I8259_LOAD_MASK(self)	u8_t __mask_cache = in_u8 ((self)->base + 1)
+#define I8259_MASK(self)	__mask_cache
+#endif
+
+/**
+ *	Unmask interrupt
+ *	@param irq	interrupt line to unmask
+ */
+INLINE void i8259_unmask (i8259_pic_t *self, word_t irq)
+{
+    I8259_LOAD_MASK (self);
+    I8259_MASK (self) &= (u8_t) ~(1 << irq);
+    out_u8 (self->base + 1, I8259_MASK (self));
+}
+
+/**
+ *	Mask interrupt
+ *	@param irq	interrupt line to mask
+ */
+INLINE void i8259_mask (i8259_pic_t *self, word_t irq)
+{
+    I8259_LOAD_MASK (self);
+    I8259_MASK (self) |= (u8_t) (1 << irq);
+    out_u8 (self->base + 1, I8259_MASK (self));
+}
+
+/**
+ *	Send specific EOI
+ *	@param irq	interrupt line to ack
+ */
+INLINE void i8259_ack (i8259_pic_t *self, word_t irq)
+{
+    out_u8 (self->base, (u8_t) (0x60 + irq));
+}
+
+/**
+ *  Check if interrupt is masked
+ *  @param irq      interrupt line
+ *  @return         true when masked, false otherwise
+ */
+INLINE bool i8259_is_masked (i8259_pic_t *self, word_t irq)
+{
+    I8259_LOAD_MASK (self);
+    return (I8259_MASK (self) & (1 << irq)) != 0;
+}
+
+/**
+ *	initialize PIC
+ *	@param vector_base	8086-style vector number base
+ *	@param slave_info	slave mask for master or slave id for slave
+ *
+ *	Initializes the PIC in 8086-mode:
+ *  - not special-fully-nested mode
+ *	- reporting vectors VECTOR_BASE...VECTOR_BASE+7
+ *	- all inputs masked
+ */
+INLINE void i8259_init (i8259_pic_t *self, u16_t base, u8_t vector_base, u8_t slave_info)
+{
+    self->base = base;
+    I8259_LOAD_MASK (self);
+    I8259_MASK (self) = 0xFF;
+
+    /*
+      ICW1:
+        0x10 | NEED_ICW4 | CASCADE_MODE | EDGE_TRIGGERED
+    */
+    out_u8 (self->base, 0x11);
+
+    /*
+      ICW2:
+      - 8086 mode irq vector base
+        PIN0->IRQ(base), ..., PIN7->IRQ(base+7)
+    */
+    out_u8 (self->base + 1, vector_base);
+
+    /*
+      ICW3:
+       - master: slave list
+         Set bits mark input PIN as connected to a slave
+       - slave: slave id
+         This PIC is connected to the master's pin SLAVE_ID
+       Note: The caller knows whether its a master or not -
+             the handling is the same.
+    */
+    out_u8 (self->base + 1, slave_info);
+
+    /*
+      ICW4:
+        8086_MODE | NORMAL_EOI | NONBUFFERED_MODE | NOT_SFN_MODE
+     */
+    out_u8 (self->base + 1, 0x01); /* mode - *NOT* fully nested */
+
+    /*
+      OCW1:
+       - set initial mask
+    */
+    out_u8 (self->base + 1, I8259_MASK (self));
+}
 
 #endif /* !__PLATFORM__PC99__8259_H__ */

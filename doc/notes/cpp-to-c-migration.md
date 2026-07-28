@@ -4932,3 +4932,73 @@ even though the value looks wrong; transcribed verbatim.
 
 None of it is mdb, vrt or io. Gate unaffected: 0 errors, 709 symbols with
 identical bodies, boots to userland.
+
+
+## §117 — The PIC path converted; the seven configs now reach the linker
+
+    platform/pc99/8259.h              176 -> 180
+    platform/generic/intctrl-pic.h     97 -> 115
+    platform/generic/intctrl-pic.c    116 -> 144
+    glue/v4-x86/intctrl.h              -7   (the stray inline method)
+    glue/v4-x86/timer.c               178 -> 174
+    platform/pc99/rtc.h                +18  (rtc_read/rtc_write)
+
+`x86-x64-p4`, `-p3` and `-p4-nokdb` now **compile with zero errors** and fail
+only at the link. Before this they died in `8259.h`.
+
+### A template with two instantiations
+
+`i8259_pic_t` was `template<u16_t base> class`, and the header says why: "The
+template parameter BASE enables compile-time resolution of the PIC's control
+register addresses." In C the base is a field, so `out_u8` takes it in `%dx`
+instead of as an immediate. There are exactly two instances — master 0x20,
+slave 0xa0 — touched only on init/mask/ack, so the lost immediate is not worth
+the alternative (macro-generated duplicate function sets).
+
+`I8259_CACHE_PICSTATE` made this awkward: with caching the mask lives in a
+field, without it in a local read back from the port, and every method had an
+`#if` picking one. Two macros — `I8259_LOAD_MASK` and `I8259_MASK` — let the
+bodies stay identical, which is what the C++ was doing with its per-method
+`#if`.
+
+`rtc_t<0x70>` had already lost its template in an earlier pass, leaving
+`timer.cc` referring to a type that no longer existed. `rtc_read`/`rtc_write`
+now sit beside `wait_for_second_tick`, which had already been rewritten in
+direct port I/O for exactly this reason.
+
+### Three faults the conversion surfaced, none of them in the PIC
+
+**`active_cpu_space` in a uniprocessor build.** `312b160` deleted
+`class active_cpu_space_t` and its `extern` from `glue/v4-x86/space.h`; the C
+flip re-created the type and the global inside `space.c`'s `#if defined(CONFIG_SMP)`
+block, but left `active_cpu_space_set`/`_get` *outside* it. The gate is SMP, so
+it never noticed. In C++ the accessors were members of a class that only existed
+in the SMP branch, so the guard came for free. Both are now guarded, matching
+their only caller in `thread.c`.
+
+**`arch_map_fpage` defined twice.** `api/v4/generic-archmap.h` defines no-op
+`INLINE` versions and is included unconditionally by `api/v4/thread.c` and
+`space.c`; `glue/v4-x86/io_space.h` declares the real ones `extern` under
+`CONFIG_X86_IO_FLEXPAGES`. As C++ inlines the two coexisted; as C statics they
+collide. The no-ops are now under the opposite guard.
+
+**`DEBUG_SCREEN` without `CONFIG_DEBUG`.** `spin_forever_c` used it under
+`CONFIG_SPIN_WHEELS` alone, but `glue/v4-x86/debug.h` defines it only under
+`CONFIG_DEBUG`. `x86-x64-p4-nokdb` sets the first and not the second. Now
+requires both, falling back to the plain busy loop — which is all a kernel
+without a debug screen can do.
+
+### What the three configs fail on now
+
+    undefined: migrate_interrupt_start  pgent_smp_sync  space_end_update
+               space_flush_tlb  space_flush_tlbent  tcb_migrate_to_processor
+
+Every one is a **uniprocessor stub**. The SMP variants exist; the non-SMP forms
+were inline members of the classes `312b160` deleted from `glue/v4-x86/space.h`,
+and nothing has replaced them, because the gate is SMP. This is the same
+gate-blindness as §115 and §117's `active_cpu_space`, now in its fourth
+appearance — and it is the last thing between these configs and a link.
+
+`x86-x64-k8` additionally needs `x86_amdhwcr_t` in `glue/v4-x86/init.c`.
+
+Gate: 0 errors, 709 symbols with identical bodies, boots to userland.
