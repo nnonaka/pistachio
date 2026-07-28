@@ -40,12 +40,6 @@
 struct spinlock_t
 {
     volatile word_t _lock;
-#if defined(__cplusplus)
-    void init(word_t val = 0);
-    void lock();
-    void unlock();
-    bool is_locked();
-#endif
 };
 typedef struct spinlock_t spinlock_t;
 
@@ -117,12 +111,6 @@ INLINE void spinlock_lock (spinlock_t *self)
 }
 
 
-#if defined(__cplusplus)
-INLINE void spinlock_t::init (word_t val) { spinlock_init (this, val); }
-INLINE void spinlock_t::unlock ()         { spinlock_unlock (this); }
-INLINE bool spinlock_t::is_locked ()      { return spinlock_is_locked (this); }
-INLINE void spinlock_t::lock ()           { spinlock_lock (this); }
-#endif
 
 
 #endif /* !__ARCH__X86__SYNC_H__ */

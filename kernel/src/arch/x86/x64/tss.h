@@ -47,14 +47,6 @@
 
 struct x86_x64_tss_t
 {
-#if defined(__cplusplus)
-public:
-    void setup(u16_t ss0=0);
-    void set_rsp0(u64_t rsp0);
-    u64_t get_rsp0();
-    addr_t get_io_bitmap();
-
-#endif /* __cplusplus */
     u32_t	reserved0;
     u64_t	rsp[3] __attribute__((packed));	      
     u64_t	reserved1;
@@ -67,7 +59,6 @@ public:
 } __attribute__((packed));
 typedef struct x86_x64_tss_t x86_x64_tss_t;
 
-#if !defined(__cplusplus)
 /* C form of x86_x64_tss_t::setup (ss0 is ignored, as in the C++ method). */
 INLINE void x86_tss_setup (x86_x64_tss_t *self, u16_t ss0)
 {
@@ -75,31 +66,7 @@ INLINE void x86_tss_setup (x86_x64_tss_t *self, u16_t ss0)
     self->iopbm_offset = (u16_t)((u64_t)self->io_bitmap - (u64_t)self);
     self->stopper = 0xff;
 }
-#endif
 
-#if defined(__cplusplus)
-INLINE void x86_x64_tss_t::setup(u16_t ss0)
-{
-    iopbm_offset = (u16_t)((u64_t)io_bitmap - (u64_t)this);
-    stopper = 0xff;
-}
-
-INLINE void x86_x64_tss_t::set_rsp0(u64_t rsp0)
-{
-    rsp[0] = rsp0;
-}
-
-INLINE u64_t x86_x64_tss_t::get_rsp0()
-{
-    return rsp[0];
-}
-
-
-INLINE addr_t x86_x64_tss_t::get_io_bitmap()
-{
-    return (addr_t) io_bitmap;
-}
-#endif /* __cplusplus */
 
 
 extern x86_x64_tss_t tss;

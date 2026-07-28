@@ -29,86 +29,6 @@ struct x86_descreg_t
 	} descriptor;
 	u16_t  selector;
     };
-#if defined(__cplusplus)
-
-    enum regtype_e
-    {
-	gdtr = 0x1,
-	ldtr = 0x2,
-	idtr = 0x3,
-	tr   = 0x4
-    };
-    
-    x86_descreg_t(word_t addr, u16_t size)
-	{ 
-	    descriptor.addr = addr; 
-	    descriptor.size = size;  
-	}
-
-    x86_descreg_t(u16_t sel)
-	{ selector = sel; }
-
-    void setdescreg(const regtype_e type)
-	{
-	    switch(type)
-	    {	
-	    case gdtr:
-		__asm__ __volatile__("lgdt %0\n" : /* No Output */ : "m"(descriptor)); 
-		break;
-	    case idtr:
-		__asm__ __volatile__("lidt %0\n" : /* No Output */ : "m"(descriptor));
-		break;
-	    default:
-		break;
-	    }	
-	}
-    
-    void getdescreg(const regtype_e type)
-	{
-	    
-	    switch(type){	
-	    case gdtr:
-		__asm__ __volatile__("sgdt %0\n" : "=m"(descriptor));
-		break;
-	    case idtr:
-		__asm__ __volatile__("sidt %0\n" : "=m"(descriptor));
-		break;
-	    default:
-		break;
-	    }	
-    
-	}
-
-    void setselreg(const regtype_e type)
-	{
-	    switch(type)
-	    {	
-	    case ldtr:
-		__asm__ __volatile__("lldt %0\n" : /* No Output */ : "m"(selector));
-		break;
-	    case tr:
-		__asm__ __volatile__("ltr %0\n"  : /* No Output */ : "m"(selector));
-		break;
-	    default:
-		break;
-	    }	
-	}
-    void getselreg(const regtype_e type)
-	{
-	    
-	    switch(type){	
-	    case ldtr:
-		__asm__ __volatile__("sldt %0\n" : "=m"(selector));
-		break;
-	    case tr:
-		__asm__ __volatile__("str %0\n" : "=m"(selector));
-		break;
-	    default:
-		selector = 0;
-		break;
-	    }	
-	}
-#endif /* __cplusplus */
 };
 typedef struct x86_descreg_t x86_descreg_t;
 
@@ -119,7 +39,6 @@ typedef struct x86_descreg_t x86_descreg_t;
 #define X86_DESCREG_IDTR	0x3
 #define X86_DESCREG_TR		0x4
 
-#if !defined(__cplusplus)
 static inline void x86_descreg_set(x86_descreg_t *self, word_t addr, u16_t size)
 {
     self->descriptor.addr = addr;
@@ -161,6 +80,5 @@ static inline void x86_descreg_setselreg(x86_descreg_t *self, int type)
 	break;
     }
 }
-#endif /* !__cplusplus */
 
 #endif /* !__ARCH__X86__SEGDESC_H__ */

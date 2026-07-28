@@ -191,40 +191,6 @@ struct x86_x64_cpu_features_t{
     u8_t paddr_bits;
     u8_t vaddr_bits;
 
-#if defined(__cplusplus)
-public:
-    /* thin forwarder to x86_x64_cpu_features_init(); the SEC_INIT lives on
-       that free function in cpu.c, so no section attribute here. */
-    x86_x64_cpu_features_t();
-    void dump_features();
-
-    char *get_cpu_vendor() { return cpu_vendor; }
-    char *get_cpu_name() { return cpu_name; }
-
-    u8_t get_family() { return family; }
-    u8_t get_model() { return model; }
-    u8_t get_stepping() { return stepping; }
-    u8_t get_brand_id() { return brand_id; }
-    u8_t get_cflush_size() { return cflush_size; }
-    u8_t get_apic_id() { return apic_id; }
-    
-    u32_t get_std_features() { return std_features; }
-    u32_t get_amd_features() { return amd_features; }
-    u32_t get_apm_features() { return apm_features; }
-
-    x86_x64_tlb_info_t get_l1_tlb() { return l1_tlb; }
-    x86_x64_cache_info_t get_l1_cache() { return l1_cache; }
-    
-    x86_x64_tlb_info_t get_l2_tlb() { return l2_tlb; } 
-    x86_x64_cache_info_t get_l2_cache() { return l2_cache; }
-
-    bool l2_2m_tlb_is_unified() { return l2_2m_tlb_unified; }
-    bool l2_4k_tlb_is_unified() { return l2_4k_tlb_unified; }
-    bool l2_cache_is_unified() { return l2_cache_unified; }
-    
-    u8_t get_paddr_bits() { return paddr_bits; }
-    u8_t get_vaddr_bits() { return vaddr_bits; }
-#endif /* __cplusplus */
 
 };
 typedef struct x86_x64_cpu_features_t x86_x64_cpu_features_t;
@@ -240,10 +206,6 @@ void x86_x64_cpu_features_init (x86_x64_cpu_features_t *self);
 void x86_x64_cpu_features_dump (x86_x64_cpu_features_t *self);
 END_DECLS
 
-#if defined(__cplusplus)
-INLINE x86_x64_cpu_features_t::x86_x64_cpu_features_t () { x86_x64_cpu_features_init (this); }
-INLINE void x86_x64_cpu_features_t::dump_features () { x86_x64_cpu_features_dump (this); }
-#endif
 
 INLINE __attribute__((always_inline)) bool x86_x64_has_cpuid() {
 

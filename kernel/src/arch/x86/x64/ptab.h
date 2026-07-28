@@ -61,120 +61,6 @@
 
 struct x86_pgent_t
 {
-#if defined(__cplusplus)
-public:
-    enum pagesize_e {
-	size_4k = 0,
-	size_2m = 1,
-        size_superpage = 1
-    };
-
-    // predicates
-    bool is_valid() 
-	{ return pg4k.present == 1; }
-
-    bool is_writable() 
-	{ return pg4k.rw == 1; }
-
-    bool is_executable() 
-	{ return pg4k.nx == 0; }
-
-    bool is_accessed()
-	{ return pg4k.accessed == 1; }
-
-    bool is_dirty()
-	{ return pg4k.dirty == 1; }
-
-    bool is_global ()
-	{ return pg4k.global == 1; }
-
-    bool is_cpulocal ()
-	{ return pg4k.cpulocal == 1; }
-
-    bool is_superpage()
-	{ return pg2m.super == 1; }
-
-    bool is_kernel()
-	{ return pg4k.privilege == 0; }
-
-    bool is_write_through()
-	{ return pg4k.write_through == 1; }
-
-    bool is_cache_disabled()
-	{ return pg4k.cache_disabled == 1; }
-    
-    word_t is_pat(pagesize_e size)
-	{ return (size == size_4k ? pg4k.pat : pg2m.pat); }
-    
-    addr_t get_address(const pagesize_e size = size_4k)
-	{ 
-	    if (size == size_4k)
-		return (addr_t) (raw & X86_PAGE_MASK);
-	    else 
-		return (addr_t) (raw & X86_SUPERPAGE_MASK);
-	}
-
-    x86_pgent_t * get_ptab()
-	{ return (x86_pgent_t*)(raw & X86_X64_PTE_MASK); }
-
-    u64_t get_raw()
-	{ return raw; }
-
-    // modification
-    void clear()
-	{ raw = 0; }
-
-    /* used to set an entry pointing to a physical page */
-    void set_entry(addr_t addr, pagesize_e size, u64_t attrib)
-	{ 
-	    if (size == size_4k){
-		raw = ((u64_t)(addr) & X86_PAGE_MASK);
-		raw |= (attrib & X86_PAGE_FLAGS_MASK);
-	    }
-	    else{
-		raw = ((u64_t)(addr) & X86_SUPERPAGE_MASK) | X86_PAGE_SUPER;
-		raw |= (attrib & X86_SUPERPAGE_FLAGS_MASK);
-		
-	    }
-
-	}
-
-    void set_cacheability (bool cacheable, pagesize_e size)
-    {
-	this->pg4k.cache_disabled = !cacheable;
-	if (size == size_4k) 
-	    pg4k.pat = 0;
-	else
-	    pg2m.pat = 0;
-    }
-
-    void set_pat (word_t pat, pagesize_e size)
-	{
-	    pg4k.write_through  = (pat & 1) ? 1 : 0;
-	    pg4k.cache_disabled = (pat & 2) ? 1 : 0;
-	    if (size == size_4k)
-		pg4k.pat = (pat & 4) ? 1 : 0;
-	    else
-		pg2m.pat = (pat & 4) ? 1 : 0;
-	}
-
-    void set_global (bool global)
-    {
-	this->pg4k.global = global;
-    }
-
-    void set_cpulocal (bool local)
-    {
-	this->pg4k.cpulocal = local;
-    }
-
-    /* used to set an entry pointing to the next table in hierarchy */
-    void set_ptab_entry(addr_t addr, u32_t attrib)
-	{
-	    raw = ((u64_t)(addr) & X86_X64_PTE_MASK) | X86_PAGE_VALID | (attrib & X86_X64_PTE_FLAGS_MASK);
-	}
-		
-#endif /* __cplusplus */
     union {
 	struct {
 	    u64_t present		:1;
@@ -221,13 +107,9 @@ public:
 	u64_t raw;
     };
 
-#if defined(__cplusplus)
-    friend class pgent_t;
-#endif /* __cplusplus */
 };
 typedef struct x86_pgent_t x86_pgent_t;
 
-#if !defined(__cplusplus)
 /* C forms of the x86_pgent_t bit-twiddling methods (the pg4k/pg2m/raw union is
    C-visible above); used by the pgent_t C API in glue/v4-x86/space.c.  size is
    X86_PGSIZE_4K/2M. */
@@ -270,7 +152,6 @@ INLINE void x86_pgent_set_global (x86_pgent_t *self, bool global)	{ self->pg4k.g
 INLINE void x86_pgent_set_cpulocal (x86_pgent_t *self, bool local)	{ self->pg4k.cpulocal = local; }
 INLINE void x86_pgent_set_ptab_entry (x86_pgent_t *self, addr_t addr, u32_t attrib)
 { self->raw = ((u64_t) addr & X86_X64_PTE_MASK) | X86_PAGE_VALID | (attrib & X86_X64_PTE_FLAGS_MASK); }
-#endif /* !__cplusplus */
 
 #endif /* !ASSEMBLY */
 

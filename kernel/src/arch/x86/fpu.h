@@ -34,60 +34,7 @@
 
 #include INC_ARCH(cpu.h)
 
-#if defined(__cplusplus)
-class x86_fpu_t
-{
-public:
-    static void enable()
-        { x86_cr0_mask(X86_CR0_TS); }
-    static void disable()
-        { x86_cr0_set(X86_CR0_TS); }
 
-    static void enable_osfxsr()
-        { x86_cr4_set(X86_CR4_OSFXSR); }
-    static void disable_osfxsr()
-        { x86_cr4_mask(X86_CR4_OSFXSR); }
-
-    static void init()
-        { __asm__ __volatile__ ("finit\n"); }
-
-    static void save_state(addr_t fpu_state)
-        {
-        __asm__ __volatile__ (
-#if !defined(CONFIG_X86_FXSR)
-        "fnsave %0"
-#else
-        "fxsave %0"
-#endif
-        :
-        : "m" (*(word_t*)fpu_state));
-    }
-
-    static void load_state(addr_t fpu_state)
-    {
-        __asm__ __volatile__ (
-#if !defined(CONFIG_X86_FXSR)
-        "frstor %0"
-#else
-        "fxrstor %0"
-#endif
-        :
-        : "m" (*(word_t*)fpu_state));
-    }
-
-    static const word_t get_state_size()
-    {
-#if !defined (CONFIG_X86_FXSR)
-        return 128;
-#else
-        return 512;
-#endif
-    }
-
-};
-#endif /* __cplusplus */
-
-#if !defined(__cplusplus)
 /* C mirror of x86_fpu_t's static methods (resources.c), same cr0/asm bodies. */
 INLINE void x86_fpu_enable (void)	{ x86_cr0_mask(X86_CR0_TS); }
 INLINE void x86_fpu_disable (void)	{ x86_cr0_set(X86_CR0_TS); }
@@ -126,6 +73,5 @@ INLINE word_t x86_fpu_get_state_size (void)
     return 512;
 #endif
 }
-#endif /* !__cplusplus */
 
 #endif  /* __ARCH_X86_FPU_H__ */

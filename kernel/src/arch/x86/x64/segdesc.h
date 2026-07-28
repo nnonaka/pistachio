@@ -39,84 +39,6 @@
  */
 struct x86_segdesc_t
 {
-#if defined(__cplusplus)
-public:
-    enum segtype_e
-    {
-	inv  = 0x0,
-	code = 0xb,
-	data = 0x3
-    };
-    
-    enum mode_e
-    {
-	m_long = 1,
-	m_comp = 0
-    };
-
-    enum msr_e
-    {
-	msr_none = 0,
-	msr_fs = 1,
-	msr_gs = 2
-    };
-    
-    void set_seg(u64_t base, segtype_e type, int dpl, mode_e mode=m_long, msr_e msr=msr_none)	
-	{
-	    /* If we set FS or GS, we have to set MSR's for a 64bit base */ 
-	    if (msr != msr_none && (base >> 32))
-	    {
-		u32_t reg = (msr == msr_fs) ? X86_X64_MSR_FS : X86_X64_MSR_GS;
-		x86_wrmsr(reg, base);
-	    }
-    
-	    x.d.base_low   = base & 0xFFFFFF;
-	    x.d.base_high  = (base >> 24) & 0xFF;
-    
-	    x.d.limit_low  = 0xFFFF;
-	    x.d.limit_high = 0xF;
-    
-	    x.d.g = 1;	
-    
-	    x.d.type = type & 0xF;
-	    x.d.l    = mode & 0x1;
-	    x.d.dpl  = dpl & 0x3;
-    
-	    if (mode == m_long && type == code)
-		x.d.d = 0;	/* code with L=1, D=0 => long mode */
-	    else
-		x.d.d = 1;	/* code with L=0, D=1 => compatibility mode
-				   D=1 needed for data in compatibility mode */
-    
-	    /* default fields */
-	    x.d.p = 1;		/* present		*/
-	    x.d.s = 1;		/* non-system segment	*/
-	    x.d.avl = 0;
-	}
-
-    void set_seg(u32_t base, segtype_e type, int dpl, mode_e mode=m_long)
-	{
-	    x.d.base_low   = base & 0xFFFFFF;
-	    x.d.base_high  = (u8_t) ((base >> 24) & 0xFF);
-    
-	    x.d.type = type & 0xF;
-	    x.d.l    = mode & 0x1;
-	    x.d.dpl = dpl & 0x3;
-	    x.d.g = 1;	
-    
-	    if (mode == m_long)
-		x.d.d = 0;	/* L=1, D=0 =>long mode	*/
-	    else
-		x.d.d = 1;	/* L=0, D=1 => 32bit segment */
-    
-	    /* default fields */
-	    x.d.p = 1;		/* present		*/
-	    x.d.s = 1;		/* non-system segment	*/
-	    x.d.avl = 0;
-	}
-
-
-#endif /* __cplusplus */
     union {
 	u64_t raw;
 	struct {
@@ -134,9 +56,6 @@ public:
 	    u64_t base_high	:  8;
 	} d;
     } x;
-#if defined(__cplusplus)
-    friend class kdb_t;
-#endif
 };
 typedef struct x86_segdesc_t x86_segdesc_t;
 
@@ -150,7 +69,6 @@ typedef struct x86_segdesc_t x86_segdesc_t;
 #define X86_SEGDESC_MSR_FS	1
 #define X86_SEGDESC_MSR_GS	2
 
-#if !defined(__cplusplus)
 /* C form of the 5-arg x86_segdesc_t::set_seg (the union is C-visible). */
 INLINE void x86_segdesc_set_seg (x86_segdesc_t *self, u64_t base, int type, int dpl, int mode, int msr)
 {
@@ -181,7 +99,6 @@ INLINE void x86_segdesc_set_seg (x86_segdesc_t *self, u64_t base, int type, int 
     self->x.d.s = 1;
     self->x.d.avl = 0;
 }
-#endif /* !__cplusplus */
 
 /* 
  * Limits are ignored for code/data segments in 64bit mode, 
@@ -195,11 +112,6 @@ INLINE void x86_segdesc_set_seg (x86_segdesc_t *self, u64_t base, int type, int 
  */
 struct x86_tssdesc_t
 {
-#if defined(__cplusplus)
-public:
-    void set_seg(u64_t base, u32_t limit);
-
-#endif /* __cplusplus */
     union {
 	u64_t raw[2];
 	struct {
@@ -221,9 +133,6 @@ public:
 	    
 	} d;
     } x;
-#if defined(__cplusplus)
-    friend class kdb_t;
-#endif
 };
 typedef struct x86_tssdesc_t x86_tssdesc_t;
 
@@ -232,37 +141,6 @@ typedef struct x86_tssdesc_t x86_tssdesc_t;
  * Addresses are ignored unless segment is for selected 
  * by FS or GS
  */   
-#if defined(__cplusplus)
-INLINE void x86_tssdesc_t::set_seg(u64_t base, u32_t limit)
-{
-    x.d.base_low  = base & 0xFFFFFF;
-    x.d.base_med  = (base >> 24) & 0xFF;
-    x.d.base_high = (u32_t) ((base >> 32) & 0xFFFFFFFF);
-    
-    /* A byte-granular limit only has 20 bits, so 1<<20 itself already
-       needs 4K granularity. */
-    if (limit >= (1 << 20))
-    {
-	x.d.limit_low  = (limit >> 12) & 0xFFFF;
-	x.d.limit_high = (u8_t) (limit >> 28) & 0xF;
-	x.d.g = 1;      /* 4K granularity       */
-    }
-    else
-    {
-	x.d.limit_low  =  limit        & 0xFFFF;
-	x.d.limit_high = (limit >> 16) & 0xF;
-	x.d.g = 0;      /* 1B granularity       */
-    }
-    
-    x.d.type = 0x9;	/* 64bit TSS type	*/
-    x.d.s = 0;		/* system segment	*/
-    x.d.dpl =  0;	/* Privilege Level 0	*/
-    x.d.p = 1;		/* present		*/
-    x.d.avl = 0;
-    x.d.mbz = 0;
-    x.d.res0 = 0;
-}
-#else /* !__cplusplus: C form of x86_tssdesc_t::set_seg. */
 INLINE void x86_tssdesc_set_seg (x86_tssdesc_t *self, u64_t base, u32_t limit)
 {
     self->x.d.base_low  = base & 0xFFFFFF;
@@ -290,7 +168,6 @@ INLINE void x86_tssdesc_set_seg (x86_tssdesc_t *self, u64_t base, u32_t limit)
     self->x.d.mbz = 0;
     self->x.d.res0 = 0;
 }
-#endif /* __cplusplus */
 
 
 /**
@@ -300,33 +177,6 @@ INLINE void x86_tssdesc_set_seg (x86_tssdesc_t *self, u64_t base, u32_t limit)
 
 struct x86_idtdesc_t
 {
-#if defined(__cplusplus)
-public:
-    enum segtype_e
-    {
-	interrupt = 0xe,
-	trap      = 0xf
-    };
-
-    void set(u16_t selector, void (*address)(), segtype_e type, int dpl, int ist=0)
-	{
-	    /* offset_high holds bits 16..63 of address, i.e. exactly 48 bits */
-	    u64_t offset_high = (u64_t) address >> 16;
-
-	    x.d.offset_low = ( (u64_t) address & 0xFFFF );
-	    x.d.offset_high = offset_high & 0xFFFFFFFFFFFF;
-	    x.d.selector   = selector;
-	    x.d.ist = ist & 0x7;
-	    x.d.type = type & 0xF;
-	    x.d.dpl = dpl & 0x3;
-    
-	    x.d.p = 1;		/* present */
-	    x.d.s = 0;		/* system segment */
-    
-	    x.d.res0 = x.d.res1 = 0;
-	}
-
-#endif /* __cplusplus */
     union {
 	u64_t raw[2];
 	struct {
@@ -342,9 +192,6 @@ public:
 	    u64_t res1		: 32;
 	} d;
     } x;
-#if defined(__cplusplus)
-    friend class kdb_t;
-#endif
 };
 typedef struct x86_idtdesc_t x86_idtdesc_t;
 
@@ -353,7 +200,6 @@ typedef struct x86_idtdesc_t x86_idtdesc_t;
 #define X86_IDTDESC_INTERRUPT	0xe
 #define X86_IDTDESC_TRAP	0xf
 
-#if !defined(__cplusplus)
 static inline void x86_idtdesc_set(x86_idtdesc_t *self, u16_t selector,
 				   void (*address)(void), int type, int dpl, int ist)
 {
@@ -373,7 +219,6 @@ static inline void x86_idtdesc_set(x86_idtdesc_t *self, u16_t selector,
     self->x.d.res0 = 0;
     self->x.d.res1 = 0;
 }
-#endif /* !__cplusplus */
 
 
 #endif /* !X64_32BIT_CODE */

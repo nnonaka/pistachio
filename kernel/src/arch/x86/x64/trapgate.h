@@ -63,23 +63,6 @@
 
 struct x86_exceptionregs_t
 {
-#if defined(__cplusplus)
-    enum { num_regs = X86_EXCEPTIONREGS_NUM_REGS };
-
-    enum reg_e {
-	r15reg = X86_EXC_R15REG,	r14reg = X86_EXC_R14REG,
-	r13reg = X86_EXC_R13REG,	r12reg = X86_EXC_R12REG,
-	r11reg = X86_EXC_R11REG,	r10reg = X86_EXC_R10REG,
-	r9reg  = X86_EXC_R9REG,		r8reg  = X86_EXC_R8REG,
-	Dreg   = X86_EXC_RDIREG,	Sreg   = X86_EXC_RSIREG,
-	Breg   = X86_EXC_RBPREG,	dreg   = X86_EXC_RDXREG,
-	breg   = X86_EXC_RBXREG,	creg   = X86_EXC_RCXREG,
-	areg   = X86_EXC_RAXREG,	ereg   = X86_EXC_EREG,
-	ipreg  = X86_EXC_IPREG,		csreg  = X86_EXC_CSREG,
-	freg   = X86_EXC_FREG,		spreg  = X86_EXC_SPREG,
-	ssreg  = X86_EXC_SSREG,
-    };
-#endif /* defined(__cplusplus) */
 
     union
     {
@@ -112,9 +95,6 @@ struct x86_exceptionregs_t
 	};
 	word_t			regs[X86_EXCEPTIONREGS_NUM_REGS];
     };
-#if defined(CONFIG_DEBUG) && defined(__cplusplus)
-    enum { num_dbgregs = 18 };
-#endif
 
 };
 
