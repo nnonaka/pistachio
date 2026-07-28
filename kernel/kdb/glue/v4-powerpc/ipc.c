@@ -35,7 +35,7 @@
 
 #define TLB(x) "tlb" #x ".0", "tlb" #x ".1", "tlb" #x ".2", "pid" #x
 
-const char* ctrlxfer_item_idname[ctrlxfer_item_t::id_max] = 
+const char* ctrlxfer_item_idname[id_max] = 
 {
 	"gpregs0",	"gpregs1",	"gpregsx", 	"fpuregs",
 #ifdef CONFIG_X_PPC_SOFTHVM
@@ -88,40 +88,40 @@ static const char* reg_names[][16] = {
     { TLB(60), TLB(61), TLB(62), TLB(63),},
 };
 
-const char* ctrlxfer_item_t::get_idname(const word_t id)
+const char* ctrlxfer_get_idname(const word_t id)
 { 
     return ctrlxfer_item_idname[id]; 
 }
 
-const char* ctrlxfer_item_t::get_hwregname(const word_t id, const word_t reg)
+const char* ctrlxfer_get_hwregname(const word_t id, const word_t reg)
 {
     return reg_names[id][reg];
 }
 
-word_t arch_ktcb_t::get_ctrlxfer_reg(word_t id, word_t reg)
+word_t arch_ktcb_get_ctrlxfer_reg (arch_ktcb_t *self, word_t id, word_t reg)
 {
-    except_regs_t *frame = get_user_except_regs(addr_to_tcb(this));
-    const word_t *regs = ctrlxfer_item_t::hwregs[id];
+    except_regs_t *frame = get_user_except_regs(addr_to_tcb(self));
+    const word_t *regs = ctrlxfer_hwregs[id];
 
     switch(id)
     {
-    case ctrlxfer_item_t::id_gpregsx:
-    case ctrlxfer_item_t::id_gpregs0:
-    case ctrlxfer_item_t::id_gpregs1:
+    case id_gpregsx:
+    case id_gpregs0:
+    case id_gpregs1:
 	return ((word_t*)frame)[regs[reg]];
 #if defined(CONFIG_X_PPC_SOFTHVM)
-    case ctrlxfer_item_t::id_mmu ... ctrlxfer_item_t::id_dcache:
-    case ctrlxfer_item_t::id_shadow_tlb:
-	return ((word_t*)vm)[regs[reg]];
+    case id_mmu ... id_dcache:
+    case id_shadow_tlb:
+	return ((word_t*)self->vm)[regs[reg]];
 
-    case ctrlxfer_item_t::id_tlb0 ... ctrlxfer_item_t::id_tlb15:
+    case id_tlb0 ... id_tlb15:
     {
-	int idx = (id - ctrlxfer_item_t::id_tlb0) * 4 + reg / 4;
+	int idx = (id - id_tlb0) * 4 + reg / 4;
 	switch(reg % 4) {
-	case 0: return vm->tlb[idx].tlb0.raw;
-	case 1: return vm->tlb[idx].tlb1.raw;
-	case 2: return vm->tlb[idx].tlb2.raw;
-	case 3: return vm->tlb[idx].pid;
+	case 0: return self->vm->tlb[idx].tlb0.raw;
+	case 1: return self->vm->tlb[idx].tlb1.raw;
+	case 2: return self->vm->tlb[idx].tlb2.raw;
+	case 3: return self->vm->tlb[idx].pid;
 	}
     }
 #endif
@@ -131,24 +131,27 @@ word_t arch_ktcb_t::get_ctrlxfer_reg(word_t id, word_t reg)
 }
 
     
-void tcb_t::dump_ctrlxfer_state(bool extended)
+void tcb_dump_ctrlxfer_state (tcb_t *self, bool extended)
 {
-    if (!get_utcb() || is_interrupt_thread())
+    if (!self->utcb || tcb_is_interrupt_thread (self))
 	return;
     
     if (extended)
     {
 	word_t max = 4;
 #if defined(CONFIG_X_PPC_SOFTHVM)
-	if (get_space()->hvm_mode)
-	    max += arch_ktcb_t::fault_max;
+	if (tcb_get_space (self)->hvm_mode)
+	    max += ARCH_KTCB_FAULT_MAX;
 #endif
 	
 	printf("\nfault masks:");
 	for (word_t fault=0; fault < max; fault++)
 	{
 	    if (fault % 4 == 0) printf("\n\t");
-	    printf("%s ", fault_ctrlxfer[fault+0].string());
+	    /* was fault_ctrlxfer[...].string(), but bitmask_t has never had a
+	       string() method -- not in this tree nor the original import, so
+	       this line has never compiled.  Print the mask itself. */
+	    printf("%04x ", self->fault_ctrlxfer[fault+0].maskvalue);
 	}
 	printf("\n");
     }
@@ -156,24 +159,24 @@ void tcb_t::dump_ctrlxfer_state(bool extended)
 
     word_t max = 2;
 #if defined(CONFIG_X_PPC_SOFTHVM)
-    if (get_space()->hvm_mode)
-	max = ctrlxfer_item_t::id_tlb0;
+    if (tcb_get_space (self)->hvm_mode)
+	max = id_tlb0;
 #endif
 
     for (word_t id = 0; id < max; id++)
     {
-	printf("\n %10s:", ctrlxfer_item_t::get_idname(id));
-	for (word_t reg = 0; reg < ctrlxfer_item_t::num_hwregs[id]; reg++)
+	printf("\n %10s:", ctrlxfer_get_idname(id));
+	for (word_t reg = 0; reg < ctrlxfer_num_hwregs[id]; reg++)
 	{
 	    if (reg && reg % 4 == 0) printf("\n\t    ");
-	    printf("%10s: %wx  ", ctrlxfer_item_t::get_hwregname(id, reg), 
-		   arch.get_ctrlxfer_reg(id, reg));
+	    printf("%10s: %wx  ", ctrlxfer_get_hwregname(id, reg), 
+		   arch_ktcb_get_ctrlxfer_reg (&self->arch, id, reg));
 	}
     }
     printf("\n");
 
 #if defined(CONFIG_X_PPC_SOFTHVM)
-    if (extended && get_space()->hvm_mode)
+    if (extended && tcb_get_space (self)->hvm_mode)
     {
 	for (word_t i = 0; i < 64; i++)
 	{
@@ -181,20 +184,20 @@ void tcb_t::dump_ctrlxfer_state(bool extended)
 	    ppc_tlb1_t tlb1;
 	    ppc_tlb2_t tlb2;
 
-	    tlb0.raw = arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_tlb0 + i / 4, i % 4 * 4 + 0);
-	    tlb1.raw = arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_tlb0 + i / 4, i % 4 * 4 + 1);
-	    tlb2.raw = arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_tlb0 + i / 4, i % 4 * 4 + 2);
-	    word_t pid = arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_tlb0 + i / 4, i % 4 * 4 + 3);
+	    tlb0.raw = arch_ktcb_get_ctrlxfer_reg (&self->arch, id_tlb0 + i / 4, i % 4 * 4 + 0);
+	    tlb1.raw = arch_ktcb_get_ctrlxfer_reg (&self->arch, id_tlb0 + i / 4, i % 4 * 4 + 1);
+	    tlb2.raw = arch_ktcb_get_ctrlxfer_reg (&self->arch, id_tlb0 + i / 4, i % 4 * 4 + 2);
+	    word_t pid = arch_ktcb_get_ctrlxfer_reg (&self->arch, id_tlb0 + i / 4, i % 4 * 4 + 3);
 
 	    if (i % 4 == 0)
-		printf("%7d:", ctrlxfer_item_t::id_tlb0 + i / 4);
+		printf("%7d:", id_tlb0 + i / 4);
 	    else
 		printf("\t");
 
 	    printf("%02d: %c [%02x:%d] %08x sz:%08x [%04x:%08x] U:%c%c%c S:%c%c%c  C:[%c%c%c%c%c]\n",
-		   i, tlb0.is_valid() ? 'V' : 'I', pid,
-		   tlb0.trans_space, tlb0.get_vaddr(), tlb0.get_size(),
-		   (word_t)(tlb1.get_paddr() >> 32), (word_t)(tlb1.get_paddr()),
+		   i, ppc_tlb0_is_valid (&tlb0) ? 'V' : 'I', pid,
+		   tlb0.trans_space, ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0),
+		   (word_t)(ppc_tlb1_get_paddr (&tlb1) >> 32), (word_t)(ppc_tlb1_get_paddr (&tlb1)),
 		   tlb2.user_execute ? 'X' : '-', tlb2.user_write ? 'W' : '-', 
 		   tlb2.user_read ? 'R' : '-', tlb2.super_execute ? 'X' : '-', 
 		   tlb2.super_write ? 'W' : '-', tlb2.super_read ? 'R' : '-',

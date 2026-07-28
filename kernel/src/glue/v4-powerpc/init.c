@@ -67,11 +67,28 @@
 #include INC_GLUE(space.h)
 #include INC_GLUE(bat.h)
 #include INC_GLUE(memcfg.h)
+/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
+   included from C; declare the scheduler entry points this file calls.
+   tcb_set_saved_* and get_idle_tcb come later in api/v4/tcb.h than the glue
+   header that reaches this file. */
+BEGIN_DECLS
+struct scheduler_t * get_current_scheduler (void);
+struct tcb_t * get_idle_tcb (void);
+void scheduler_schedule (struct scheduler_t *self, struct tcb_t *tcb, word_t dest);
+void scheduler_handle_timer_interrupt (struct scheduler_t *self);
+void scheduler_init (struct scheduler_t *self, bool bootcpu);
+void scheduler_start (struct scheduler_t *self, cpuid_t cpu);
+void tcb_set_saved_partner (struct tcb_t *self, threadid_t tid);
+void tcb_set_saved_state (struct tcb_t *self, word_t state);
+END_DECLS
+
+
 
 EXTERN_KMEM_GROUP(kmem_misc);
 
 word_t decrementer_interval = 0;
-word_t cpu_count = 1;
+/* cpu_count is defined in glue/v4-powerpc/cpu.c, as on x86. */
+extern word_t cpu_count;
 
 #if defined(CONFIG_SMP)
 static SECTION(".init.data") DEFINE_SPINLOCK(cpu_start_lock);

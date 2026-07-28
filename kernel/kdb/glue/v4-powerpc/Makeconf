@@ -34,5 +34,5 @@ SOURCES += $(addprefix kdb/glue/v4-powerpc/, code.c addr.c prepost.c thread.c)
 SOURCES += kdb/generic/linear_ptab_dump.c
 
 ifeq ("$(CONFIG_X_CTRLXFER_MSG)","y")
-SOURCES+=	kdb/glue/v4-powerpc/ipc.cc
+SOURCES+=	kdb/glue/v4-powerpc/ipc.c
 endif

@@ -35,7 +35,7 @@
 #include INC_API(cpu.h)
 
 cpu_t cpu_descriptors[CONFIG_SMP_MAX_CPUS];
-word_t cpu_count;
+word_t cpu_count = 1;
 
 #if defined(CONFIG_SMP)
 

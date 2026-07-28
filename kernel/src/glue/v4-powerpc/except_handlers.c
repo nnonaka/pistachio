@@ -49,6 +49,22 @@
 #include INC_GLUE(memcfg.h)
 
 
+
+/* api/v4/sched-rr/schedule_functions.h still contains C++ and cannot be
+   included from C; declare the scheduler entry points this file calls.
+   tcb_set_saved_* and get_idle_tcb come later in api/v4/tcb.h than the glue
+   header that reaches this file. */
+BEGIN_DECLS
+struct scheduler_t * get_current_scheduler (void);
+struct tcb_t * get_idle_tcb (void);
+void scheduler_schedule (struct scheduler_t *self, struct tcb_t *tcb, word_t dest);
+void scheduler_handle_timer_interrupt (struct scheduler_t *self);
+void scheduler_init (struct scheduler_t *self, bool bootcpu);
+void scheduler_start (struct scheduler_t *self, cpuid_t cpu);
+void tcb_set_saved_partner (struct tcb_t *self, threadid_t tid);
+void tcb_set_saved_state (struct tcb_t *self, word_t state);
+END_DECLS
+
 DECLARE_TRACEPOINT(PPC_EXCEPT_PROG);
 DECLARE_TRACEPOINT(PPC_EXCEPT_DECR);
 DECLARE_TRACEPOINT(PPC_EXCEPT_EXTINT);

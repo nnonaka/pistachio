@@ -39,14 +39,14 @@ asm(".macro lfpdux  frt, idx, reg; .long ((31<<26)|((\\frt)<<21)|(\\idx<<16)|(\\
 asm(".macro stfpdx  frt, idx, reg; .long ((31<<26)|((\\frt)<<21)|(\\idx<<16)|(\\reg<<11)|(974<<1)); .endm");
 asm(".macro stfpdux frt, idx, reg; .long ((31<<26)|((\\frt)<<21)|(\\idx<<16)|(\\reg<<11)|(1006<<1)); .endm");
 
-extern inline word_t ppc_get_dcrx(word_t dcrn)
+INLINE word_t ppc_get_dcrx(word_t dcrn)
 {
     word_t value;
     asm volatile ("mfdcrx %0,%1": "=r" (value) : "r" (dcrn) : "memory");
     return value;
 }
 
-extern inline void ppc_set_dcrx(word_t dcrn, word_t value)
+INLINE void ppc_set_dcrx(word_t dcrn, word_t value)
 {
     asm volatile("mtdcrx %0,%1": :"r" (dcrn), "r" (value) : "memory");
 }

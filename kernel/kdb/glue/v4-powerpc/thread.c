@@ -37,9 +37,5 @@ INLINE u16_t dbg_get_current_cpu()
     return ppc_get_spr(SPR_PIR);
 }
 
-/* declared extern in src/kdb/tracepoints.h, so not static here */
-word_t dbg_get_current_tcb (void)
-{
-    return (word_t) get_current_tcb();
-}
+/* dbg_get_current_tcb is defined in kdb/api/v4/tcb.c. */
 
