@@ -112,7 +112,7 @@ INLINE word_t tcb_get_utcb_location (tcb_t *self)
 INLINE void tcb_set_cpu (tcb_t *self, cpuid_t cpu)
 {
     self->cpu = cpu;
-    tcb_get_utcb(self)->processor_no = cpu;
+    self->utcb->processor_no = cpu;
 #if defined(CONFIG_PPC_MMU_TLB)
     if (tcb_get_space(self) != get_kernel_space())
 	self->pdir_cache = (word_t) space_get_asid_cpu (self->space, cpu);
@@ -125,7 +125,7 @@ INLINE void tcb_set_cpu (tcb_t *self, cpuid_t cpu)
  */
 INLINE word_t tcb_get_mr (tcb_t *self, word_t index)
 {
-    return tcb_get_utcb(self)->mr[index];
+    return self->utcb->mr[index];
 }
 
 /**
@@ -135,7 +135,7 @@ INLINE word_t tcb_get_mr (tcb_t *self, word_t index)
  */
 INLINE void tcb_set_mr (tcb_t *self, word_t index, word_t value)
 {
-    tcb_get_utcb(self)->mr[index] = value;
+    self->utcb->mr[index] = value;
 }
 
 /**
@@ -159,8 +159,8 @@ INLINE void tcb_copy_mrs (tcb_t *self, tcb_t * dest, word_t start, word_t count)
 	      "+r" (count)
 	    : /* inputs */
 	      /* Handle pre-increment with -1 offset. */
-	      "r" (&self->tcb_get_utcb(self)->mr[start-1]), 
-	      "r" (&dest->tcb_get_utcb(self)->mr[start-1])
+	      "r" (&self->utcb->mr[start-1]), 
+	      "r" (&dest->utcb->mr[start-1])
 	    : /* clobbers */
 	      "ctr"
 	    );
@@ -172,7 +172,7 @@ INLINE void tcb_copy_mrs (tcb_t *self, tcb_t * dest, word_t start, word_t count)
  */
 INLINE word_t tcb_get_br (tcb_t *self, word_t index)
 {
-    return tcb_get_utcb(self)->br[32-index];
+    return self->utcb->br[32-index];
 }
 
 /**
@@ -182,7 +182,7 @@ INLINE word_t tcb_get_br (tcb_t *self, word_t index)
  */
 INLINE void tcb_set_br (tcb_t *self, word_t index, word_t value)
 {
-    tcb_get_utcb(self)->br[32-index] = value;
+    self->utcb->br[32-index] = value;
 }
 
 #ifdef CONFIG_DYNAMIC_TCBS
@@ -488,18 +488,18 @@ INLINE msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to_tid, threadid_t from_tid
 
 INLINE void tcb_adjust_for_copy_area (tcb_t *self, tcb_t * dst, addr_t * s, addr_t * d)
 {
-    resources.setup_copy_area( self, s, dst, d );
-    resources.enable_copy_area( self );
+    tcb_resources_setup_copy_area (&self->resources, self, s, dst, d);
+    tcb_resources_enable_copy_area (&self->resources, self);
 }
 
 INLINE void tcb_release_copy_area (tcb_t *self)
 {
-    resources.disable_copy_area( self );
+    tcb_resources_disable_copy_area (&self->resources, self);
 }
 
 INLINE addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)
 {
-    return resources.copy_area_real_address( self, addr );
+    return tcb_resources_copy_area_real_address (&self->resources, self, addr);
 }
 
 /**********************************************************************

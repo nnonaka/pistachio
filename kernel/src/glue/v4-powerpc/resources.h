@@ -52,58 +52,47 @@ enum resource_type_e {
 #define FPU_EXTRA_REGS	0
 #endif
 
-class thread_resources_t : public generic_thread_resources_t
-{
-public:
-    void dump(tcb_t * tcb);
-    void save( tcb_t *tcb );
-    void load( tcb_t *tcb );
-    void purge( tcb_t *tcb );
-    void init( tcb_t *tcb );
-    void free( tcb_t *tcb );
-
-public:
-    void fpu_unavail_exception( tcb_t *tcb );
-
-    addr_t copy_area_real_address( tcb_t *src, addr_t addr );
-    void setup_copy_area( tcb_t *src, addr_t *saddr, tcb_t *dst, addr_t *daddr);
-    void enable_copy_area( tcb_t *src );
-    void disable_copy_area( tcb_t *src );
-    void flush_copy_area( tcb_t *src );
-
-    void set_kernel_ipc( tcb_t *tcb );
-    void clr_kernel_ipc( tcb_t *tcb );
-    void set_kernel_thread( tcb_t *tcb );
-
-#ifdef CONFIG_X_PPC_SOFTHVM
-    void enable_hvm_mode( tcb_t *tcb);
-    void disable_hvm_mode( tcb_t *tcb);
-#endif
-
-    void spill_fpu( tcb_t *tcb );
-    void restore_fpu( tcb_t *tcb );
-    void reown_fpu( tcb_t *tcb, tcb_t *new_owner );
-
-private:
-    void deactivate_fpu( tcb_t *tcb );
-    void activate_fpu( tcb_t *tcb );
-
-    addr_t change_segment( addr_t addr, word_t segment )
-    {
-	word_t tmp = (word_t)addr;
-	tmp &= 0x0fffffff;
-	tmp |= segment << 28;
-	return (addr_t)tmp;
-    }
-
-private:
-#ifdef CONFIG_X_PPC_SOFTHVM
-    static tcb_t *last_hvm_tcb; 
-#endif
+/* Was a class deriving from generic_thread_resources_t, which is empty and no
+   longer defined anywhere, so as on x86 the base is simply not embedded. */
+struct thread_resources_t {
     word_t copy_area_offset;
     word_t fpscr;
-    u64_t fpu_state[FPU_REGS + FPU_EXTRA_REGS] __attribute__((aligned(16)));
+    u64_t  fpu_state[FPU_REGS + FPU_EXTRA_REGS] __attribute__((aligned(16)));
 };
+typedef struct thread_resources_t thread_resources_t;
+
+#ifdef CONFIG_X_PPC_SOFTHVM
+/* was the static member thread_resources_t::last_hvm_tcb */
+extern tcb_t *thread_resources_last_hvm_tcb;
+#endif
+
+BEGIN_DECLS
+/* Defined in resources.c. */
+void   tcb_resources_dump (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_save (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_load (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_purge (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_init (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_free (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_spill_fpu (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_restore_fpu (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_reown_fpu (thread_resources_t *self, tcb_t *tcb, tcb_t *new_owner);
+void   tcb_resources_deactivate_fpu (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_activate_fpu (thread_resources_t *self, tcb_t *tcb);
+#ifdef CONFIG_X_PPC_SOFTHVM
+void   tcb_resources_enable_hvm_mode (thread_resources_t *self, tcb_t *tcb);
+void   tcb_resources_disable_hvm_mode (thread_resources_t *self, tcb_t *tcb);
+#endif
+END_DECLS
+
+/* was the private change_segment helper */
+INLINE addr_t tcb_resources_change_segment (addr_t addr, word_t segment)
+{
+    word_t tmp = (word_t)addr;
+    tmp &= 0x0fffffff;
+    tmp |= segment << 28;
+    return (addr_t)tmp;
+}
 
 
 INLINE tcb_t *get_fp_lazy_tcb()
