@@ -5002,3 +5002,72 @@ appearance — and it is the last thing between these configs and a link.
 `x86-x64-k8` additionally needs `x86_amdhwcr_t` in `glue/v4-x86/init.c`.
 
 Gate: 0 errors, 709 symbols with identical bodies, boots to userland.
+
+
+## §118 — The uniprocessor stubs: six x64 configs now build
+
+**1 of 11 x64 configs built at §95. Six do now.**
+
+    x86-x64-p4-smp   332328   (the gate)
+    x86-x64-p4       247936   uniprocessor, PIC
+    x86-x64-p3       149088
+    x86-x64-p4-nokdb 149472
+    x86-x64-p4-fp    248312
+    x86-x64-p4-statictcbs  2349704
+
+`x86-x64-p4` boots to userland — a uniprocessor PIC kernel reaching the test
+suite, which is what makes §117's PIC conversion and these stubs real rather
+than merely link-clean.
+
+### What was missing, and which half was a regression
+
+    space_flush_tlb / space_flush_tlbent / space_end_update   restored
+    pgent_sync                                                restored
+    tcb_migrate_to_processor                                  never existed
+    migrate_interrupt_start_c                                 guard added
+
+The first four were **inline members in the `#ifndef CONFIG_SMP` branch** of
+`glue/v4-x86/space.h` and the non-SMP branch of `arch/x86/pgent.h`, deleted by
+`312b160`. The C flip reproduced only the SMP branch of each, because the gate
+config is SMP. Recovered from `312b160^`.
+
+`tcb_migrate_to_processor` is different and worth separating: in `thread.cc` it
+sat inside `#if defined(CONFIG_SMP)` while `commit_schedule_parameters` called
+it unconditionally, so **a uniprocessor build never linked in C++ either**. That
+is an upstream gap, not something this migration broke. The stub returns false —
+a `processor_control` request cannot be honoured without SMP — matching what the
+powerpc port already needed; powerpc's local copy is removed in favour of the
+shared one.
+
+`migrate_interrupt_start_c` in `glue/v4-x86/thread.c` was an unconditional
+wrapper around an SMP-only function whose only real caller, `xcpu_release_thread`,
+was properly guarded. Only the wrapper needed the guard.
+
+### A mistake made and caught here
+
+The first attempt spliced the non-SMP block in at "the first `#endif` after
+`space_end_update`". That `#endif` closes an inner conditional 55 lines before
+the `CONFIG_SMP` block actually ends, so the edit **silently deleted
+`space_move_tcb`, `space_alloc_cpu_top_pdir` and `space_free_cpu_top_pdir`**.
+The gate build caught it immediately — three undefined references — and
+`git checkout` plus a splice anchored on `#endif /* defined(CONFIG_SMP) */`
+fixed it.
+
+Worth recording because it is the same class of error as the bugs being fixed:
+a structural edit aimed at a pattern rather than at the construct it belongs to.
+The lesson is the cheap one — when splicing into `#if` blocks, anchor on the
+*commented* closing marker, and re-run the gate before believing the result.
+
+### Verification
+
+Gate: 0 errors, 709 symbols with identical bodies, boots. powerpc: 66 objects,
+0 errors, links (its duplicate `tcb_migrate_to_processor` removed). The five
+newly-building configs produce images; `x86-x64-p4` boots to the test suite.
+
+### Still failing
+
+    x86-x64-p4-fullkdb   7 errors
+    x86-x64-k8           2  -- x86_amdhwcr_t in glue/v4-x86/init.c
+    x86-x64-p4-cm       99  -- compatibility mode, glue/v4-x86/utcb.h (§95)
+    x86-x64-p4-iofp          the mapnode_t identity conflict (§113)
+    x86-x64-p4-newmdb        same

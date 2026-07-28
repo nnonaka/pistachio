@@ -87,8 +87,13 @@ END_DECLS
    pgent_sync mirrors pgent_t::sync -> smp_sync. */
 INLINE void pgent_sync (pgent_t *self, struct space_t *s, word_t pgsize)
 {
+#if defined(CONFIG_SMP)
     if (pgsize >= X86_PGSIZE_SYNC)
 	pgent_smp_sync (self, s, pgsize);
+#else
+    /* pgent_t::sync was `{ }' in the non-SMP branch (notes §118). */
+    (void) self; (void) s; (void) pgsize;
+#endif
 }
 
 INLINE void pgent_set_global (pgent_t *self, struct space_t *s, word_t pgsize, bool global)

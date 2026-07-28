@@ -721,6 +721,42 @@ void space_free_cpu_top_pdir (space_t *self, cpuid_t cpu)
     kmem_free (&kmem, kmem_space, (addr_t) pdir, sizeof (x86_top_pdir_t));
 }
 
+
+#else /* !defined(CONFIG_SMP) */
+
+/*
+ * Uniprocessor forms.  These were inline members of space_t in
+ * glue/v4-x86/space.h's `#ifndef CONFIG_SMP' branch, removed by 312b160; the C
+ * flip only reproduced the SMP branch, because the gate config is SMP.
+ * Recovered from 312b160^ -- notes §118.
+ */
+
+/**
+ * Flush complete TLB
+ */
+void space_flush_tlb (space_t *self, space_t *curspace)
+{
+    if (self == curspace || IS_SPACE_SMALL (self))
+	x86_mmu_flush_tlb (IS_SPACE_GLOBAL (self));
+}
+
+/**
+ * Flush a specific TLB entry
+ * @param addr	virtual address of TLB entry
+ */
+void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr,
+			 word_t log2size)
+{
+    (void) log2size;
+    if (self == curspace || IS_SPACE_SMALL (self))
+	x86_mmu_flush_tlbent ((word_t) addr);
+}
+
+/**
+ * Update functions are empty in the non-SMP case
+ */
+void space_end_update (void) { }
+
 #endif /* defined(CONFIG_SMP) */
 
 

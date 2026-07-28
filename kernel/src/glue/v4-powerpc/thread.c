@@ -854,8 +854,4 @@ void initial_switch_to_c (tcb_t *tcb)
     while (1);
 }
 
-#if !defined(CONFIG_SMP)
-/* api/v4/thread.c defines this only under CONFIG_SMP. */
-bool tcb_migrate_to_processor (tcb_t *self, cpuid_t processor)
-{ (void) self; (void) processor; return false; }
-#endif
+/* tcb_migrate_to_processor's uniprocessor form is in api/v4/thread.c. */

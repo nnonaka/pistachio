@@ -346,6 +346,11 @@ void   initial_switch_to_c (tcb_t *tcb)
 }
 
 
+/* migrate_interrupt_start is declared and defined only under CONFIG_SMP
+   (api/v4/interrupt.h/.c), and its only caller -- xcpu_release_thread -- is
+   inside the same guard, so the wrapper must be too.  Notes §118. */
+#if defined(CONFIG_SMP)
 void   migrate_interrupt_start_c (tcb_t *tcb)	{ migrate_interrupt_start (tcb); }
+#endif
 
 

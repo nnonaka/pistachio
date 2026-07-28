@@ -1146,6 +1146,19 @@ word_t tcb_ctrlxfer (tcb_t *self, tcb_t *dst, msg_item_t item, word_t src_idx,
 #endif /* defined(CONFIG_X_CTRLXFER_MSG) */
 
 
+#if !defined(CONFIG_SMP)
+/*
+ * tcb_t::migrate_to_processor sat inside CONFIG_SMP in thread.cc while
+ * sched_commit_schedule_parameters calls it unconditionally, so a uniprocessor
+ * build has never linked -- in C++ either.  A processor_control request cannot
+ * be honoured without SMP, so it fails, matching what the powerpc port already
+ * did for the same reason.  Notes §118.
+ */
+bool tcb_migrate_to_processor (tcb_t *self, cpuid_t processor)
+{ (void) self; (void) processor; return false; }
+#endif
+
+
 /**********************************************************************
  *             global V4 thread management
  **********************************************************************/
