@@ -46,6 +46,7 @@
 #include INC_API(schedule.h)
 #include INC_API(interrupt.h)	/* thread_control_interrupt */
 #include INC_GLUE(space.h)
+#include INC_GLUE(map.h)	/* arch_map_fpage / arch_unmap_fpage */
 #include INC_GLUE(debug.h)	/* DEBUG_SCREEN, for spin_forever_c */
 
 #if defined(CONFIG_DEBUG)
@@ -71,54 +72,79 @@ word_t fpage_base_mask (fpage_t fp, word_t size)
 
 fpage_t fpage_complete_mem (void)				{ fpage_t r; r.raw = 0; r.mem.x.size = 1; return r; }
 
-addr_t fpage_get_address (fpage_t *self)			{ return (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size)); }
+/* fpage_t::complete_arch has no generic caller; glue/v4-x86/io_space.h keeps
+   its own INLINE under CONFIG_X86_IO_FLEXPAGES (notes §116). */
 
-addr_t fpage_get_base (fpage_t *self)				{ return (addr_t) ((word_t) self->mem.x.base << 10); }
+/* Every accessor below that the C++ wrote as `is_mempage() ? mem : arch.'
+   keeps both branches.  With no architecture-specific flexpages
+   arch_fpage_is_valid_page() is a constant false and the arch half folds
+   away; under CONFIG_X86_IO_FLEXPAGES it is what routes an IO fpage.  The
+   first conversion of this file kept only the mem half, which is why the
+   iofp configuration handed an IO fpage to space_map_fpage -- see §131. */
+
+addr_t fpage_get_address (fpage_t *self)
+{ return fpage_is_mempage (self)
+	? (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size))
+	: arch_fpage_get_address (&self->arch); }
+
+addr_t fpage_get_base (fpage_t *self)
+{ return fpage_is_mempage (self)
+	? (addr_t) ((word_t) self->mem.x.base << 10)
+	: arch_fpage_get_base (&self->arch); }
 
 word_t fpage_get_rwx (fpage_t *self)				{ return self->raw & 7; }
 
-word_t fpage_get_size (fpage_t *self)				{ return 1UL << self->mem.x.size; }
+word_t fpage_get_size (fpage_t *self)
+{ return fpage_is_mempage (self) ? 1UL << self->mem.x.size
+				 : arch_fpage_get_size (&self->arch); }
 
 word_t fpage_get_size_log2 (fpage_t *self)
-{ return (self->mem.x.size == 1 && self->mem.x.base == 0) ? sizeof (word_t) * 8 : self->mem.x.size; }
+{ return fpage_is_mempage (self)
+	? ((self->mem.x.size == 1 && self->mem.x.base == 0) ? sizeof (word_t) * 8 : self->mem.x.size)
+	: arch_fpage_get_size_log2 (&self->arch); }
 
 bool fpage_is_addr_in_fpage (fpage_t *self, addr_t addr);
 
-bool   fpage_is_archpage (fpage_t *self)			{ (void) self; return false; }
+bool   fpage_is_archpage (fpage_t *self)			{ return arch_fpage_is_valid_page (&self->arch); }
 
-/* CONFIG_X86_IO_FLEXPAGES is off, so the arch-page half of the C++
-   is_complete_fpage() is always false and only the mem-page test remains. */
 bool   fpage_is_complete_fpage (fpage_t *self)
-{ return fpage_is_mempage (self) && self->mem.x.size == 1 && self->mem.x.base == 0; }
+{ return (fpage_is_mempage (self) && self->mem.x.size == 1 && self->mem.x.base == 0) ||
+	 (arch_fpage_is_valid_page (&self->arch) && arch_fpage_is_complete_page (&self->arch)); }
 
 bool   fpage_is_execute (fpage_t *self)				{ return self->mem.x.execute; }
 
-bool   fpage_is_mempage (fpage_t *self)				{ (void) self; return true; }
+bool   fpage_is_mempage (fpage_t *self)				{ return ! arch_fpage_is_valid_page (&self->arch); }
 
 bool   fpage_is_nil_fpage (fpage_t *self)			{ return self->raw == 0; }
 
 bool   fpage_is_overlapping (fpage_t *self, fpage_t other)
 {
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t sa = (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size));
-    addr_t oa = (addr_t) (((word_t) other.mem.x.base << 10) & (~0UL << other.mem.x.size));
-    if (oa < sa) return addr_offset (oa, 1UL << other.mem.x.size) > sa;
-    return addr_offset (sa, 1UL << self->mem.x.size) > oa;
+    addr_t sa, oa;
+
+    if (fpage_is_complete_fpage (self)) return true;
+    sa = fpage_get_address (self);
+    oa = fpage_get_address (&other);
+    if (oa < sa) return addr_offset (oa, fpage_get_size (&other)) > sa;
+    return addr_offset (sa, fpage_get_size (self)) > oa;
 }
 
 bool   fpage_is_range_in_fpage (fpage_t *self, addr_t start, addr_t end)
 {
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t a = fpage_get_address (self);
+    addr_t a;
+
+    if (fpage_is_complete_fpage (self)) return true;
+    a = fpage_get_address (self);
     return (a <= start && addr_offset (a, fpage_get_size (self)) >= end);
 }
 
 bool   fpage_is_range_overlapping (fpage_t *self, addr_t start, addr_t end)
 {
-    if (self->mem.x.size == 1 && self->mem.x.base == 0) return true;
-    addr_t a = (addr_t) (((word_t) self->mem.x.base << 10) & (~0UL << self->mem.x.size));
+    addr_t a;
+
+    if (fpage_is_complete_fpage (self)) return true;
+    a = fpage_get_address (self);
     if (start < a) return end > a;
-    return addr_offset (a, 1UL << self->mem.x.size) > start;
+    return addr_offset (a, fpage_get_size (self)) > start;
 }
 
 bool   fpage_is_read (fpage_t *self)				{ return self->mem.x.read; }
@@ -131,13 +157,18 @@ fpage_t fpage_nilpage (void)					{ fpage_t r; r.raw = 0; return r; }
 
 void   fpage_set (fpage_t *self, word_t base, word_t size, bool read, bool write, bool exec)
 {
-    word_t abase = (base & (~0UL << size)) >> 10;
-    self->raw = 0;
-    self->mem.x.base = abase & (~0UL >> (BITS_WORD - L4_FPAGE_BASE_BITS));
-    self->mem.x.size = size & 0x3f;
-    self->mem.x.read = read;
-    self->mem.x.write = write;
-    self->mem.x.execute = exec;
+    if (EXPECT_FALSE (arch_fpage_is_valid_page (&self->arch) == false))
+    {
+	word_t abase = (base & (~0UL << size)) >> 10;
+	self->raw = 0;
+	self->mem.x.base = abase & (~0UL >> (BITS_WORD - L4_FPAGE_BASE_BITS));
+	self->mem.x.size = size & 0x3f;
+	self->mem.x.read = read;
+	self->mem.x.write = write;
+	self->mem.x.execute = exec;
+    }
+    else
+	arch_fpage_set (&self->arch, base, size, read, write, exec);
 }
 
 void   fpage_set_rwx (fpage_t *self, word_t rwx)		{ self->raw = (self->raw & ~(word_t) 7) | (rwx & 7); }
@@ -198,10 +229,17 @@ bool   time_lt (time_t a, time_t b)
 }
 
 /* ---- from glue/v4-x86/thread.c ---- */
+/* api/v4/ipcx.c cannot see the arch map interface -- it is INC_GLUE(map.h),
+   an empty INLINE pair on an architecture without arch-specific flexpages and
+   an extern pair in glue/v4-x86/io_space.c under CONFIG_X86_IO_FLEXPAGES -- so
+   these forward to whichever is in scope here.  They were written as no-ops,
+   which is right only for the first case and left the IO flexpage mapping
+   silently dropped in the second; see §131. */
 void   arch_map_fpage_c (tcb_t *src, fpage_t snd_fpage, word_t snd_base, tcb_t *dst, fpage_t rcv_fpage, bool grant)
-{ (void) src; (void) snd_fpage; (void) snd_base; (void) dst; (void) rcv_fpage; (void) grant; }
+{ arch_map_fpage (src, snd_fpage, snd_base, dst, rcv_fpage, grant); }
 
-void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush)	{ (void) from; (void) fpage; (void) flush; }
+void   arch_unmap_fpage_c (tcb_t *from, fpage_t fpage, bool flush)
+{ arch_unmap_fpage (from, fpage, flush); }
 
 tcb_t * get_idle_tcb_c (void)			{ extern tcb_t *__idle_tcb; return __idle_tcb; }
 

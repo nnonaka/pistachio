@@ -101,7 +101,29 @@ void space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area)
     self->base.data.kip_area = kip_area;
     self->base.data.utcb_area = utcb_area;
 
-    /* map kip read-only to user (COMPATIBILITY_MODE / IO_FLEXPAGES off) */
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+    /* A compatibility-mode space gets the 32-bit KIP instead.  This was the
+       `if ... else' arm around the mapping below; the `else' is the return. */
+    if (space_is_compatibility_mode (self))
+    {
+	space_add_mapping (self, fpage_get_base (&kip_area),
+			   virt_to_phys ((addr_t) x32_get_kip ()),
+			   X86_PGSIZE_4K, false, false, false, true);
+	return;
+    }
+#endif
+
+#if defined(CONFIG_X86_IO_FLEXPAGES)
+    /* The first space initialised is sigma0's, and it starts out owning every
+       IO port; every other space gets its ports from sigma0 by IO flexpage. */
+    if (! sigma0_space)
+    {
+	space_set_io_space (self, vrt_io_alloc ());
+	vrt_io_populate_sigma0 (space_get_io_space (self));
+    }
+#endif
+
+    /* map kip read-only to user */
     space_add_mapping (self, fpage_get_base (&kip_area), virt_to_phys ((addr_t) get_kip ()), X86_PGSIZE_4K, false, false, false, true);
 }
 

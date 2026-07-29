@@ -5913,3 +5913,101 @@ memtest with no assertion and no kdb entry.
 Thirteen of nineteen x32 configurations reach userland now, fourteen with
 `TBUF_PERFMON` off. Gate: `x86-x64-p4-smp`, 706 symbols with 706 identical
 bodies — the restored block is inside a gate x64 does not set.
+
+
+## §131 — IO flexpages: three stubs that were only right with the option off
+
+    KD# map_fpage(): invalid fpage size
+
+The kdb entry is in `linear_ptab_walker.c`'s `space_map_fpage`, which is the
+memory mapping path. An IO flexpage had reached it. `api/v4/ipcx.c` decides:
+
+    if (fpage_is_mempage (&snd_fpage))       space_map_fpage (...)
+    else if (fpage_is_archpage (&snd_fpage)) arch_map_fpage_c (...)
+
+and `api/v4/accessors.c` had
+
+    bool fpage_is_archpage (fpage_t *self)  { return false; }
+    bool fpage_is_mempage (fpage_t *self)   { return true; }
+
+with a comment saying CONFIG_X86_IO_FLEXPAGES is off. It is off in ten of the
+eleven x64 configurations and in eighteen of the nineteen x32 ones, and
+`accessors.c` is compiled in all of them.
+
+In C++ these were `arch.is_valid_page() == false` and `== true`, and
+`arch_fpage_t::is_valid_page()` is a constant `false` on an architecture with
+no architecture-specific flexpages and a real test of the two-bit tag under
+`CONFIG_X86_IO_FLEXPAGES`. The same flattening had happened to `get_base`,
+`get_address`, `get_size`, `get_size_log2`, `set` and `is_complete_fpage`,
+each of which the C++ wrote as `is_mempage() ? mem... : arch...`, and to
+`is_overlapping`, `is_range_in_fpage` and `is_range_overlapping`, which called
+`is_complete_fpage()` and had been rewritten to test `mem.x` directly.
+`generic-archfpage.h` now carries the C forms of the arch_fpage_t methods --
+all of them the constant that makes the arch half fold away -- and the
+accessors have both branches back.
+
+That got the classification right and the fpage still did not map, because
+
+    void arch_map_fpage_c (...) { }
+    void arch_unmap_fpage_c (...) { }
+
+in the same file are also unconditional. They are the C wrappers `ipcx.c`
+needs because it cannot see `INC_GLUE(map.h)`, and the no-op body is the
+generic `arch_map_fpage` inline, not the one in `glue/v4-x86/io_space.c`. They
+forward now.
+
+And with the call arriving, `arch_map_fpage` still did nothing, because it
+opens `if (space_get_io_space (sspace))` and sigma0's space had none.
+`space_t::init` had
+
+    #if defined(CONFIG_X86_IO_FLEXPAGES)
+        if (!sigma0_space)
+        {
+            set_io_space(new vrt_io_t);
+            get_io_space()->populate_sigma0();
+        }
+    #endif
+
+-- the first space initialised is sigma0's, and it starts out owning every IO
+port. §119 flattened that function too, and with it the
+`CONFIG_X86_COMPATIBILITY_MODE` arm above it, which maps the 32-bit KIP into a
+compatibility-mode space instead of the 64-bit one. Both are back; the C++
+`else` is a `return`.
+
+Three separate stubs, each individually correct for the configuration the
+author was compiling and wrong for the one that was not. `x86-x32-p4-iofp`
+reaches the l4test menu: five IO pagefaults, five mappings, done.
+
+`x86-x64-p4-iofp` still does not boot. It takes a kernel-mode #GP in early
+init, before any of this code runs, and it did so before this change as well.
+Not the same fault, and not yet looked at.
+
+### The gate was comparing the tree with itself
+
+§128's and §130's "706 symbols with 706 identical bodies" were not
+measurements. The reference build was a `git worktree` at the previous commit,
+built with a `Makeconf.local` copied from `build/x86-x64-p4-smp/kernel` -- and
+`SRCDIR` in that file is absolute, pointing at the main tree. Both sides of
+every comparison compiled the same, current, sources. `tools/configsweep`
+copies the same donor, so any reference build made this way is worthless
+unless `SRCDIR` is rewritten to the worktree.
+
+Rerun properly, against `48c8cda` (this session's starting point, so it covers
+all three commits): `x86-x64-p4-smp`, 706 symbols and 705 identical bodies,
+the one being `fpage_is_range_in_fpage`, which now routes through
+`fpage_is_complete_fpage` and `fpage_get_address` instead of testing `mem.x`
+inline -- same instructions, different registers. `x86-x64-p4-cm`, 553 and 549:
+that one, `space_init` with the compatibility-mode arm restored, the ctor table
+that shifted because `space_init` moved, and `kernel_version_string`, which is
+the build date.
+
+The x64 boot tally is unchanged by all three commits -- the same six of eleven
+pass at `48c8cda` as pass now. Which also means §126's "nine of eleven" does
+not reproduce: `p4-cm` and `p4-statictcbs` do not get past kickstart with the
+current userland, and `p4-newmdb` and `p4-iofp` reach the kernel and stop. All
+four fail identically at the older commit, so this is a difference in how they
+were measured then, not a regression.
+
+Fourteen of nineteen x32 configurations reach userland. `p4-fullkdb` is §124's
+`rdpmc`; the two `CONFIG_X_EVT_LOGGING` builds are §129's remaining fault; the
+two HVM configurations do not compile.

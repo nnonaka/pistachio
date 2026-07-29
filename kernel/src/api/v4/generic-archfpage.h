@@ -53,5 +53,37 @@ struct arch_fpage_t
 };
 typedef struct arch_fpage_t arch_fpage_t;
 
+/*
+ * C forms of the arch_fpage_t methods.  This is the architecture that has no
+ * architecture-specific flexpages, so every one of them is the answer that
+ * makes fpage_t's arch branch dead code: is_valid_page() is false, and
+ * api/v4/accessors.c's fpage accessors therefore take the mem-page branch.
+ * glue/v4-x86/io_fpage.h supplies the other set under CONFIG_X86_IO_FLEXPAGES.
+ */
+INLINE void   arch_fpage_set (arch_fpage_t *self, word_t base, word_t log2size,
+			      bool read, bool write, bool exec)
+{ (void) self; (void) base; (void) log2size; (void) read; (void) write; (void) exec; }
+INLINE bool   arch_fpage_is_valid_page (arch_fpage_t *self)	{ (void) self; return false; }
+INLINE bool   arch_fpage_is_complete_page (arch_fpage_t *self)	{ (void) self; return false; }
+INLINE addr_t arch_fpage_get_base (arch_fpage_t *self)		{ (void) self; return NULL; }
+INLINE addr_t arch_fpage_get_address (arch_fpage_t *self)	{ (void) self; return NULL; }
+INLINE word_t arch_fpage_get_size (arch_fpage_t *self)		{ (void) self; return 0; }
+INLINE word_t arch_fpage_get_size_log2 (arch_fpage_t *self)	{ (void) self; return 0; }
+INLINE bool   arch_fpage_is_read (arch_fpage_t *self)		{ (void) self; return false; }
+INLINE bool   arch_fpage_is_write (arch_fpage_t *self)		{ (void) self; return false; }
+INLINE bool   arch_fpage_is_execute (arch_fpage_t *self)	{ (void) self; return false; }
+INLINE bool   arch_fpage_is_rwx (arch_fpage_t *self)		{ (void) self; return true; }
+INLINE void   arch_fpage_set_rwx_all (arch_fpage_t *self)	{ (void) self; }
+INLINE void   arch_fpage_set_rwx (arch_fpage_t *self, word_t rwx) { (void) self; (void) rwx; }
+/* NB: get_rwx() returned `false', i.e. 0, from a word_t function.  Kept. */
+INLINE word_t arch_fpage_get_rwx (arch_fpage_t *self)		{ (void) self; return false; }
+
+INLINE arch_fpage_t arch_fpage_complete (void)
+{
+    arch_fpage_t ret;
+    ret.raw = 0;
+    return ret;
+}
+
 
 #endif /* !__GENERIC__FPAGE_H__ */
