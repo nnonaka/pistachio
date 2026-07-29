@@ -31,22 +31,33 @@
  ********************************************************************/
 		. = ALIGN(16);
 
+		/*
+		 * KEEP, because nothing in the kernel references a
+		 * constructor section by symbol: they are walked at run time
+		 * between the __ctors_* markers below.  ld's own default
+		 * script wraps these in KEEP for exactly that reason; this
+		 * script does not use the default.  CONFIG_X_EVT_LOGGING is
+		 * the only configuration that links --gc-sections
+		 * (Mk/Makeconf.x86), and without KEEP every initializer in
+		 * the kernel was collected there -- see notes §132.
+		 */
+
 		/* cpu-local static initializers */
                 __ctors_CPU__ = .;
-                *(SORT(.ctors.3*))
+                KEEP(*(SORT(.ctors.3*)))
                 QUAD(0)
 
 		/* node-local static initializers */
                 __ctors_NODE__ = .;
-                *(SORT(.ctors.2*))
+                KEEP(*(SORT(.ctors.2*)))
                 QUAD(0)
 
 		/* global static initializers */
                 __ctors_GLOBAL__ = .;
-		*(SORT(.ctors.1*))
-		*(SORT(.ctors.*))
-                *(.ctors)
+		KEEP(*(SORT(.ctors.1*)))
+		KEEP(*(SORT(.ctors.*)))
+                KEEP(*(.ctors))
 		/* GCC >4.7 */
-		*(SORT(.init_array.*))
-		*(.init_array)
+		KEEP(*(SORT(.init_array.*)))
+		KEEP(*(.init_array))
                 QUAD(0)

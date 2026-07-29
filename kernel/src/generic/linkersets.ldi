@@ -31,13 +31,18 @@
  ********************************************************************/
 	.sets . : AT(ADDR(.sets) - KERNEL_OFFSET)
 	{
+		/* KEEP: linker sets are walked between the markers below,
+		   never referenced by symbol, so --gc-sections collects them
+		   (CONFIG_X_EVT_LOGGING is the one configuration that links
+		   with it).  Without this the kdb command table is empty and
+		   the debugger ignores every key -- see notes §132. */
 		. = ALIGN(16);
 		_start_setlist = .;
-		*(.setlist)
+		KEEP(*(.setlist))
 		_end_setlist = .;
 		. = ALIGN(16);
 		_start_sets = .;
-		*(SORT(set_*))
+		KEEP(*(SORT(set_*)))
 		_end_sets = .;
 	}
 

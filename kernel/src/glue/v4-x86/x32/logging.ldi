@@ -16,7 +16,7 @@
 	_log_evtenable_start = .;
 	.log.evtenable . : AT (ADDR(.log.evtenable) - KERNEL_OFFSET)
 	{
-		*(SORT(.log.evtenable.*)) 
+		KEEP(*(SORT(.log.evtenable.*))) 
 	} = 0xAFFEAFFE
 	_log_evtenable_end = .;
 
@@ -24,7 +24,7 @@
 	_log_evtlist_start = .;
 	.log.evtlist . : AT (ADDR(.log.evtlist) - KERNEL_OFFSET)
 	{
-		*(SORT(.log.evtlist.*)) 
+		KEEP(*(SORT(.log.evtlist.*))) 
 	} = 0xAFFEAFFE
 	_log_evtlist_end = .;
 	

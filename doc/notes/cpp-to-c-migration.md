@@ -6011,3 +6011,58 @@ were measured then, not a regression.
 Fourteen of nineteen x32 configurations reach userland. `p4-fullkdb` is §124's
 `rdpmc`; the two `CONFIG_X_EVT_LOGGING` builds are §129's remaining fault; the
 two HVM configurations do not compile.
+
+
+## §132 — Logging: `--gc-sections`, and four linker scripts with no `KEEP`
+
+The `CONFIG_X_EVT_LOGGING` builds failed an assertion in `switch_to`:
+
+    tcb_get_cpu (self) == tcb_get_cpu (dest)
+
+`self` was the idle TCB and `dest` was `NULL`; the return address was in
+`cpu_kdb_do_enter_kdebug`, which ends
+
+    tcb_switch_to (get_current_tcb(), cpu_kdb.kdb_tcb);
+
+and `cpu_kdb.kdb_tcb` was null because `cpu_kdb_ctor` had never run. Nothing
+was wrong with the constructor. `__ctors_GLOBAL__` in that kernel contained
+its terminating `QUAD(0)` and nothing else, where the same build without the
+option has an entry.
+
+`Mk/Makeconf.x86`:
+
+    ifeq "$(CONFIG_X_EVT_LOGGING)" "y"
+    KLDFLAGS_x86_x32 += --gc-sections
+    endif
+
+That is the only configuration in the tree that links `--gc-sections`, and
+`generic/ctors.ldi` has no `KEEP`. Constructor sections are never referenced by
+symbol -- they are walked at run time between the `__ctors_CPU__`,
+`__ctors_NODE__` and `__ctors_GLOBAL__` markers -- so from the collector's
+point of view they are unreachable, and every static initializer in the kernel
+was discarded. ld's own default linker script wraps `.ctors`, `.init_array` and
+friends in `KEEP` for exactly this reason; this script does not use the
+default.
+
+With the constructors back the kernel reached `System started (press 'g' to
+continue)` and then ignored the key, because the same thing had happened to the
+kdb command table: `_start_sets == _end_sets`. Linker sets are walked between
+markers too. `generic/linkersets.ldi`, `generic/mdb.ldi` and the logging
+feature's own `x32/logging.ldi` -- whose `.log.evtenable.*` and
+`.log.evtlist.*` sections hold the patch points `toggle_events` walks, and
+whose `0xDEADBEEF` terminators had gone the same way -- all now `KEEP`.
+
+`KEEP` is a no-op without `--gc-sections`, so nothing else in the tree moves:
+`x86-x64-p4-smp` is 706 symbols with 706 identical bodies against the previous
+commit, and the x64 boot tally is unchanged.
+
+This is not a migration fault. The flag, the linker scripts and the marker-walk
+idiom are all upstream, and no x32 configuration had ever been linked. It is
+the first fault in this whole pass that the C rewrite could not have caused --
+and the reason it took three probes to find is that a collected section leaves
+nothing behind to read: the constructor is simply not there, and the code that
+walks the list finds an empty list and carries on.
+
+Sixteen of nineteen x32 configurations reach userland. The remaining three are
+`p4-fullkdb`, which is §124's `rdpmc` under QEMU and not a kernel fault, and
+the two HVM configurations, which do not compile.
