@@ -5835,3 +5835,44 @@ reporting a full pass over a set it had silently narrowed.
 Gate: x64 unaffected. `x86-x64-p4-smp`, 706 symbols with 706 identical bodies;
 `x86-x64-p4-cm`, 553 with 552, the odd one being `kernel_version_string`, which
 is the build date disassembled as instructions.
+
+
+## §129 — Four of the seven were the harness, or QEMU
+
+§128 left seven x32 configurations that build and do not boot. Four of them
+are not faults.
+
+`hsched-pic`, `hsched-smp`, `logging` and `logging-smp` set
+`CONFIG_KDB_ON_STARTUP`: the kernel stops in the debugger before the root task
+runs and waits for a key. `tools/boottest` gave QEMU `-serial file:`, which is
+write only, so the run sat at
+
+    --- "KD# System started (press 'g' to continue)" ---
+
+until the timeout and was reported as a kernel that produced no output. The
+harness drives the line now — `-serial stdio` with a `printf 'g'` every second
+— when the build's `config.h` has the option. `hsched-pic` and `hsched-smp`
+reach the l4test menu with no other change.
+
+`p4-fullkdb` is §124 again: turning `CONFIG_TBUF_PERFMON` off boots it, exactly
+as on x64. QEMU's TCG does not implement `rdpmc`.
+
+That leaves three real faults, all in features whose configurations have never
+been built in this tree at all:
+
+  - `CONFIG_X_EVT_LOGGING` — `switch_to` fails
+    `tcb_get_cpu (self) == tcb_get_cpu (dest)` on the first thread switch after
+    the root servers are created, and then repeats it forever. Turning only
+    that option off in the same build boots to userland, so it is the logging
+    code and not the rest of the configuration. `LOG_PMC` is never invoked
+    anywhere in the tree, so the injected trace points are not it; what the
+    option does change is `sched_ktcb_t` (it gains a `logid`, moving every
+    `tcb_t` field after `sched_state`), the KIP, and `init_logging_cpu`'s
+    remapping of a megabyte of kernel log area.
+  - `CONFIG_X86_IO_FLEXPAGES` — `map_fpage(): invalid fpage size` during init.
+  - `CONFIG_X86_SMALL_SPACES` — sigma0 touches `df001000`, inside the kernel
+    area, before it starts. The small space area is carved out of the user
+    area, so a boundary is the obvious suspect.
+
+Ten of nineteen configurations reached userland when §128 was written; twelve
+do now, and thirteen with `TBUF_PERFMON` off.

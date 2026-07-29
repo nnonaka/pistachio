@@ -88,11 +88,27 @@ cp "$APP" "$WORK/roottask"
 SERIAL="$WORK/serial.log"
 
 echo "boottest: booting (timeout ${TIMEOUT}s) ..."
-timeout "$TIMEOUT" qemu-system-x86_64 \
-    -kernel "$WORK/kickstart" \
-    -initrd "$WORK/kernel,$WORK/sigma0,$WORK/roottask" \
-    -serial "file:$SERIAL" \
-    -display none -no-reboot -m 256 >/dev/null 2>&1
+
+# CONFIG_KDB_ON_STARTUP stops in the debugger before the root task runs and
+# waits for a key, so a write-only serial line never gets past it -- the run
+# looks like a hang at "System started (press 'g' to continue)".  Drive the
+# line instead and keep pressing 'g'; the interval matters because kdb is
+# polling, and l4test ignores the key once it has the console.
+if grep -q '^#define  *CONFIG_KDB_ON_STARTUP' "$CONFIG_H"; then
+    echo "boottest: CONFIG_KDB_ON_STARTUP -- driving the console with 'g'"
+    ( while :; do printf 'g'; sleep 1; done ) | \
+    timeout "$TIMEOUT" qemu-system-x86_64 \
+	-kernel "$WORK/kickstart" \
+	-initrd "$WORK/kernel,$WORK/sigma0,$WORK/roottask" \
+	-serial stdio \
+	-display none -no-reboot -m 256 > "$SERIAL" 2>/dev/null
+else
+    timeout "$TIMEOUT" qemu-system-x86_64 \
+	-kernel "$WORK/kickstart" \
+	-initrd "$WORK/kernel,$WORK/sigma0,$WORK/roottask" \
+	-serial "file:$SERIAL" \
+	-display none -no-reboot -m 256 >/dev/null 2>&1
+fi
 
 # --- 4. evaluate -----------------------------------------------------------
 echo "----- serial log -----"
