@@ -34,6 +34,44 @@ INLINE bool space_is_compatibility_mode (space_t *self)
 }
 #endif
 
+#if defined(CONFIG_X86_SMALL_SPACES)
+/* Small spaces are x32 only; x32/space.h holds the bodies. */
+INLINE smallspace_id_t * space_smallid (space_t *self)
+{
+    return x86_space_smallid (&self->base);
+}
+
+INLINE bool space_is_small (space_t *self)
+{
+    return x86_space_is_small (&self->base);
+}
+
+INLINE bool space_make_small (space_t *self, smallspace_id_t id)
+{
+    return x86_space_make_small (&self->base, id);
+}
+
+INLINE void space_make_large (space_t *self)
+{
+    x86_space_make_large (&self->base);
+}
+
+INLINE bool space_sync_smallspace (space_t *self, addr_t addr)
+{
+    return x86_space_sync_smallspace (&self->base, addr);
+}
+
+INLINE void space_enqueue_polluted (space_t *self)
+{
+    x86_space_enqueue_polluted (&self->base);
+}
+
+INLINE void space_dequeue_polluted (space_t *self)
+{
+    x86_space_dequeue_polluted (&self->base);
+}
+#endif
+
 
 /* C entry points for the copy-area / per-CPU pdir methods that resources.c
    needs (space_t stays a C++ class; these wrap the methods, defined in

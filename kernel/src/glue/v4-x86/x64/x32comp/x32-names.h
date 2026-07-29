@@ -90,6 +90,7 @@
 #define memdesc_low        x32_memdesc_low
 #define memdesc_high       x32_memdesc_high
 #define memdesc_size       x32_memdesc_size
+#define memdesc_set        x32_memdesc_set
 
 /* api/v4/procdesc.h */
 #define procdesc_t x32_procdesc_t
@@ -216,6 +217,7 @@
 #undef memdesc_low
 #undef memdesc_high
 #undef memdesc_size
+#undef memdesc_set
 
 /* api/v4/procdesc.h */
 #undef procdesc_t

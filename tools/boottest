@@ -71,7 +71,7 @@ fi
 
 # --- 2. build the kernel ---------------------------------------------------
 echo "boottest: building kernel ..."
-make -C "$BUILDDIR" >/"$BUILDDIR/.boottest-build.log" 2>&1 \
+make -C "$BUILDDIR" >"$BUILDDIR/.boottest-build.log" 2>&1 \
     || { echo "boottest: BUILD FAILED (see $BUILDDIR/.boottest-build.log)"; exit 2; }
 
 for f in "$KERNEL" "$KICKSTART" "$SIGMA0" "$APP"; do

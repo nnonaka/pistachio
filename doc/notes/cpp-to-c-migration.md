@@ -5735,3 +5735,103 @@ The five configurations outside the core set — HVM (`vmx.cc`, `hvm-vmx.cc`,
 configurations were never in this pass's scope.
 
 Gate: x64 unaffected, 709 symbols with 709 identical bodies.
+
+
+## §128 — x32 boots, and the alignment attribute the conversion dropped
+
+`gcc-multilib` is installed on this machine now, so `__udivdi3` resolves and
+`x86-x32-p4` links. It is the first x32 kernel image this migration has
+produced. It also asserts on the first kernel-memory allocation of the boot:
+
+    Assertion (size % KMEM_CHUNKSIZE) == 0 failed in generic/kmemory.c:170
+
+The caller is `space_init_kernel_space`, and the size is `sizeof (space_t)`:
+3096 on x32, not a multiple of 1024.
+
+### One attribute, and what it was holding up
+
+The C++ `x86_space_t` ended
+
+    } __attribute__((aligned(X86_PAGE_SIZE)));
+
+and §127's conversion of `x32/space.h` did not carry it over. x64's equivalent
+`aligned(X86_PTAB_BYTES)` survived its own conversion, so the x64 sweep had no
+way to notice. Nothing else in the tree mentions the alignment, and nothing
+had ever compiled the x32 header, so between the two passes the requirement
+existed only in a line that was gone.
+
+It is holding up `space_allocate_space`, which carves a space and its top page
+directory out of a single block:
+
+    kmem_alloc (sizeof (space_t) + sizeof (x86_top_pdir_t))
+    top_pdir = (addr_t) space + sizeof (space_t)
+
+Two properties are required and neither is stated anywhere. `sizeof (space_t)`
+must be a whole number of pages, because the top pdir is walked by hardware.
+And the sum must be a power of two, because `kmem_do_alloc`'s alignment test is
+`!(addr & (size - 1))` — a mask, not a modulus — and its `ASSERT` wants a
+`KMEM_CHUNKSIZE` multiple. Padded to 4096 both hold, and 4096 + 4096 is what
+x64 has always passed.
+
+With assertions compiled out this would not have stopped: `kmem_do_alloc` would
+have walked three 1024-byte chunks for a 3096-byte request and returned a page
+directory 3096 bytes into the block, unaligned. The assertion is the only thing
+between the dropped attribute and a kernel that corrupts its own heap.
+
+`glue/v4-x86/space.c` now states both properties as `_Static_assert`s next to
+the allocation. They are cheap and they are checked on every subarchitecture.
+
+### Three more files, and the five configurations outside the core set
+
+`x86-x32-p4` reaches the l4test menu once the space is page aligned. The sweep
+then put eight of nineteen configurations at three distinct compile failures,
+all in the sources §127 left alone:
+
+  - `kdb/arch/x86/x32/disas.c` — the x32 disassembler wrapper, three
+    configurations. x64's equivalent was converted in the x64 pass; this is the
+    same work. `f->eip` becomes `f->__base.regs[X86_EXC_IPREG]`,
+    `get_kernel_space` becomes `get_kernel_space_c`, and `get_hex` takes the
+    third argument the C form has.
+  - `glue/v4-x86/x32/logging.c` and its header, two configurations. A default
+    argument, two `extern "C"` in macros, `x86_mmu_t::flush_tlb`, the memdesc
+    and pgent method calls, and `sched_state.get_logid()` — which is a plain
+    `word_t logid` member in C, as `sched-hs/schedule.c` already assumed.
+    `memdesc_t::set` had no C form yet; it does now.
+  - `glue/v4-x86/x32/smallspaces.c`, its kdb command file and the
+    `smallspace_id_t` class, one configuration. The class becomes a struct with
+    `smallspace_id_*` functions, and the `x86_space_t` methods §127 dropped
+    from the header come back as `x86_space_*` functions with `space_*`
+    wrappers in the shared header, the way x64 does compatibility mode.
+
+Two more gate-blind leftovers surfaced while compiling those — the eleventh and
+twelfth. `api/v4/schedule.c` had `sched_state.set_logid()` and `get_idle_tcb()`
+inside `#if defined(CONFIG_X_EVT_LOGGING)`; `glue/v4-x86/exception.c` had
+`frame->reason`, `frame->eflags`, `frame->ecx`, `frame->eip` and three tcb
+methods inside `CONFIG_X86_SMALL_SPACES`. Neither gate had ever been on.
+
+`memdesc_set` needed adding to the x32comp prefix list, or compatibility mode
+sees two conflicting declarations of it.
+
+### Where it stands
+
+Seventeen of nineteen configurations compile; the two that do not are HVM,
+whose `vmx.cc`, `hvm-vmx.cc` and `hvm-vtlb.cc` are still C++ (285 errors, and
+`x32/ktcb.h` and `kdb/arch/x86/x32/disas.c` both `#error` under the option
+rather than converting blind). Ten reach the l4test menu.
+
+Of the seven that build and do not boot, `p4-fullkdb` is §124's `rdpmc` again —
+`CONFIG_TBUF_PERFMON`, QEMU, not this tree. The other six are three separate
+faults, none of them diagnosed yet: the four `CONFIG_TRACEBUFFER` builds fail
+an SMP-only-looking `tcb_get_cpu (self) == tcb_get_cpu (dest)` in `switch_to`;
+`p4-iofp` stops at `map_fpage(): invalid fpage size`; `p4-smallspaces` has
+sigma0 touching `df001000`, inside the kernel area, before it starts.
+
+`contrib/configs/x86-x32-cxfer-kernel.tar` is named with a dash where every
+other config tar has a dot, so `tools/configsweep`'s glob has never matched it.
+Nineteen of twenty, and the twentieth is the `CONFIG_X_CTRLXFER_MSG`
+configuration §127 declined to convert, so nothing is lost — but the sweep was
+reporting a full pass over a set it had silently narrowed.
+
+Gate: x64 unaffected. `x86-x64-p4-smp`, 706 symbols with 706 identical bodies;
+`x86-x64-p4-cm`, 553 with 552, the odd one being `kernel_version_string`, which
+is the build date disassembled as instructions.

@@ -118,7 +118,7 @@ static void idle_thread(void)
 {
     sched_set_accounted_tcb (get_current_tcb());
 #if defined(CONFIG_X_EVT_LOGGING)
-    get_idle_tcb()->sched_state.set_logid(IDLE_LOGID);
+    get_idle_tcb_c()->sched_state.logid = IDLE_LOGID;
 #endif
     sched_idle ();
 }

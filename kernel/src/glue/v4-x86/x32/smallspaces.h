@@ -34,77 +34,82 @@
 
 #include INC_GLUE(config.h)
 
-class space_t;
+struct space_t;
+typedef struct space_t space_t;
 
-class smallspace_id_t
+struct smallspace_id_t
 {
     union {
 	u32_t	raw;
 	u8_t	id;
     };
-
-public:
-
-    /**
-     * Check whether small space id indicates a small space or not.
-     * @return true if space id indicates small space, false otherwise
-     */
-    bool is_small (void)
-	{
-	    return id != 0;
-	}
-
-    /**
-     * Set small space id to indicate large address space.
-     */
-    void set_large (void)
-	{
-	    raw = 0;
-	}
-
-    /**
-     * Set small space id to indicate small address space.
-     * @param idx	index into small space area (4MB stepping)
-     * @param size	size of small space in megabytes
-     */
-    void set_small (word_t idx, word_t size)
-	{
-	    id = ((idx & ~(size - 1)) >> 1) | (size >> 2);
-	}
-
-    /**
-     * Get size of small space (in bytes).
-     * @return size of small space (in bytes)
-     */
-    word_t size (void)
-	{
-	    if (id == 0)
-		return 0;
-
-	    word_t size = (1UL << 22);
-	    for (word_t mask = 1; (id & mask) == 0; mask <<= 1, size <<= 1)
-		;
-	    return size;
-	}
-
-    /**
-     * Get offset of small space within small space area (in bytes).
-     * @return offset of small space (in bytes)
-     */
-    word_t offset (void)
-	{
-	    if (id == 0)
-		return 0;
-
-	    word_t mask = 1;
-	    for (; (id & mask) == 0; mask <<= 1)
-		;
-	    return (id & ~mask) << 21;
-	}
-
-    void set_raw (word_t r) { raw = r; }
-    word_t get_raw (void) { return raw; }
 };
+typedef struct smallspace_id_t smallspace_id_t;
+
+/**
+ * Check whether small space id indicates a small space or not.
+ * @return true if space id indicates small space, false otherwise
+ */
+INLINE bool smallspace_id_is_small (smallspace_id_t *self)
+{
+    return self->id != 0;
+}
+
+/**
+ * Set small space id to indicate large address space.
+ */
+INLINE void smallspace_id_set_large (smallspace_id_t *self)
+{
+    self->raw = 0;
+}
+
+/**
+ * Set small space id to indicate small address space.
+ * @param idx	index into small space area (4MB stepping)
+ * @param size	size of small space in megabytes
+ */
+INLINE void smallspace_id_set_small (smallspace_id_t *self, word_t idx, word_t size)
+{
+    self->id = (u8_t) (((idx & ~(size - 1)) >> 1) | (size >> 2));
+}
+
+/**
+ * Get size of small space (in bytes).
+ * @return size of small space (in bytes)
+ */
+INLINE word_t smallspace_id_size (smallspace_id_t *self)
+{
+    word_t size;
+    word_t mask;
+
+    if (self->id == 0)
+	return 0;
+
+    size = (1UL << 22);
+    for (mask = 1; (self->id & mask) == 0; mask <<= 1, size <<= 1)
+	;
+    return size;
+}
+
+/**
+ * Get offset of small space within small space area (in bytes).
+ * @return offset of small space (in bytes)
+ */
+INLINE word_t smallspace_id_offset (smallspace_id_t *self)
+{
+    word_t mask;
+
+    if (self->id == 0)
+	return 0;
+
+    mask = 1;
+    for (; (self->id & mask) == 0; mask <<= 1)
+	;
+    return (word_t) (self->id & ~mask) << 21;
+}
+
+INLINE void   smallspace_id_set_raw (smallspace_id_t *self, word_t r) { self->raw = (u32_t) r; }
+INLINE word_t smallspace_id_get_raw (smallspace_id_t *self) { return self->raw; }
 
 
 bool is_smallspace(space_t *s);

@@ -78,6 +78,16 @@ INLINE addr_t memdesc_low (const memdesc_t *self)	{ return (addr_t) ((word_t) se
 INLINE addr_t memdesc_high (const memdesc_t *self)	{ return (addr_t) (((word_t) self->_high << 10) + 0x3ff); }
 INLINE word_t memdesc_size (const memdesc_t *self)	{ return ((word_t) (self->_high - self->_low + 1) << 10); }
 
+INLINE void memdesc_set (memdesc_t *self, word_t type, word_t t, bool virt,
+			 addr_t low, addr_t high)
+{
+    self->_type = type;
+    self->_t    = t;
+    self->_v    = virt;
+    self->_low  = ((word_t) low) >> 10;
+    self->_high = ((word_t) high) >> 10;
+}
+
 
 
 #endif /* !__API__V4__MEMDESC_H__ */

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2008-2010,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x32/logging.cc
+ * File path:     glue/v4-x86/x32/logging.c
  * Description:   
  *                
  * @LICENSE@
@@ -131,9 +131,9 @@ void toggle_events(word_t evt, bool all)
 	    jmptmp16 = entry_start16[0];
 
 	    entry_start16[0] = (u16_t) (entry_stop16 - entry_start16 -2) << 8 | 0xeb;
-	    
+
 	    //TRACE_INIT_LOG("Logging: patched near jump %x\n", (word_t) entry_start16[0]);
-	
+
 	    for (u8_t *cur8 = entry_stop8 - 1 ; cur8 >= entry_start8; cur8--)
 	    {
 		
@@ -183,7 +183,7 @@ void toggle_events(word_t evt, bool all)
     evt_enabled ^= (1 << evt); 
 	
 	
-    x86_mmu_t::flush_tlb(true);
+    x86_mmu_flush_tlb(true);
     __asm__ __volatile__ ("wbinvd \n\t");
     
 }
@@ -192,15 +192,16 @@ void toggle_events(word_t evt, bool all)
 void add_logging_kmem(memdesc_t *kmem_md)
 {
     word_t log_size = LOG_AREA_SIZE * CONFIG_SMP_MAX_CPUS;
-    addr_t log_low =  addr_align(addr_offset(kmem_md->low(), kmem_md->size() - log_size), LOG_SPACE_SIZE);
-    
-    ASSERT((word_t) log_low >= (word_t) kmem_md->low() && 
-           (word_t) log_low + log_size <= (word_t) kmem_md->low() + kmem_md->size());
-    
-    TRACE_INIT("\treserve %x - %x (sz %d) for log area\n", log_low, kmem_md->high(), log_size);
+    addr_t log_low =  addr_align(addr_offset(memdesc_low (kmem_md), memdesc_size (kmem_md) - log_size), LOG_SPACE_SIZE);
 
-    get_kip()->memory_info.insert(memdesc_t::arch_specific, 0, false, log_low, kmem_md->high());
-    kmem_md->set (kmem_md->type(), kmem_md->subtype(), kmem_md->is_virtual(), kmem_md->low(), (addr_t) ((word_t) log_low-1));
+    ASSERT((word_t) log_low >= (word_t) memdesc_low (kmem_md) &&
+           (word_t) log_low + log_size <= (word_t) memdesc_low (kmem_md) + memdesc_size (kmem_md));
+
+    TRACE_INIT("\treserve %x - %x (sz %d) for log area\n", log_low, memdesc_high (kmem_md), log_size);
+
+    memory_info_insert (&get_kip()->memory_info, MEMDESC_ARCH_SPECIFIC, 0, false, log_low, memdesc_high (kmem_md));
+    memdesc_set (kmem_md, memdesc_type (kmem_md), memdesc_subtype (kmem_md), memdesc_is_virtual (kmem_md),
+		 memdesc_low (kmem_md), (addr_t) ((word_t) log_low-1));
 
     user_log_area_start = log_low;
 
@@ -230,13 +231,13 @@ void init_logging_cpu(cpuid_t cpu)
     for (word_t p = 0; p < LOG_AREA_SIZE; p += KERNEL_PAGE_SIZE)
     {
         pgent_t *pgent;
-        pgent_t::pgsize_e pgsize;
-        space_t *kspace = get_kernel_space();
-        
+        int pgsize;
+        space_t *kspace = get_kernel_space_c();
+
         addr_t uaddr = addr_offset(user_log_mapping, p);
         addr_t kaddr = addr_offset(kernel_log_mapping, p);
-        
-        if (!kspace->lookup_mapping(kaddr, &pgent, &pgsize, cpu))
+
+        if (!space_lookup_mapping(kspace, kaddr, &pgent, &pgsize, cpu))
             panic("logging bug");
         
         
@@ -247,15 +248,15 @@ void init_logging_cpu(cpuid_t cpu)
         
         /* Remove old cpulocal mappings */
         if (cpu != 0)
-            kmem_free(&kmem, kmem_pgtab, 
-                      addr_offset(phys_to_virt(pgent->address(kspace, pgsize)), addr_mask(kaddr, page_mask (pgsize))), 
+            kmem_free(&kmem, kmem_pgtab,
+                      addr_offset(phys_to_virt(pgent_address(pgent, kspace, (word_t) pgsize)), addr_mask(kaddr, page_mask ((word_t) pgsize))),
                       KERNEL_PAGE_SIZE);
-                  
-        pgent->set_entry(kspace, pgsize, uaddr, 7, 8, true);
+
+        pgent_set_entry(pgent, kspace, (word_t) pgsize, uaddr, 7, 8, true);
     }
     
     
-    x86_mmu_t::flush_tlb(true);
+    x86_mmu_flush_tlb(true);
     
     TRACE_INIT("\tremapped log pages %p -> %p (CPU %d)\n", kernel_log_area_start, user_log_mapping, cpu);
 
@@ -571,8 +572,8 @@ LOG_CODE2(log_pmc, u32_t src_tcb, u32_t dst_tcb)
         return;
 #endif
 
-    word_t src_logid = src->sched_state.get_logid();
-    word_t dst_logid = dst->sched_state.get_logid();
+    word_t src_logid = src->sched_state.logid;
+    word_t dst_logid = dst->sched_state.logid;
 	
     if (src_logid == dst_logid)
 	return;

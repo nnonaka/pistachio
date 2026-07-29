@@ -164,6 +164,20 @@ utcb_t * space_allocate_utcb (space_t *self, tcb_t *tcb)
     return result;
 }
 
+/*
+ * space_allocate_space carves the space and its top page directory out of a
+ * single kmem block, so it depends on two properties of the subarchitecture's
+ * layout that nothing else states.  See the comment on x86_space_t in
+ * x32/space.h for what happens when they do not hold.
+ */
+#define SPACE_BLOCK_SIZE	(sizeof (space_t) + sizeof (x86_top_pdir_t))
+_Static_assert ((sizeof (space_t) % X86_PAGE_SIZE) == 0,
+		"top_pdir sits at space + sizeof (space_t) and is hardware "
+		"walked, so sizeof (space_t) must be a page multiple");
+_Static_assert ((SPACE_BLOCK_SIZE & (SPACE_BLOCK_SIZE - 1)) == 0,
+		"kmem_do_alloc aligns with (size - 1) as a mask, so the "
+		"combined block must be a power of two");
+
 space_t * space_allocate_space (void)
 {
     space_t *space = (space_t *) kmem_alloc (&kmem, kmem_space, sizeof (space_t) + sizeof (x86_top_pdir_t));

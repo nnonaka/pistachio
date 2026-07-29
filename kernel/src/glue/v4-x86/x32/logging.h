@@ -129,7 +129,8 @@ typedef union{
 void init_logging_cpu(cpuid_t current_cpu);
 
 
-void toggle_events(word_t evt, bool all=false);
+/* `all' had a default of false in C++; every call site passes it explicitly. */
+void toggle_events(word_t evt, bool all);
     
 extern word_t *log_evtbptr_start;
 extern word_t *log_evtbptr_end;
@@ -169,8 +170,8 @@ __asm__ __volatile__(									\
 
 
 #define LOG_CODE2(name, arg1, arg2)			\
-extern "C" void name (arg1, arg2);			\
-extern "C" void name##handler(arg1, arg2);		\
+EXTERN_C void name (arg1, arg2);			\
+EXTERN_C void name##handler(arg1, arg2);		\
 void name##_wrapper()					\
 {							\
     __asm__ __volatile__(                               \
@@ -223,8 +224,8 @@ __asm__ __volatile__(									\
 
 #define LOG_CODE1(name, arg1)				\
 void name (arg1);					\
-extern "C" void name##handler(arg1);			\
-extern "C" void name##_wrapper()			\
+EXTERN_C void name##handler(arg1);			\
+EXTERN_C void name##_wrapper()				\
 {							\
     __asm__ (						\
         ".global "#name "		\n"		\

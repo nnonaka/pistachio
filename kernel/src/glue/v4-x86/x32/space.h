@@ -138,7 +138,74 @@ struct x86_space_t {
 	x86_hvm_space_t hvm_space;
 #endif
     } data;
-};
+}
+/*
+ * This attribute was on the C++ class and the first conversion of this header
+ * dropped it -- x64's equivalent aligned(X86_PTAB_BYTES) survived, so nothing
+ * in the x64 sweep noticed.  It is load bearing.  glue/v4-x86/space.c carves
+ * a space and its top page directory out of one kmem block:
+ *
+ *     kmem_alloc (sizeof (space_t) + sizeof (x86_top_pdir_t))
+ *     top_pdir = (addr_t) space + sizeof (space_t)
+ *
+ * so sizeof (space_t) must be a whole number of pages -- the top pdir is
+ * hardware walked -- and the sum must be a power of two, because
+ * kmem_do_alloc's alignment test is `!(addr & (size - 1))' and its ASSERT
+ * demands a KMEM_CHUNKSIZE multiple.  Unaligned, x32's layout is 3096 bytes
+ * (768 shadow pgents plus the administrative data) and the first allocation
+ * of the boot -- init_kernel_space -- asserts in kmem_do_alloc.  The
+ * _Static_assert in glue/v4-x86/space.c now states both properties.
+ */
+__attribute__((aligned(X86_PAGE_SIZE)));
 typedef struct x86_space_t x86_space_t;
+
+#if defined(CONFIG_X86_SMALL_SPACES)
+/* C forms of the x86_space_t small-space methods.  These take the base rather
+   than space_t, which is not complete here; glue/v4-x86/space.h wraps them for
+   callers that hold a space_t, the way x64 does with compatibility_mode. */
+INLINE smallspace_id_t * x86_space_smallid (x86_space_t *self)
+{
+    return &self->data.smallid;
+}
+
+INLINE x86_segdesc_t * x86_space_segdesc (x86_space_t *self)
+{
+    return &self->data.segdesc;
+}
+
+INLINE x86_space_t * x86_space_get_prev (x86_space_t *self) { return self->data.prev; }
+INLINE x86_space_t * x86_space_get_next (x86_space_t *self) { return self->data.next; }
+INLINE void x86_space_set_prev (x86_space_t *self, x86_space_t *p) { self->data.prev = p; }
+INLINE void x86_space_set_next (x86_space_t *self, x86_space_t *n) { self->data.next = n; }
+
+INLINE bool x86_space_is_small (x86_space_t *self)
+{
+    return smallspace_id_is_small (x86_space_smallid (self));
+}
+
+INLINE bool x86_space_is_smallspace_area (addr_t addr)
+{
+    return (addr >= (addr_t) SMALLSPACE_AREA_START &&
+	    addr < (addr_t) SMALLSPACE_AREA_END);
+}
+
+INLINE word_t x86_space_smallspace_offset (x86_space_t *self)
+{
+    return smallspace_id_offset (x86_space_smallid (self)) + SMALLSPACE_AREA_START;
+}
+
+INLINE word_t x86_space_smallspace_size (x86_space_t *self)
+{
+    return smallspace_id_size (x86_space_smallid (self));
+}
+
+BEGIN_DECLS
+bool x86_space_make_small (x86_space_t *self, smallspace_id_t id);
+void x86_space_make_large (x86_space_t *self);
+bool x86_space_sync_smallspace (x86_space_t *self, addr_t addr);
+void x86_space_dequeue_polluted (x86_space_t *self);
+void x86_space_enqueue_polluted (x86_space_t *self);
+END_DECLS
+#endif /* CONFIG_X86_SMALL_SPACES */
 
 #endif /* !__GLUE_V4_X86__X32__SPACE_H__ */

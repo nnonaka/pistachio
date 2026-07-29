@@ -168,11 +168,11 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	 * might happen to be outside the small space.  If so, we
 	 * must promote the space to a large one.
 	 */
-	if (! space->is_user_area (instr) &&
-	    space->is_small () &&
-	    (word_t) current->get_user_ip () > space->smallid ()->size ())
+	if (! space_is_user_area (instr) &&
+	    space_is_small (space) &&
+	    (word_t) tcb_get_user_ip (current) > smallspace_id_size (space_smallid (space)))
 	{
-	    space->make_large ();
+	    space_make_large (space);
 	    return true;
 	}
 	break;
@@ -366,11 +366,11 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
      * Try to promote space to a large one instead of sending
      * exception IPC.
      */
-    if ((frame->reason == X86_EXC_STACKSEG_FAULT ||
-         frame->reason == X86_EXC_GENERAL_PROTECTION) &&
-        frame->__base.error == 0 && space->is_small ())
+    if ((frame->__base.reason == X86_EXC_STACKSEG_FAULT ||
+         frame->__base.reason == X86_EXC_GENERAL_PROTECTION) &&
+        frame->__base.error == 0 && space_is_small (space))
     {
-        space->make_large ();
+        space_make_large (space);
         return true;
     }
 #endif
@@ -397,7 +397,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
      * Check if we caught an exception in the sysexit trampoline.
      */
     tcb_t * current = get_current_tcb ();
-    addr_t user_eip = current->get_user_ip ();
+    addr_t user_eip = tcb_get_user_ip (current);
 
     if (user_eip >= (addr_t) sysexit_tramp &&
         user_eip <  (addr_t) sysexit_tramp_end)
@@ -411,10 +411,10 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
          * interrupts since we can not be allowed to be preempted in
          * the reenter-trampoline.
          */
-        frame->__base.cs = X86_KCS;
-        frame->eflags &= ~X86_FLAGS_IF;
-        frame->ecx = (word_t) current->get_user_sp ();
-        frame->eip = (word_t) reenter_sysexit;
+        frame->__base.regs[X86_EXC_CSREG] = X86_KCS;
+        frame->__base.regs[X86_EXC_FREG] &= ~X86_FLAGS_IF;
+        frame->__base.regs[X86_EXC_CREG] = (word_t) tcb_get_user_sp (current);
+        frame->__base.regs[X86_EXC_IPREG] = (word_t) reenter_sysexit;
         return;
     }
 #endif

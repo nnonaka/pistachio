@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-ia32/smallspaces.cc
+ * File path:     kdb/glue/v4-x86/x32/smallspaces.c
  * Description:   Management of small spaces from kernel debugger
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@
 #include INC_GLUE(space.h)
 
 
-extern space_t * small_space_owner[SMALLSPACE_AREA_SIZE >> X86_X32_PDIR_BITS];
+extern x86_space_t * small_space_owner[SMALLSPACE_AREA_SIZE >> X86_X32_PDIR_BITS];
 
 
 DECLARE_CMD_GROUP (x86_x32_smallspaces);
@@ -50,7 +50,7 @@ DECLARE_CMD (cmd_smallspaces, arch, 's', "smallspaces",
 
 CMD (cmd_smallspaces, cg)
 {
-    return x86_x32_smallspaces.interact (cg, "smallspaces");
+    return cmd_group_interact (&x86_x32_smallspaces, cg, "smallspaces");
 }
 
 
@@ -67,6 +67,8 @@ CMD (cmd_smallspaces_dump, cg)
     printf ("Small address space allocation:\n");
 
     word_t b = 0, i;
+
+    (void) cg;
     for (i = 1; i < max_idx; i++)
     {
 	if (small_space_owner[b] != small_space_owner[i])
@@ -106,12 +108,14 @@ CMD (cmd_smallspaces_mksmall, cg)
     smallspace_id_t id;
     word_t size, idx;
 
+    (void) cg;
+
     for (;;)
     {
-	if ((size = get_dec ("Size (in MB)", 16)) == ABORT_MAGIC)
+	if ((size = get_dec ("Size (in MB)", 16, NULL)) == ABORT_MAGIC)
 	    return CMD_NOQUIT;
 
-	if ((idx = get_dec ("Index", 0)) == ABORT_MAGIC)
+	if ((idx = get_dec ("Index", 0, NULL)) == ABORT_MAGIC)
 	    return CMD_NOQUIT;
 
 	idx *= size;
@@ -122,9 +126,9 @@ CMD (cmd_smallspaces_mksmall, cg)
 	printf ("Invalid parameters.\n");
     }
 
-    id.set_small (idx, size);
+    smallspace_id_set_small (&id, idx, size);
 
-    if (! space->make_small (id))
+    if (! space_make_small (space, id))
 	printf ("Unable to create small space!\n");
 
     return CMD_NOQUIT;
@@ -140,7 +144,9 @@ DECLARE_CMD (cmd_smallspaces_mklarge, x86_x32_smallspaces, 'l', "mklarge",
 CMD (cmd_smallspaces_mklarge, cg)
 {
     space_t * space = get_space ("Space");
-    space->make_large ();
+
+    (void) cg;
+    space_make_large (space);
     return CMD_NOQUIT;
 }
 
