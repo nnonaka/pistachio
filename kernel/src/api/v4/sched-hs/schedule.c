@@ -212,11 +212,11 @@ INLINE void sched_dequeue_timeout (scheduler_t *self, tcb_t *tcb)
     queue_state_clear (&tcb->queue_state, QUEUE_STATE_WAKEUP);
 }
 
-/* tcb_t::get/set_preempt_flags (the utcb field is C-visible) */
+/* tcb_t::get/set_preempt_flags (via the generic UTCB accessors) */
 INLINE preempt_flags_t tcb_preempt_flags (tcb_t *self)
-{ preempt_flags_t f; f.raw = self->utcb->preempt_flags; return f; }
+{ preempt_flags_t f; f.raw = utcb_get_preempt_flags (self->utcb); return f; }
 INLINE void tcb_preempt_flags_set (tcb_t *self, preempt_flags_t f)
-{ self->utcb->preempt_flags = f.raw; }
+{ utcb_set_preempt_flags (self->utcb, f.raw); }
 
 /*
  * Walk two threads up their domain chains until both sit in the same prio

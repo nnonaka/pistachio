@@ -27,6 +27,13 @@ struct space_t {
 };
 typedef struct space_t space_t;
 
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+INLINE bool space_is_compatibility_mode (space_t *self)
+{
+    return x86_space_is_compatibility_mode (&self->base);
+}
+#endif
+
 
 /* C entry points for the copy-area / per-CPU pdir methods that resources.c
    needs (space_t stays a C++ class; these wrap the methods, defined in

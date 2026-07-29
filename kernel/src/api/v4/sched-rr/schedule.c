@@ -115,11 +115,11 @@ INLINE bool rr_delay_preemption (rr_sched_ktcb_t *self, tcb_t *tcb)
     return (rr_sched_get_maximum_delay (self) > 0);
 }
 
-/* tcb_t::get/set_preempt_flags (the utcb field is C-visible) */
+/* tcb_t::get/set_preempt_flags (via the generic UTCB accessors) */
 INLINE preempt_flags_t tcb_preempt_flags (tcb_t *self)
-{ preempt_flags_t f; f.raw = self->utcb->preempt_flags; return f; }
+{ preempt_flags_t f; f.raw = utcb_get_preempt_flags (self->utcb); return f; }
 INLINE void tcb_preempt_flags_set (tcb_t *self, preempt_flags_t f)
-{ self->utcb->preempt_flags = f.raw; }
+{ utcb_set_preempt_flags (self->utcb, f.raw); }
 
 /* scheduler_t::check_dispatch_thread */
 INLINE bool check_dispatch_thread (tcb_t *tcb, tcb_t *dest)

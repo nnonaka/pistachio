@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2002-2007,  Karlsruhe University
+ * Copyright (C) 2006, 2008,  Karlsruhe University
  *                
  * File path:     glue/v4-x86/x64/x32comp/utcb.h
- * Description:   UTCB for AMD64 compatibility mode
+ * Description:   UTCB spanning the 32- and 64-bit layouts
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: utcb.h,v 1.6 2006/10/21 02:02:01 reichelt Exp $
+ * $Id: types.h,v 1.2 2006/10/20 16:18:38 reichelt Exp $
  *                
  ********************************************************************/
 #ifndef __GLUE_V4_X86__X64__X32__UTCB_H__
@@ -35,199 +35,243 @@
 #include INC_GLUE_SA(x32comp/types.h)
 #include INC_GLUE_SA(x32comp/thread.h)
 
-namespace x32 {
+/*
+ * The 32-bit UTCB: the same layout as the 64-bit one, in 32-bit words.  Only
+ * the API types need renaming here -- the struct takes its name from
+ * UTCB_NAME -- but the rename is the whole x32 set, since that is what stands
+ * in for `namespace x32'.
+ */
+#include INC_GLUE_SA(x32comp/x32-names.h)
 
-#undef __API__V4__GENERIC_UTCB_H__
-#undef __GLUE__V4_X86__UTCB_H__
-#undef CONFIG_X86_COMPATIBILITY_MODE
-#include INC_GLUE(utcb.h)
-#define CONFIG_X86_COMPATIBILITY_MODE
-}
+#define UTCB_NAME x32_utcb_t
+#include INC_GLUE(utcb-body.h)
+#undef UTCB_NAME
 
-/* Parts of padding around 32-bit UTCB used by user_exchange_registers_32 */
-class utcb_exreg32_t
+#define X32_UNRENAME
+#include INC_GLUE_SA(x32comp/x32-names.h)
+#undef X32_UNRENAME
+
+/* Parts of the padding around the 32-bit UTCB, used by
+   user_exchange_registers_32. */
+struct utcb_exreg32_t
 {
-public:
-    word_t compatibility_mode;	/* -512 */
-    x32::word_t is_local;	/* -504 */
-    x32::threadid_t pager;	/* -500 */
-    x32::word_t control;	/* -496 */
+    word_t	   compatibility_mode;	/* -512 */
+    x32_word_t	   is_local;		/* -504 */
+    x32_threadid_t pager;		/* -500 */
+    x32_word_t	   control;		/* -496 */
 } __attribute__((packed));
+typedef struct utcb_exreg32_t utcb_exreg32_t;
 
-/* UTCB class that handles both 64-bit and 32-bit UTCBs */
-class utcb_t
+/* The UTCB proper: whichever of the two the thread's space selected. */
+struct utcb_t
 {
-public:
     union {
-	x64::utcb_t x64;
+	x64_utcb_t x64;
 	struct {
 	    word_t padding[32];
-	    x32::utcb_t x32;
+	    x32_utcb_t x32;
 	};
 	bool compatibility_mode;
 	utcb_exreg32_t exreg32;
     };
-
-public:
-    bool is_compatibility_mode();
-    void set_compatibility_mode(bool cm);
-
-public:
-    void set_my_global_id(threadid_t tid);
-    word_t get_user_defined_handle();
-    void set_user_defined_handle(word_t handle);
-    threadid_t get_pager();
-    void set_pager(threadid_t tid);
-    threadid_t get_exception_handler();
-    void set_exception_handler(threadid_t tid);
-    u8_t get_preempt_flags();
-    void set_preempt_flags(u8_t flags);
-    u8_t get_cop_flags();
-    word_t get_error_code();
-    void set_error_code(word_t err);
-    timeout_t get_xfer_timeout();
-    threadid_t get_intended_receiver();
-    threadid_t get_virtual_sender();
-    void set_virtual_sender(threadid_t tid);
-
 };
+typedef struct utcb_t utcb_t;
 
-INLINE bool utcb_t::is_compatibility_mode()
+/*
+ * The api/v4/generic-utcb.h accessor set, dispatching on the mode.  Everything
+ * outside this file reaches the UTCB through these, which is what lets the
+ * two layouts stay confined to compatibility mode.
+ */
+
+INLINE bool utcb_is_compatibility_mode (utcb_t *self)
 {
-    return EXPECT_FALSE(this->compatibility_mode);
+    return EXPECT_FALSE (self->compatibility_mode);
 }
 
-INLINE void utcb_t::set_compatibility_mode(bool cm)
+INLINE void utcb_set_compatibility_mode (utcb_t *self, bool cm)
 {
-    this->compatibility_mode = cm;
+    self->compatibility_mode = cm;
 }
 
-INLINE void utcb_t::set_my_global_id(threadid_t tid)
+INLINE void utcb_set_my_global_id (utcb_t *self, threadid_t tid)
 {
-    if (is_compatibility_mode())
-	x32.set_my_global_id(threadid_32(tid));
+    if (utcb_is_compatibility_mode (self))
+	self->x32.my_global_id = threadid_32 (tid);
     else
-	x64.set_my_global_id(tid);
+	self->x64.my_global_id = tid;
 }
 
-INLINE word_t utcb_t::get_user_defined_handle()
+INLINE void utcb_set_processor_no (utcb_t *self, word_t cpu)
 {
-    if (is_compatibility_mode())
-	return x32.get_user_defined_handle();
+    if (utcb_is_compatibility_mode (self))
+	self->x32.processor_no = (x32_word_t) cpu;
     else
-	return x64.get_user_defined_handle();
+	self->x64.processor_no = cpu;
 }
 
-INLINE void utcb_t::set_user_defined_handle(word_t handle)
+INLINE word_t utcb_get_user_defined_handle (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_user_defined_handle(handle);
+    if (utcb_is_compatibility_mode (self))
+	return self->x32.user_defined_handle;
     else
-	x64.set_user_defined_handle(handle);
+	return self->x64.user_defined_handle;
 }
 
-INLINE threadid_t utcb_t::get_pager()
+INLINE void utcb_set_user_defined_handle (utcb_t *self, word_t handle)
 {
-    if (is_compatibility_mode())
-	return threadid(x32.get_pager());
+    if (utcb_is_compatibility_mode (self))
+	self->x32.user_defined_handle = (x32_word_t) handle;
     else
-	return x64.get_pager();
+	self->x64.user_defined_handle = handle;
 }
 
-INLINE void utcb_t::set_pager(threadid_t tid)
+INLINE threadid_t utcb_get_pager (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_pager(threadid_32(tid));
+    if (utcb_is_compatibility_mode (self))
+	return threadid_64 (self->x32.pager);
     else
-	x64.set_pager(tid);
+	return self->x64.pager;
 }
 
-INLINE threadid_t utcb_t::get_exception_handler()
+INLINE void utcb_set_pager (utcb_t *self, threadid_t tid)
 {
-    if (is_compatibility_mode())
-	return threadid(x32.get_exception_handler());
+    if (utcb_is_compatibility_mode (self))
+	self->x32.pager = threadid_32 (tid);
     else
-	return x64.get_exception_handler();
+	self->x64.pager = tid;
 }
 
-INLINE void utcb_t::set_exception_handler(threadid_t tid)
+INLINE threadid_t utcb_get_exception_handler (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_exception_handler(threadid_32(tid));
+    if (utcb_is_compatibility_mode (self))
+	return threadid_64 (self->x32.exception_handler);
     else
-	x64.set_exception_handler(tid);
+	return self->x64.exception_handler;
 }
 
-INLINE u8_t utcb_t::get_preempt_flags()
+INLINE void utcb_set_exception_handler (utcb_t *self, threadid_t tid)
 {
-    if (is_compatibility_mode())
-	return x32.get_preempt_flags();
+    if (utcb_is_compatibility_mode (self))
+	self->x32.exception_handler = threadid_32 (tid);
     else
-	return x64.get_preempt_flags();
+	self->x64.exception_handler = tid;
 }
 
-INLINE void utcb_t::set_preempt_flags(u8_t flags)
+INLINE u8_t utcb_get_preempt_flags (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_preempt_flags(flags);
+    if (utcb_is_compatibility_mode (self))
+	return self->x32.preempt_flags;
     else
-	x64.set_preempt_flags(flags);
+	return self->x64.preempt_flags;
 }
 
-INLINE u8_t utcb_t::get_cop_flags()
+INLINE void utcb_set_preempt_flags (utcb_t *self, u8_t flags)
 {
-    if (is_compatibility_mode())
-	return x32.get_cop_flags();
+    if (utcb_is_compatibility_mode (self))
+	self->x32.preempt_flags = flags;
     else
-	return x64.get_cop_flags();
+	self->x64.preempt_flags = flags;
 }
 
-INLINE void utcb_t::set_error_code(word_t err)
+INLINE u8_t utcb_get_cop_flags (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_error_code(err);
+    if (utcb_is_compatibility_mode (self))
+	return self->x32.cop_flags;
     else
-	x64.set_error_code(err);
+	return self->x64.cop_flags;
 }
 
-INLINE word_t utcb_t::get_error_code()
+INLINE word_t utcb_get_error_code (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	return x32.get_error_code();
+    if (utcb_is_compatibility_mode (self))
+	return self->x32.error_code;
     else
-	return x64.get_error_code();
+	return self->x64.error_code;
 }
 
-INLINE timeout_t utcb_t::get_xfer_timeout()
+INLINE void utcb_set_error_code (utcb_t *self, word_t err)
 {
-    if (is_compatibility_mode())
-	return timeout(x32.get_xfer_timeout());
+    if (utcb_is_compatibility_mode (self))
+	self->x32.error_code = (x32_word_t) err;
     else
-	return x64.get_xfer_timeout();
+	self->x64.error_code = err;
 }
 
-INLINE threadid_t utcb_t::get_intended_receiver()
+INLINE timeout_t utcb_get_xfer_timeout (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	return threadid(x32.get_intended_receiver());
+    if (utcb_is_compatibility_mode (self))
+	return timeout_64 (self->x32.xfer_timeout);
     else
-	return x64.get_intended_receiver();
+	return self->x64.xfer_timeout;
 }
 
-INLINE threadid_t utcb_t::get_virtual_sender()
+INLINE threadid_t utcb_get_intended_receiver (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	return threadid(x32.get_virtual_sender());
+    if (utcb_is_compatibility_mode (self))
+	return threadid_64 (self->x32.intended_receiver);
     else
-	return x64.get_virtual_sender();
+	return self->x64.intended_receiver;
 }
 
-INLINE void utcb_t::set_virtual_sender(threadid_t tid)
+INLINE threadid_t utcb_get_virtual_sender (utcb_t *self)
 {
-    if (is_compatibility_mode())
-	x32.set_virtual_sender(threadid_32(tid));
+    if (utcb_is_compatibility_mode (self))
+	return threadid_64 (self->x32.virtual_sender);
     else
-	x64.set_virtual_sender(tid);
+	return self->x64.virtual_sender;
 }
+
+INLINE void utcb_set_virtual_sender (utcb_t *self, threadid_t tid)
+{
+    if (utcb_is_compatibility_mode (self))
+	self->x32.virtual_sender = threadid_32 (tid);
+    else
+	self->x64.virtual_sender = tid;
+}
+
+/*
+ * Message and buffer registers.  MR0 carries the message tag, whose label the
+ * page-fault protocol expects sign-extended; the other MRs must not be, or
+ * page faults past 2G could not be described.
+ */
+
+INLINE word_t utcb_get_mr (utcb_t *self, word_t index)
+{
+    if (utcb_is_compatibility_mode (self))
+    {
+	x32_word_t result = self->x32.mr[index];
+	if (index == 0)
+	    return (word_t) (s64_t) (s32_t) result;
+	else
+	    return result;
+    }
+    else
+	return self->x64.mr[index];
+}
+
+INLINE void utcb_set_mr (utcb_t *self, word_t index, word_t value)
+{
+    if (utcb_is_compatibility_mode (self))
+	self->x32.mr[index] = (x32_word_t) value;
+    else
+	self->x64.mr[index] = value;
+}
+
+INLINE word_t utcb_get_br (utcb_t *self, word_t slot)
+{
+    if (utcb_is_compatibility_mode (self))
+	return self->x32.br[slot];
+    else
+	return self->x64.br[slot];
+}
+
+INLINE void utcb_set_br (utcb_t *self, word_t slot, word_t value)
+{
+    if (utcb_is_compatibility_mode (self))
+	self->x32.br[slot] = (x32_word_t) value;
+    else
+	self->x64.br[slot] = value;
+}
+
 
 #endif /* !__GLUE_V4_X86__X64__X32__UTCB_H__ */

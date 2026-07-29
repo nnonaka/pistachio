@@ -459,7 +459,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
         return;
 
 #ifdef CONFIG_KDB
-    frame->dump();
+    x86_exceptionframe_dump (frame);
     word_t ds = 0 , es = 0, fs = 0, gs = 0;
 
     __asm__ (
@@ -501,13 +501,15 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
             frame->__base.regs[X86_EXC_RCXREG] = api_version_to_word (&get_kip()->api_version);
             frame->__base.regs[X86_EXC_RSIREG] = kip_get_kernel_id_raw (get_kip());
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-            if (space->is_compatibility_mode())
+            if (space_is_compatibility_mode (space))
             {
                 /* srXXX: Hack: Update system and user base in 32-bit KIP.
                    This is necessary because they are not set in the initialization phase. */
-                x32::get_kip()->thread_info.set_system_base(get_kip()->thread_info.get_system_base());
-                x32::get_kip()->thread_info.set_user_base(get_kip()->thread_info.get_user_base());
-                frame->__base.regs[X86_EXC_RDXREG] = x32::get_kip()->api_flags;
+                x32_thread_info_set_system_base (&x32_get_kip()->thread_info,
+                                                 thread_info_get_system_base (&get_kip()->thread_info));
+                x32_thread_info_set_user_base (&x32_get_kip()->thread_info,
+                                               thread_info_get_user_base (&get_kip()->thread_info));
+                frame->__base.regs[X86_EXC_RDXREG] = x32_api_flags_to_word (&x32_get_kip()->api_flags);
                 frame->__base.regs[X86_EXC_IPREG] += 2;
                 return;
             }

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2006-2007,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x64/x32comp/init.cc
+ * File path:     glue/v4-x86/x64/x32comp/init.c
  * Description:   System initialization for Compatibility Mode
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,7 @@
 #include INC_ARCH(x86.h)
 #include INC_GLUE_SA(x32comp/kernelinterface.h)
 
-static void SECTION(SEC_INIT) copy_boot_info(word_t *binfo, x32::word_t *binfo_32)
+static void SECTION(SEC_INIT) copy_boot_info (word_t *binfo, x32_word_t *binfo_32)
 {
     word_t addr = *binfo;
     /* Check if boot info exists and is located below 4G */
@@ -49,110 +49,114 @@ static void SECTION(SEC_INIT) copy_boot_info(word_t *binfo, x32::word_t *binfo_3
 	    u32_t version_32 = *((u32_t *) (addr + 4));
 	    if (version_32)
 	    {
-		*binfo_32 = addr;
+		*binfo_32 = (x32_word_t) addr;
 		*binfo = 0;
 	    }
 	}
 	else
 	    /* Not a generic bootinfo structure, just use it */
-	    *binfo_32 = addr;
+	    *binfo_32 = (x32_word_t) addr;
     }
 }
 
-static void SECTION(SEC_INIT) copy_clock_info(clock_info_t *cinfo, x32::clock_info_t *cinfo_32)
+static void SECTION(SEC_INIT) copy_clock_info (clock_info_t *cinfo, x32_clock_info_t *cinfo_32)
 {
-    cinfo_32->read_precision     = cinfo->get_read_precision();
-    cinfo_32->schedule_precision = cinfo->get_schedule_precision();
+    cinfo_32->read_precision     = clock_info_get_read_precision (cinfo);
+    cinfo_32->schedule_precision = clock_info_get_schedule_precision (cinfo);
 }
 
 #if 0
-static void SECTION(SEC_INIT) copy_thread_info(thread_info_t *tinfo, x32::thread_info_t *tinfo_32)
+static void SECTION(SEC_INIT) copy_thread_info (thread_info_t *tinfo, x32_thread_info_t *tinfo_32)
 {
-    tinfo_32->set_user_base  (tinfo->get_user_base());
-    tinfo_32->set_system_base(tinfo->get_system_base());
+    x32_thread_info_set_user_base   (tinfo_32, thread_info_get_user_base (tinfo));
+    x32_thread_info_set_system_base (tinfo_32, thread_info_get_system_base (tinfo));
 }
 #endif
 
-static void SECTION(SEC_INIT) copy_procdesc(procdesc_t *pdesc, x32::procdesc_t *pdesc_32)
+static void SECTION(SEC_INIT) copy_procdesc (procdesc_t *pdesc, x32_procdesc_t *pdesc_32)
 {
-    pdesc_32->set_external_frequency(pdesc->external_freq);
-    pdesc_32->set_internal_frequency(pdesc->internal_freq);
+    pdesc_32->external_freq = (x32_word_t) pdesc->external_freq;
+    pdesc_32->internal_freq = (x32_word_t) pdesc->internal_freq;
 }
 
-static void SECTION(SEC_INIT) copy_processor_info(processor_info_t *pinfo, x32::processor_info_t *pinfo_32)
+static void SECTION(SEC_INIT) copy_processor_info (processor_info_t *pinfo, x32_processor_info_t *pinfo_32)
 {
-    word_t num_processors = pinfo->get_num_processors();
+    word_t num_processors = processor_info_get_num_processors (pinfo);
+    word_t processor;
 
-    for (word_t processor = 0; processor < num_processors; processor++)
-	copy_procdesc(pinfo->get_procdesc(processor), pinfo_32->get_procdesc(processor));
+    for (processor = 0; processor < num_processors; processor++)
+	copy_procdesc (processor_info_get_procdesc (pinfo, processor),
+		       x32_processor_info_get_procdesc (pinfo_32, processor));
     pinfo_32->processors = pinfo->processors;
 }
 
-static void SECTION(SEC_INIT) copy_memdesc(memdesc_t *mdesc, x32::memory_info_t *minfo_32)
+static void SECTION(SEC_INIT) copy_memdesc (memdesc_t *mdesc, x32_memory_info_t *minfo_32)
 {
     word_t low, high;
 
-    low = (word_t) mdesc->low();
+    low = (word_t) memdesc_low (mdesc);
 
     if (!(low & ~0xffffffffUL))
     {
-	high = (word_t) mdesc->high();
+	high = (word_t) memdesc_high (mdesc);
 	if (high & ~0xffffffffUL)
 	    high = 0xffffffffUL;
-	if (mdesc->is_virtual()
+	if (memdesc_is_virtual (mdesc)
 	    && low < UTCB_MAPPING_32 + X86_PAGE_SIZE
 	    && high >= UTCB_MAPPING_32)
 	{
 	    if (UTCB_MAPPING_32 > low)
-		minfo_32->insert((x32::memdesc_t::type_e) mdesc->type(),
-				 mdesc->subtype(), true,
-				 (x32::addr_t) low, UTCB_MAPPING_32 - 1);
+		x32_memory_info_insert (minfo_32, memdesc_type (mdesc),
+					memdesc_subtype (mdesc), true,
+					(x32_addr_t) low, (x32_addr_t) (UTCB_MAPPING_32 - 1));
 	    if (high >= UTCB_MAPPING_32 + X86_PAGE_SIZE)
-		minfo_32->insert((x32::memdesc_t::type_e) mdesc->type(),
-				 mdesc->subtype(), true,
-				 UTCB_MAPPING_32 + X86_PAGE_SIZE, (x32::addr_t) high);
+		x32_memory_info_insert (minfo_32, memdesc_type (mdesc),
+					memdesc_subtype (mdesc), true,
+					(x32_addr_t) (UTCB_MAPPING_32 + X86_PAGE_SIZE),
+					(x32_addr_t) high);
 	}
 	else
 	{
-	    minfo_32->insert((x32::memdesc_t::type_e) mdesc->type(),
-			     mdesc->subtype(), mdesc->is_virtual(),
-			     (x32::addr_t) low, (x32::addr_t) high);
+	    x32_memory_info_insert (minfo_32, memdesc_type (mdesc),
+				    memdesc_subtype (mdesc), memdesc_is_virtual (mdesc),
+				    (x32_addr_t) low, (x32_addr_t) high);
 	}
     }
 }
 
-static void SECTION(SEC_INIT) copy_memory_info(memory_info_t *minfo, x32::memory_info_t *minfo_32)
+static void SECTION(SEC_INIT) copy_memory_info (memory_info_t *minfo, x32_memory_info_t *minfo_32)
 {
-    word_t num_descriptors = minfo->get_num_descriptors();
+    word_t num_descriptors = memory_info_get_num_descriptors (minfo);
+    word_t descriptor;
 
     minfo_32->n = 0;
 
-    for (word_t descriptor = 0; descriptor < num_descriptors; descriptor++)
-	copy_memdesc(minfo->get_memdesc(descriptor), minfo_32);
+    for (descriptor = 0; descriptor < num_descriptors; descriptor++)
+	copy_memdesc (memory_info_get_memdesc (minfo, descriptor), minfo_32);
 }
 
-static void SECTION(SEC_INIT) copy_root_server(root_server_t *serv, x32::root_server_t *serv_32)
+static void SECTION(SEC_INIT) copy_root_server (root_server_t *serv, x32_root_server_t *serv_32)
 {
     if (!(((word_t) serv->mem_region.high) & ~0xffffffffUL))
     {
-	serv_32->sp              = serv->sp;
-	serv_32->ip              = serv->ip;
-	serv_32->mem_region.low  = (x32::addr_t) (word_t) serv->mem_region.low;
-	serv_32->mem_region.high = (x32::addr_t) (word_t) serv->mem_region.high;
+	serv_32->sp              = (x32_word_t) serv->sp;
+	serv_32->ip              = (x32_word_t) serv->ip;
+	serv_32->mem_region.low  = (x32_addr_t) (word_t) serv->mem_region.low;
+	serv_32->mem_region.high = (x32_addr_t) (word_t) serv->mem_region.high;
     }
 }
 
-static void SECTION(SEC_INIT) copy_root_server_info(kernel_interface_page_t *kip, x32::kernel_interface_page_t *kip_32)
+static void SECTION(SEC_INIT) copy_root_server_info (kernel_interface_page_t *kip, x32_kernel_interface_page_t *kip_32)
 {
-    copy_root_server(&(kip->sigma0),      &(kip_32->sigma0));
-    copy_root_server(&(kip->sigma1),      &(kip_32->sigma1));
-    copy_root_server(&(kip->root_server), &(kip_32->root_server));
+    copy_root_server (&(kip->sigma0),      &(kip_32->sigma0));
+    copy_root_server (&(kip->sigma1),      &(kip_32->sigma1));
+    copy_root_server (&(kip->root_server), &(kip_32->root_server));
 }
 
-void SECTION(SEC_INIT) init_kip_32()
+void SECTION(SEC_INIT) init_kip_32 (void)
 {
-    kernel_interface_page_t       *kip    =       get_kip();
-    x32::kernel_interface_page_t *kip_32 = x32::get_kip();
+    kernel_interface_page_t     *kip    = get_kip ();
+    x32_kernel_interface_page_t *kip_32 = x32_get_kip ();
 
     copy_boot_info       (&(kip->boot_info),      &(kip_32->boot_info));
     copy_clock_info      (&(kip->clock_info),     &(kip_32->clock_info));

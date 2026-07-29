@@ -37,6 +37,12 @@
 
 //#define CONFIG_SMP_OUTPUTPREFIX 1
 
+#if !defined(CONFIG_KDB_BOOT_CONS)
+/* config/rules.cml defaults this to 0.  Configurations generated before the
+   option existed -- contrib/configs holds several -- do not carry it at all. */
+#define CONFIG_KDB_BOOT_CONS	0
+#endif
+
 word_t kdb_current_console;
 void init_console (void)
 {

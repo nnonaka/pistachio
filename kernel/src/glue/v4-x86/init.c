@@ -577,8 +577,8 @@ void SECTION(".init.init64") startup_system(u32_t is_ap)
 #endif
 
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-    TRACE_INIT("\tInitializing 32-bit kernel interface page (%p)\n", x32::get_kip());
-    x32::get_kip()->init();
+    TRACE_INIT("\tInitializing 32-bit kernel interface page (%p)\n", x32_get_kip());
+    x32_kernel_interface_page_init (x32_get_kip());
     init_kip_32();
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
 

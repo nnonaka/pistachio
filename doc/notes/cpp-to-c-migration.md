@@ -5420,3 +5420,134 @@ caveat that it cannot be boot-tested under QEMU. Booting it here requires
     do not build (1)           p4-cm
 
 Eight of eleven x64 configurations are now known-good, against one at §95.
+
+
+## §125 — `namespace`, in C: compatibility mode, and all eleven x64 configs build
+
+`x86-x64-p4-cm` was the last configuration that did not compile. It does now,
+and it boots to userland. **Eleven of eleven x64 configurations build**, which
+is the first time in this migration that the configuration set has been whole.
+
+### What it was actually blocked on
+
+Compatibility mode runs 32-bit tasks on the 64-bit kernel, so it needs a second
+copy of the V4 API types built with a 32-bit word: a 32-bit `threadid_t`, a
+32-bit KIP, a 32-bit UTCB, alongside the 64-bit ones, in the same translation
+unit. The original got that by re-including `api/v4/{types,thread,
+kernelinterface}.h` — include guards undefined, `word_t` typedef'd to `u32_t` —
+inside `namespace x32 { }`.
+
+That is the one C++ feature this tree used that has no C spelling. Everything
+else the migration met was a class, a method, a template or an `extern "C"`;
+this is a name-isolation mechanism, and C has exactly one: the preprocessor.
+
+### The stand-in
+
+`glue/v4-x86/x64/x32comp/x32-names.h` renames every name those headers declare
+to an `x32_`-prefixed one. It is used in pairs around each re-include:
+
+    #include INC_GLUE_SA(x32comp/x32-names.h)
+    #undef __API__V4__THREAD_H__
+    #include INC_API(thread.h)
+    #define X32_UNRENAME
+    #include INC_GLUE_SA(x32comp/x32-names.h)
+    #undef X32_UNRENAME
+
+108 names, in two lists that have to stay in step — and they stay in step under
+pressure, which is what makes this tolerable rather than merely ugly. A name
+missing from the rename list collides on the second include; a name missing
+from the unrename list leaves the 64-bit code compiling against an `x32_` name.
+Both are compile errors, immediately, with no silent-wrong state in between.
+
+The nested includes cost nothing: their guards are already set from the first
+pass, so the rename only ever reaches the one file's own text. That was already
+true of the `namespace` version — it had to be, or the nested content would
+have landed inside the namespace.
+
+### The part that came out for free
+
+`BITS_WORD` is `(sizeof(word_t)*8)` (`generic/types.h`). It is a macro, so it
+is expanded at each *use*, with whatever `word_t` means there — and inside the
+rename it means `x32_word_t`. So `memory_info_t`'s `n : BITS_WORD/2` becomes a
+16-bit field, and the whole KIP lays itself out in 32-bit words without a
+single width being written down twice. Confirmed in the image: `.kip_32` has
+the magic at 0 and `api_version` at 4, against 0 and 8 in `.kip`.
+
+Which incidentally answers what `KIP_BITS_WORD` was for. It is set by
+`x32comp/kernelinterface.h` and read *nowhere* — not in this tree, not in the
+2007 upstream import either. Someone saw that the KIP's field widths did not
+follow the KIP's word size and started to parameterise it; the C
+`sizeof`-derived form solves it by construction.
+
+### The UTCB had to become a function call again
+
+Compatibility mode's `utcb_t` is a union of the two layouts, and every accessor
+picks between them on a flag. That only works if the accessors are functions —
+and this migration had emptied `api/v4/generic-utcb.h` and inlined the field
+access at each call site (`self->utcb->pager`), which reads better everywhere
+except the one configuration that cannot do it.
+
+So `generic-utcb.h` is a set of C free functions again, `api/v4/accessors.c`,
+`api/v4/tcb.h`, both `sched-*/schedule.c` and `glue/v4-x86/thread.c` go through
+them, and `x32comp/utcb.h` supplies the dispatching set under the same names.
+On everything but compatibility mode they are the field access spelled out:
+**the reference config rebuilds byte-identical**, disassembly included.
+
+The layout itself moved to `glue/v4-x86/utcb-body.h`, which takes its struct
+name from `UTCB_NAME` so it can be emitted twice. `Mk/Makefile.voodoo` scans it
+for the `TCB_START_MARKER` field list along with `utcb.h`, and gets the plain
+64-bit layout because `utcb.h` keys the union off `!defined(BUILD_TCB_LAYOUT)`
+— which is right, since the generator's consumer is the 64-bit syscall stub.
+
+### One thing that genuinely could not be a static initializer
+
+`KIP_MEMORY_INFO` is `{{raw: (addr_word_t) &KIP_MEMDESCS_RAW}}`, where the
+"address" is a linker-computed `(offset << 16) + size`. For the 32-bit KIP that
+field is 32 bits wide, the value fits, and the linker could emit it — but to
+the compiler it is a truncating cast of a 64-bit symbol address, which is not a
+load-time constant. `kernel_interface_page_init` assigns it instead, under
+`KIP_MEMDESCS_RAW_AT_RUNTIME`.
+
+### What the sweep found once it was run properly
+
+§124's lesson was that a sweep over configurations needs the build directory
+reset every iteration. Acting on it turned up two failures that had been hidden
+behind a build directory whose config had drifted from every shipped one:
+
+  - `glue/v4-x86/exception.c` calls `frame->dump()` under `CONFIG_KDB` — the
+    eighth appearance of the gate-blind pattern, and it broke **seven** of the
+    eleven configurations. The main build directory's config has `CONFIG_KDB`
+    off, so nothing had compiled that line since it was converted.
+  - `CONFIG_KDB_BOOT_CONS` is read unguarded by `kdb/generic/console.c`, and
+    the pre-2010 configs in `contrib/configs` predate the option. Defaulted to
+    `rules.cml`'s 0.
+
+Plus one defective artifact: `x86-x64-p4-statictcbs.kernel.tar` ships
+`config/config.h` but no `config/.config`, and the *make* variables that decide
+which subsystems reach `SOURCES` come from `.config` — so it configured a kdb
+kernel and linked one without kdb. Derived from `config.h` when absent.
+
+All of this is now `tools/configsweep`, so the clean-tree sweep is a command
+rather than a discipline.
+
+### Result
+
+    build (11)          p4-smp  p4  p3  k8  p4-nokdb  p4-fp  p4-statictcbs
+                        p4-fullkdb  p4-newmdb  p4-iofp  p4-cm
+    boot verified (8)   the seven of §124, plus p4-cm
+    boot, with caveats  p4-fullkdb   -- needs TBUF_PERFMON=n under QEMU (§124)
+    do not boot (2)     p4-newmdb  p4-iofp   (§121-§122)
+
+`p4-cm` boots to the l4test menu, with sigma0 and the root task relinked: the
+extra `.kip_32` section pushes `.init` to 0x00f0f000, past sigma0's default
+0x00f00000 link base, and kickstart rejects the overlap. That is a link-base
+choice, not a kernel fault.
+
+Honest limit on what that proves: there is no 32-bit userland in this tree, so
+the compatibility path is exercised as far as `init_kip_32` — which does build
+the 32-bit KIP and run `memory_info_insert` on the 32-bit twin — and no
+further. The syscall dispatch, the UTCB dispatch and the 32-bit thread ids
+compile and are reachable, but nothing has called them.
+
+Gate: reference config byte-identical (332328, disassembly identical),
+`tools/boottest` PASS, `tools/configsweep` 11/11.

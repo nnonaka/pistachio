@@ -132,12 +132,13 @@ void tcb_create_startup_stack (tcb_t *self, void (*func)(void))
 
 
 /* arch/utcb accessor wrappers for the C api/v4 files (declared in api/v4/tcb.h).
-   utcb_t is a plain C-visible struct, so the utcb-delegating accessors read
-   self->utcb->field directly; the stack-based ones index tcb_get_stack_top. */
-word_t tcb_get_mr (tcb_t *self, word_t index)		{ ASSERT (index < IPC_NUM_MR); return self->utcb->mr[index]; }
-void   tcb_set_mr (tcb_t *self, word_t index, word_t value) { ASSERT (index < IPC_NUM_MR); self->utcb->mr[index] = value; }
-word_t tcb_get_br (tcb_t *self, word_t index)		{ return self->utcb->br[32U - index]; }
-void   tcb_set_br (tcb_t *self, word_t index, word_t value) { self->utcb->br[32U - index] = value; }
+   The utcb-delegating ones go through api/v4/generic-utcb.h's accessors, which
+   compatibility mode replaces with a 32/64-bit dispatch; the stack-based ones
+   index tcb_get_stack_top. */
+word_t tcb_get_mr (tcb_t *self, word_t index)		{ ASSERT (index < IPC_NUM_MR); return utcb_get_mr (self->utcb, index); }
+void   tcb_set_mr (tcb_t *self, word_t index, word_t value) { ASSERT (index < IPC_NUM_MR); utcb_set_mr (self->utcb, index, value); }
+word_t tcb_get_br (tcb_t *self, word_t index)		{ return utcb_get_br (self->utcb, 32U - index); }
+void   tcb_set_br (tcb_t *self, word_t index, word_t value) { utcb_set_br (self->utcb, 32U - index, value); }
 
 addr_t tcb_get_user_ip (tcb_t *self)			{ return (addr_t) tcb_get_stack_top (self)[KSTACK_UIP]; }
 addr_t tcb_get_user_sp (tcb_t *self)			{ return (addr_t) tcb_get_stack_top (self)[KSTACK_USP]; }
@@ -147,10 +148,35 @@ void   tcb_set_user_sp (tcb_t *self, addr_t sp)		{ tcb_get_stack_top (self)[KSTA
 void   tcb_set_user_flags (tcb_t *self, word_t flags)
 { tcb_get_stack_top (self)[KSTACK_UFLAGS] = (tcb_get_user_flags (self) & (~X86_USER_FLAGMASK)) | (flags & X86_USER_FLAGMASK); }
 
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+/*
+ * With compatibility mode the UTCB is a union of a 32- and a 64-bit UTCB and
+ * has no mr[] of its own, so the mr0 offset is spelled out.
+ *
+ * srXXX: This is rather ugly!  To create a 32-bit thread in a new address
+ * space, an application must call ThreadControl without a pager, then
+ * SpaceControl with appropriate flags, then ThreadControl with a pager.  The
+ * ThreadControl implementation calls space_allocate_utcb, which is implemented
+ * in glue and calls this function -- so the resource bits are updated here.
+ * The correct fix is to keep a list of TCBs per address space and update all
+ * of them in SpaceControl.
+ */
+#define UTCB_MR0_OFFSET	0x200
+
+word_t tcb_get_utcb_location (tcb_t *self)
+{
+    if (tcb_get_space (self) && space_is_compatibility_mode (tcb_get_space (self)))
+	resource_bits_add (&self->resource_bits, COMPATIBILITY_MODE);
+    return threadid_get_raw (&self->myself_local) - UTCB_MR0_OFFSET;
+}
+void   tcb_set_utcb_location (tcb_t *self, word_t loc)
+{ threadid_set_raw (&self->myself_local, loc + UTCB_MR0_OFFSET); }
+#else
 word_t tcb_get_utcb_location (tcb_t *self)
 { utcb_t *dummy = (utcb_t *) 0; return threadid_get_raw (&self->myself_local) - ((word_t) &dummy->mr[0]); }
 void   tcb_set_utcb_location (tcb_t *self, word_t loc)
 { utcb_t *dummy = (utcb_t *) 0; threadid_set_raw (&self->myself_local, loc + ((word_t) &dummy->mr[0])); }
+#endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
 
 void   tcb_set_cpu (tcb_t *self, cpuid_t cpu)
@@ -163,7 +189,7 @@ void   tcb_set_cpu (tcb_t *self, cpuid_t cpu)
     }
     /* only update UTCB if there is one */
     if (self->utcb)
-	self->utcb->processor_no = cpu;
+	utcb_set_processor_no (self->utcb, cpu);
     self->cpu = cpu;
 }
 
@@ -171,6 +197,10 @@ void   tcb_set_space (tcb_t *self, space_t *space)
 {
     self->space = space;
     self->pdir_cache = space ? (word_t) space_get_top_pdir_phys (space, tcb_get_cpu (self)) : (word_t) 0;
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+    if (space && space_is_compatibility_mode (space))
+	resource_bits_add (&self->resource_bits, COMPATIBILITY_MODE);
+#endif
 }
 
 void   tcb_init_stack (tcb_t *self)			{ self->stack = tcb_get_stack_top (self); }
@@ -204,7 +234,7 @@ msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t tim
 {
     msg_tag_t tag;
     sys_ipc (timeout, to, from);
-    tag.raw = self->utcb->mr[0];
+    tag.raw = utcb_get_mr (self->utcb, 0);
     return tag;
 }
 
@@ -216,7 +246,7 @@ void tcb_return_from_ipc (tcb_t *self)
 	     :
 	     : "r" (&tcb_get_stack_top (self)[KSTACK_RET_IPC]),
 	       "r" (self),
-	       "d" (self->utcb->mr[0]));
+	       "d" (utcb_get_mr (self->utcb, 0)));
     while (1);
 }
 
@@ -297,6 +327,7 @@ void tcb_switch_to (tcb_t *self, tcb_t *dest)
 	tcb_resources_load (&self->resources, self);
 }
 
+#if !defined(CONFIG_X86_COMPATIBILITY_MODE)
 void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count)
 {
     ASSERT (start + count <= IPC_NUM_MR);
@@ -311,6 +342,63 @@ void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count)
 	: "c" (count), "S" (&self->utcb->mr[start]),
 	  "D" (&dest->utcb->mr[start]));
 }
+#else /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
+void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count)
+{
+    ASSERT (start + count <= IPC_NUM_MR);
+    ASSERT (count > 0);
+
+    utcb_t *this_utcb = self->utcb;
+    utcb_t *dest_utcb = dest->utcb;
+
+    /* Optimized copy loops for 32/32 and 64/64 transfers */
+    if (EXPECT_FALSE (resource_bits_have_resource (&self->resource_bits, COMPATIBILITY_MODE)))
+    {
+	if (EXPECT_FALSE (resource_bits_have_resource (&dest->resource_bits, COMPATIBILITY_MODE)))
+	{
+	    word_t dummy;
+	    __asm__ __volatile__ (
+		"repnz movsl (%%rsi), (%%rdi)\n"
+		: /* output */
+		"=S" (dummy), "=D" (dummy), "=c" (dummy)
+		: /* input */
+		"c" (count), "S" (&this_utcb->x32.mr[start]),
+		"D" (&dest_utcb->x32.mr[start]));
+	}
+	else
+	{
+	    if (start == 0)
+	    {
+		/* Sign-extend the label (for page fault protocol). */
+		dest_utcb->x64.mr[0] = (s32_t) this_utcb->x32.mr[0];
+		count--;
+		start++;
+	    }
+	    for (; count > 0; count--, start++)
+		dest_utcb->x64.mr[start] = this_utcb->x32.mr[start];
+	}
+    }
+    else
+    {
+	if (EXPECT_FALSE (resource_bits_have_resource (&dest->resource_bits, COMPATIBILITY_MODE)))
+	{
+	    for (; count > 0; count--, start++)
+		dest_utcb->x32.mr[start] = this_utcb->x64.mr[start];
+	}
+	else
+	{
+	    word_t dummy;
+	    __asm__ __volatile__ (
+		"repnz movsq (%%rsi), (%%rdi)\n"
+		: /* output */
+		"=S" (dummy), "=D" (dummy), "=c" (dummy)
+		: /* input */
+		"c" (count), "S" (&this_utcb->x64.mr[start]),
+		"D" (&dest_utcb->x64.mr[start]));
+	}
+    }
+}
+#endif /* !defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
 void tcb_notify (tcb_t *self, void (*func)(void))
 {

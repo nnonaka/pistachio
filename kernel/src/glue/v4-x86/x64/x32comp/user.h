@@ -32,16 +32,16 @@
 #ifndef __GLUE__V4_X86__X64__X32COMP__USER_H__
 #define __GLUE__V4_X86__X64__X32COMP__USER_H__
 
-extern "C" void SECTION(".user.syscall_32.ipc") user_ipc_32();
-extern "C" void SECTION(".user.syscall_32.lipc") user_lipc_32();
-extern "C" void SECTION(".user.syscall_32.exregs") user_exchange_registers_32();
-extern "C" void SECTION(".user.syscall_32.threadctrl") user_thread_control_32();
-extern "C" void SECTION(".user.syscall_32.sysclock") user_system_clock_32();
-extern "C" void SECTION(".user.syscall_32.threadswtch") user_thread_switch_32();
-extern "C" void SECTION(".user.syscall_32.schedule") user_schedule_32();
-extern "C" void SECTION(".user.syscall_32.unmap") user_unmap_32();
-extern "C" void SECTION(".user.syscall_32.spacectrl") user_space_control_32();
-extern "C" void SECTION(".user.syscall_32.procctrl") user_processor_control_32();
-extern "C" void SECTION(".user.syscall_32.memctrl") user_memory_control_32();
+void SECTION(".user.syscall_32.ipc") user_ipc_32();
+void SECTION(".user.syscall_32.lipc") user_lipc_32();
+void SECTION(".user.syscall_32.exregs") user_exchange_registers_32();
+void SECTION(".user.syscall_32.threadctrl") user_thread_control_32();
+void SECTION(".user.syscall_32.sysclock") user_system_clock_32();
+void SECTION(".user.syscall_32.threadswtch") user_thread_switch_32();
+void SECTION(".user.syscall_32.schedule") user_schedule_32();
+void SECTION(".user.syscall_32.unmap") user_unmap_32();
+void SECTION(".user.syscall_32.spacectrl") user_space_control_32();
+void SECTION(".user.syscall_32.procctrl") user_processor_control_32();
+void SECTION(".user.syscall_32.memctrl") user_memory_control_32();
 
 #endif /* !__GLUE__V4_X86__X64__X32COMP__USER_H__ */

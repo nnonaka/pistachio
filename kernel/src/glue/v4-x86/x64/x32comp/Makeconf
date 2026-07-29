@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/glue/v4-x86/x64/x32comp/, init.cc kernelinterface.cc syscalls.cc user.cc)
+SOURCES += $(addprefix src/glue/v4-x86/x64/x32comp/, init.c kernelinterface.c syscalls.c user.c)
 
 ifeq ("$(CONFIG_CPU_X86_P4)","y")
 SOURCES += $(addprefix src/glue/v4-x86/x64/x32comp/, trap-sysenter.S)
@@ -46,8 +46,8 @@ CCFLAGS_src/glue/v4-x86/x64/x32comp/user = -DX64_32BIT_CODE\
 					$(subst -mcmodel=kernel,,\
 					  $(CCFLAGS)))
 
-src/glue/v4-x86/x64/x32comp/user.o: src/glue/v4-x86/x64/x32comp/user.cc
+src/glue/v4-x86/x64/x32comp/user.o: src/glue/v4-x86/x64/x32comp/user.c
 	@$(ECHO_MSG) $(subst $(SRCDIR)/,,$<)
 	@if [ ! -d $(dir $@) ]; then $(MKDIRHIER) $(dir $@); fi
-	cd $(dir $@) && $(CC) $(CPPFLAGS) $(CCFLAGS_$*) -x c++ -c $< -o $(notdir $@)
+	cd $(dir $@) && $(CC) $(CPPFLAGS) $(CCFLAGS_$*) -x c -c $< -o $(notdir $@)
 	cd $(dir $@) && $(OBJCOPY) -g -O elf64-x86-64 $(notdir $@) $(notdir $@)

@@ -144,7 +144,7 @@ typedef struct {
 {										\
     word_t x86_x64_dummy, x86_x64_uip;						\
     tcb_t *x86_x64_current = get_current_tcb();					\
-    utcb_t *utcb = x86_x64_current->get_utcb();					\
+    utcb_t *utcb = tcb_get_utcb (x86_x64_current);				\
     struct {									\
 	word_t       rdi;							\
 	word_t       r8;							\
@@ -160,7 +160,7 @@ typedef struct {
     x86_x64_ret.r11 = (word_t) tcb_get_user_flags(x86_x64_current);		\
     x86_x64_ret.rsp = (word_t) tcb_get_user_sp(x86_x64_current);			\
     x86_x64_uip = (word_t) tcb_get_user_ip(x86_x64_current);			\
-    if (utcb->is_compatibility_mode())						\
+    if (utcb_is_compatibility_mode (utcb))					\
     {										\
 	utcb->exreg32.control = cntrl;						\
 	__asm__ __volatile__("movq   (%[ret]), %%rbp	\n"			\
@@ -176,7 +176,7 @@ typedef struct {
 			     "=c" (x86_x64_dummy),	/* %2 RCX */		\
 			     "=d" (x86_x64_dummy)		/* %3 RDX */		\
 			     : /* inputs */					\
-				    "0" (threadid_32(result)), /* %4 RAX */	\
+				    "0" (threadid_raw_32(result)), /* %4 RAX */	\
 			     [ret]  "1" (&x86_x64_ret),	/* %5 RSI */		\
 				    "2" (x86_x64_uip),	/* %6 RCX */		\
 				    "3" (sp)		/* %7 RDX */		\

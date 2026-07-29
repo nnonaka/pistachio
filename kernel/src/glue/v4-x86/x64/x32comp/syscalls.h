@@ -33,7 +33,7 @@
 #define __GLUE__V4_X86__X64__X32COMP__SYSCALLS_H__
 
 
-extern "C" x86_x64_sysret_t syscall_dispatcher_32(word_t arg1,  /* RDI */
+x86_x64_sysret_t syscall_dispatcher_32(word_t arg1,  /* RDI */
 					        word_t arg2,  /* RSI */
 					        word_t arg3,  /* RDX */
 					        word_t uip,   /* RCX */

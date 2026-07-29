@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2006-2007, 2010,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x64/x32comp/user.cc
+ * File path:     glue/v4-x86/x64/x32comp/user.c
  * Description:   user-mode syscall stubs for 32-bit programs
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -64,8 +64,8 @@
 #endif /* !defined(CONFIG_X86_EM64T) */
 
 
-extern "C" void SECTION(".user.syscall_32.ipc") user_ipc_32_wrapper();
-void user_ipc_32_wrapper()
+void SECTION(".user.syscall_32.ipc") user_ipc_32_wrapper (void);
+void user_ipc_32_wrapper (void)
 {
     __asm__ __volatile__ (
 	"	.global user_lipc_32		\n"
@@ -113,8 +113,8 @@ void user_ipc_32_wrapper()
 	"	jmp	2b			\n"	/* continue */
         );
 }
-extern "C" void SECTION(".user.syscall_32.exregs") user_exchange_registers_32_wrapper();
-void user_exchange_registers_32_wrapper()
+void SECTION(".user.syscall_32.exregs") user_exchange_registers_32_wrapper (void);
+void user_exchange_registers_32_wrapper (void)
 {
     __asm__ __volatile__ (
 	BEGIN(user_exchange_registers_32, ".user.syscall_32.exregs")
@@ -135,8 +135,8 @@ void user_exchange_registers_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.sysclock") user_system_clock_32_wrapper();
-void user_system_clock_32_wrapper()
+void SECTION(".user.syscall_32.sysclock") user_system_clock_32_wrapper (void);
+void user_system_clock_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_system_clock_32,	  ".user.syscall_32.sysclock")
@@ -149,8 +149,8 @@ void user_system_clock_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.threadswtch") user_thread_switch_32_wrapper();
-void user_thread_switch_32_wrapper()
+void SECTION(".user.syscall_32.threadswtch") user_thread_switch_32_wrapper (void);
+void user_thread_switch_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_thread_switch_32,	  ".user.syscall_32.threadswtch")
@@ -179,8 +179,8 @@ void user_thread_switch_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.schedule") user_schedule_32_wrapper();
-void user_schedule_32_wrapper()
+void SECTION(".user.syscall_32.schedule") user_schedule_32_wrapper (void);
+void user_schedule_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_schedule_32,		  ".user.syscall_32.schedule")
@@ -194,8 +194,8 @@ void user_schedule_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.unmap") user_unmap_32_wrapper();
-void user_unmap_32_wrapper()
+void SECTION(".user.syscall_32.unmap") user_unmap_32_wrapper (void);
+void user_unmap_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_unmap_32,		  ".user.syscall_32.unmap")
@@ -206,8 +206,8 @@ void user_unmap_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.threadctrl") user_thread_control_32_wrapper();
-void user_thread_control_32_wrapper()
+void SECTION(".user.syscall_32.threadctrl") user_thread_control_32_wrapper (void);
+void user_thread_control_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_thread_control_32,	  ".user.syscall_32.threadctrl")
@@ -233,8 +233,8 @@ void user_thread_control_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.spacectrl") user_space_control_32_wrapper();
-void user_space_control_32_wrapper()
+void SECTION(".user.syscall_32.spacectrl") user_space_control_32_wrapper (void);
+void user_space_control_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_space_control_32,	  ".user.syscall_32.spacectrl")
@@ -251,8 +251,8 @@ void user_space_control_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.procctrl") user_processor_control_32_wrapper();
-void user_processor_control_32_wrapper()
+void SECTION(".user.syscall_32.procctrl") user_processor_control_32_wrapper (void);
+void user_processor_control_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_processor_control_32,  ".user.syscall_32.procctrl")
@@ -262,8 +262,8 @@ void user_processor_control_32_wrapper()
         );
 }
 
-extern "C" void SECTION(".user.syscall_32.memctrl") user_memory_control_32_wrapper();
-void user_memory_control_32_wrapper()
+void SECTION(".user.syscall_32.memctrl") user_memory_control_32_wrapper (void);
+void user_memory_control_32_wrapper (void)
 {
     __asm__ __volatile__ (
         BEGIN(user_memory_control_32,	  ".user.syscall_32.memctrl")

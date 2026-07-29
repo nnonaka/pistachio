@@ -134,29 +134,31 @@ void acpi_unmap(addr_t addr)
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
 extern addr_t utcb_page;
 
-word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
+word_t space_t_space_control (space_t * self, word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid)
 {
-    // Ignore parameter if 'c' bit is not set.
+    /* Ignore parameter if 'c' bit is not set. */
     if ((ctrl & (((word_t) 1) << 63)) == 0)
 	return 0;
 
-    if (!data.compatibility_mode)
+    if (!self->base.data.compatibility_mode)
     {
-	data.compatibility_mode = true;
+	self->base.data.compatibility_mode = true;
 
 	/* Add 32-bit UTCB mapping, since the gs segment descriptor
 	   is truncated in 32-bit mode.
 	   Copied from init_kernel_mappings. */
-	remap_area((addr_t) UTCB_MAPPING_32,
-		   virt_to_phys(utcb_page),
-		   pgent_t::size_4k, X86_PAGE_SIZE, true, false, false);
+	space_remap_area (self, (addr_t) UTCB_MAPPING_32,
+			  virt_to_phys (utcb_page),
+			  X86_PGSIZE_4K, X86_PAGE_SIZE, true, false, false);
 
 	/* Replace 64-bit KIP mapping with 32-bit KIP.
 	   Copied from init. */
-	if (is_initialized())
+	if (space_is_initialized (self))
 	{
-	    add_mapping(get_kip_page_area().get_base(), virt_to_phys((addr_t) x32::get_kip()), pgent_t::size_4k, 
-			false, false, false);
+	    fpage_t kip_page_area = space_get_kip_page_area (self);
+	    space_add_mapping (self, fpage_get_base (&kip_page_area),
+			       virt_to_phys ((addr_t) x32_get_kip ()), X86_PGSIZE_4K,
+			       false, false, false, true);
 	}
     }
 

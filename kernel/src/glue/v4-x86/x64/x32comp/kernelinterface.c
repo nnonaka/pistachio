@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2006-2007,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x64/x32comp/kernelinterface.cc
+ * File path:     glue/v4-x86/x64/x32comp/kernelinterface.c
  * Description:   kernel interface page for 32-bit programs
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -43,12 +43,22 @@
 #define KIP_SYSCALL		KIP_SYSCALL_32
 #define KIP_API_FLAGS		KIP_API_FLAGS_32
 
+#define KIP_MEMDESCS_RAW_AT_RUNTIME
+
 #define KIP_MEMDESCS		memory_descriptors_32
 #define KIP_MEMDESCS_SIZE	_memory_descriptors_size_32
 #define KIP_MEMDESCS_RAW	_memory_descriptors_raw_32
 
-namespace x32 {
+/*
+ * The second copy of the kernel interface page: api/v4/kernelinterface.c
+ * again, built with the 32-bit types and emitted under x32_ names.  The KIP_*
+ * macros above point its data at the kip_32 section; x32-names.h keeps its
+ * definitions from colliding with the 64-bit ones.
+ */
+#include INC_GLUE_SA(x32comp/x32-names.h)
 
-#include "../../../../api/v4/kernelinterface.cc"
+#include "../../../../api/v4/kernelinterface.c"
 
-}
+#define X32_UNRENAME
+#include INC_GLUE_SA(x32comp/x32-names.h)
+#undef X32_UNRENAME

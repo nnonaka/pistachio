@@ -34,7 +34,7 @@
 
 #include <init.h>
 
-void SECTION(SEC_INIT) init_kip_32();
+void SECTION(SEC_INIT) init_kip_32 (void);
 
 
 #endif /* !__GLUE__V4_X86__X64__X32COMP__INIT_H__ */

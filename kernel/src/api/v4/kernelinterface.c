@@ -73,7 +73,18 @@ BEGIN_DECLS
 #endif
 extern word_t KIP_MEMDESCS_SIZE[];
 extern word_t KIP_MEMDESCS_RAW[];
+/*
+ * KIP_MEMDESCS_RAW is a linker-computed value (offset << 16 | size), taken
+ * here as the address of a symbol.  Where the KIP's word is narrower than the
+ * host's -- the 32-bit KIP of x86 compatibility mode -- the truncating cast is
+ * not a load-time constant even though the value fits, so that KIP fills the
+ * field in kernel_interface_page_init instead.
+ */
+#if defined(KIP_MEMDESCS_RAW_AT_RUNTIME)
+#define KIP_MEMORY_INFO {{raw: 0}}
+#else
 #define KIP_MEMORY_INFO {{raw: (addr_word_t) &KIP_MEMDESCS_RAW}}
+#endif
   
 kernel_interface_page_t KIP UNIT(KIP_SECTION) =
 {
@@ -267,6 +278,10 @@ void SECTION(".init") init_hello (void)
 
 void SECTION(".init") kernel_interface_page_init (kernel_interface_page_t *self)
 {
+#if defined(KIP_MEMDESCS_RAW_AT_RUNTIME)
+    self->memory_info.raw = (word_t) (addr_word_t) &KIP_MEMDESCS_RAW;
+#endif
+
 #if defined(KIP_SYSCALL)
 #define SET_KIP_SYSCALL(x) \
     self->x##_syscall = KIP_SYSCALL(user_##x)

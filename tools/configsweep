@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# configsweep -- build every shipped configuration of an architecture from a
+#                freshly extracted config tar, and report which ones compile.
+#
+# The point is the freshness.  A build directory carries hand edits from
+# earlier experiments -- an option flipped to isolate a fault, a serial console
+# enabled by tools/boottest -- and a sweep over configurations run in a dirty
+# directory answers a question nobody asked.  See doc/notes/cpp-to-c-migration.md
+# §124, where exactly that produced a self-contradictory bisect.
+#
+# Usage:
+#   tools/configsweep [PATTERN]      # default pattern: x86-x64-*
+#
+# Builds into build/sweep/<config>/kernel.  Exit status is 0 only if every
+# configuration built.
+#
+set -u
+
+TOP=$(cd "$(dirname "$0")/.." && pwd)
+PATTERN=${1:-x86-x64-*}
+OUT=$TOP/build/sweep
+REF=$TOP/build/x86-x64-p4-smp/kernel	# donor for Makefile / Makeconf.local
+JOBS=${JOBS:-8}
+rc=0
+
+if [ ! -f "$REF/Makeconf.local" ]; then
+    echo "configsweep: no reference build dir at $REF" >&2; exit 2
+fi
+
+rm -rf "$OUT"; mkdir -p "$OUT"
+for tar in "$TOP"/contrib/configs/$PATTERN.kernel.tar; do
+    [ -e "$tar" ] || { echo "configsweep: no configs match '$PATTERN'" >&2; exit 2; }
+    name=$(basename "$tar" .kernel.tar)
+    d="$OUT/$name/kernel"
+    mkdir -p "$d"; (cd "$d" && tar xf "$tar")
+
+    cfg="$d/config/.config"
+    # x86-x64-p4-statictcbs.kernel.tar ships config.h but no .config, and the
+    # build reads .config for the make-level CONFIG_* variables that gate which
+    # subsystems land in SOURCES.  Derive one when it is missing.
+    if [ ! -f "$cfg" ]; then
+	sed -n -e 's/^#define  *\(CONFIG_[A-Za-z0-9_]*\)  *\(.*\)$/\1=\2/p' \
+	       -e 's/^#undef  *\(CONFIG_[A-Za-z0-9_]*\).*$/# \1 is not set/p' \
+	    "$d/config/config.h" | sed 's/=1$/=y/' > "$cfg"
+    fi
+
+    cpu=p4
+    grep -q '^CONFIG_CPU_X86_P3=y' "$cfg" && cpu=p3
+    grep -q '^CONFIG_CPU_X86_K8=y' "$cfg" && cpu=k8
+    sched=rr
+    grep -q '^CONFIG_X_SCHED_HS=y' "$cfg" && sched=hs
+
+    sed -e "s|^BUILDDIR.*|BUILDDIR = \$(CURDIR)|" \
+	-e "s|^CPU=.*|CPU=$cpu|" -e "s|^SCHED=.*|SCHED=$sched|" \
+	"$REF/Makeconf.local" > "$d/Makeconf.local"
+    cp "$REF/Makefile" "$d/Makefile"
+
+    if (cd "$d" && make -j"$JOBS" > build.log 2>&1); then
+	printf '%-24s OK    %s bytes\n' "$name" "$(stat -c%s "$d/x86-kernel")"
+    else
+	printf '%-24s FAIL  %s errors  (%s)\n' "$name" \
+	       "$(grep -c ' error:' "$d/build.log")" "$d/build.log"
+	rc=1
+    fi
+done
+exit $rc

@@ -36,21 +36,6 @@
 #include INC_API(fpage.h)
 #include INC_API(thread.h)
 
-#if defined(CONFIG_X86_COMPATIBILITY_MODE)
-#include INC_GLUE_SA(x32comp/tcb.h)
-#else 
-
-
-/**
- * copies a set of message registers from one UTCB to another
- * @param dest destination TCB
- * @param start MR start index
- * @param count number of MRs to be copied
- */
-
-
-#endif /* !defined(CONFIG_X86_COMPATIBILITY_MODE) */
-
 
 
 /********************************************************************** 

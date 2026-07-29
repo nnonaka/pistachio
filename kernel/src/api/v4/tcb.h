@@ -242,13 +242,14 @@ INLINE void       tcb_set_saved_state (tcb_t *self, word_t state)
 	{ self->misc.saved_state[0].state = state; }
 INLINE void       tcb_set_saved_partner (tcb_t *self, threadid_t tid)
 	{ self->misc.saved_state[0].partner = tid; }
-/* preempt_flags/cop_flags are plain data members of the UTCB. */
-INLINE word_t     tcb_get_cop_flags (const tcb_t *self)		{ return self->utcb->cop_flags; }
-INLINE threadid_t tcb_get_intended_receiver (const tcb_t *self)	{ return self->utcb->intended_receiver; }
+/* preempt_flags/cop_flags live in the UTCB; go through the accessors so that
+   x86 compatibility mode can dispatch between the 32- and 64-bit UTCBs. */
+INLINE word_t     tcb_get_cop_flags (const tcb_t *self)		{ return utcb_get_cop_flags (self->utcb); }
+INLINE threadid_t tcb_get_intended_receiver (const tcb_t *self)	{ return utcb_get_intended_receiver (self->utcb); }
 INLINE preempt_flags_t tcb_get_preempt_flags (const tcb_t *self)
 {
     preempt_flags_t flags;
-    flags.raw = self->utcb->preempt_flags;
+    flags.raw = utcb_get_preempt_flags (self->utcb);
     return flags;
 }
 INLINE word_t     tcb_get_state (const tcb_t *self)		{ return self->thread_state.state; }

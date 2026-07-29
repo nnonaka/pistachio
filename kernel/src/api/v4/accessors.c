@@ -252,23 +252,23 @@ void tcb_enqueue_send (tcb_t *self, tcb_t *t)
     queue_state_set (&self->queue_state, QUEUE_STATE_SEND);
 }
 
-word_t tcb_get_error_code (tcb_t *self)			{ return self->utcb->error_code; }
+word_t tcb_get_error_code (tcb_t *self)			{ return utcb_get_error_code (self->utcb); }
 
-threadid_t tcb_get_exception_handler (tcb_t *self)	{ return self->utcb->exception_handler; }
+threadid_t tcb_get_exception_handler (tcb_t *self)	{ return utcb_get_exception_handler (self->utcb); }
 
-threadid_t tcb_get_pager (tcb_t *self)			{ return self->utcb->pager; }
+threadid_t tcb_get_pager (tcb_t *self)			{ return utcb_get_pager (self->utcb); }
 
 threadid_t tcb_get_saved_partner (tcb_t *self)		{ return self->misc.saved_state[0].partner; }
 
-msg_tag_t tcb_get_tag (tcb_t *self)			{ msg_tag_t tag; tag.raw = self->utcb->mr[0]; return tag; }
+msg_tag_t tcb_get_tag (tcb_t *self)			{ msg_tag_t tag; tag.raw = utcb_get_mr (self->utcb, 0); return tag; }
 
-word_t tcb_get_user_handle (tcb_t *self)		{ return self->utcb->user_defined_handle; }
+word_t tcb_get_user_handle (tcb_t *self)		{ return utcb_get_user_defined_handle (self->utcb); }
 
-threadid_t tcb_get_virtual_sender (tcb_t *self)		{ return self->utcb->virtual_sender; }
+threadid_t tcb_get_virtual_sender (tcb_t *self)		{ return utcb_get_virtual_sender (self->utcb); }
 
-time_t tcb_get_xfer_timeout_rcv (tcb_t *self)		{ timeout_t t = self->utcb->xfer_timeout; return timeout_get_rcv (&t); }
+time_t tcb_get_xfer_timeout_rcv (tcb_t *self)		{ timeout_t t = utcb_get_xfer_timeout (self->utcb); return timeout_get_rcv (&t); }
 
-time_t tcb_get_xfer_timeout_snd (tcb_t *self)		{ timeout_t t = self->utcb->xfer_timeout; return timeout_get_snd (&t); }
+time_t tcb_get_xfer_timeout_snd (tcb_t *self)		{ timeout_t t = utcb_get_xfer_timeout (self->utcb); return timeout_get_snd (&t); }
 
 bool   tcb_is_local_cpu (tcb_t *self)			{ return get_current_cpu () == tcb_get_cpu (self); }
 
@@ -276,20 +276,20 @@ void tcb_lock (tcb_t *self)				{ spinlock_lock (&self->tcb_lock); }
 
 void tcb_lock_init (tcb_t *self)			{ spinlock_init (&self->tcb_lock, 0); }
 
-void   tcb_set_actual_sender (tcb_t *self, threadid_t tid) { self->utcb->virtual_sender = tid; }
+void   tcb_set_actual_sender (tcb_t *self, threadid_t tid) { utcb_set_virtual_sender (self->utcb, tid); }
 
-void   tcb_set_error_code (tcb_t *self, word_t err)	{ self->utcb->error_code = err; }
+void   tcb_set_error_code (tcb_t *self, word_t err)	{ utcb_set_error_code (self->utcb, err); }
 
-void   tcb_set_exception_handler (tcb_t *self, threadid_t tid) { self->utcb->exception_handler = tid; }
+void   tcb_set_exception_handler (tcb_t *self, threadid_t tid) { utcb_set_exception_handler (self->utcb, tid); }
 
 void   tcb_set_global_id (tcb_t *self, threadid_t tid)
-{ self->myself_global = tid; ASSERT (self->utcb); self->utcb->my_global_id = tid; }
+{ self->myself_global = tid; ASSERT (self->utcb); utcb_set_my_global_id (self->utcb, tid); }
 
-void   tcb_set_pager (tcb_t *self, threadid_t tid)	{ self->utcb->pager = tid; }
+void   tcb_set_pager (tcb_t *self, threadid_t tid)	{ utcb_set_pager (self->utcb, tid); }
 
-void   tcb_set_tag (tcb_t *self, msg_tag_t tag)		{ self->utcb->mr[0] = tag.raw; }
+void   tcb_set_tag (tcb_t *self, msg_tag_t tag)		{ utcb_set_mr (self->utcb, 0, tag.raw); }
 
-void   tcb_set_user_handle (tcb_t *self, word_t handle)	{ self->utcb->user_defined_handle = handle; }
+void   tcb_set_user_handle (tcb_t *self, word_t handle)	{ utcb_set_user_defined_handle (self->utcb, handle); }
 
 void tcb_unlock (tcb_t *self)				{ spinlock_unlock (&self->tcb_lock); }
 

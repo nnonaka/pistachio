@@ -2,8 +2,8 @@
  *                
  * Copyright (C) 2002-2003, 2006-2007,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/utcb.h
- * Description:   UTCB for IA32
+ * File path:     glue/v4-x86/utcb-body.h
+ * Description:   UTCB layout for IA32, as an includable body
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,42 +29,44 @@
  * $Id: utcb.h,v 1.15 2006/10/20 16:30:13 reichelt Exp $
  *                
  ********************************************************************/
-#ifndef __GLUE__V4_X86__UTCB_H__
-#define __GLUE__V4_X86__UTCB_H__
-
-#include INC_API(types.h)
-#include INC_API(thread.h)
-
 /*
- * BUILD_TCB_LAYOUT is the offset generator (Mk/Makefile.voodoo), which asks
- * for offsets of the UTCB fields by name.  Under compatibility mode utcb_t is
- * a union with no fields of its own, so the generator gets the plain 64-bit
- * layout -- which is the one its consumer, the 64-bit syscall stub in
- * x64/user.c, is computing offsets into.
+ * The UTCB layout, with its name taken from UTCB_NAME.  Split out of utcb.h so
+ * that compatibility mode can emit it twice: once for the 64-bit UTCB
+ * (x64_utcb_t) and once, with the API types renamed to their 32-bit twins, for
+ * the 32-bit one (x32_utcb_t).  See x32comp/utcb.h.
+ *
+ * No include guard: this file is meant to be included more than once.
  */
-#if defined(CONFIG_X86_COMPATIBILITY_MODE) && !defined(BUILD_TCB_LAYOUT)
+#if !defined(UTCB_NAME)
+#error UTCB_NAME must name the struct this expands to
+#endif
 
-/*
- * Compatibility mode: the UTCB is one of two layouts.  Emit the 64-bit one
- * here under its own name; x32comp/utcb.h emits the 32-bit twin and defines
- * utcb_t as the union of the pair, along with the accessors that dispatch
- * between them (the ones api/v4/generic-utcb.h supplies everywhere else).
- */
-#define UTCB_NAME x64_utcb_t
-#include INC_GLUE(utcb-body.h)
-#undef UTCB_NAME
+struct UTCB_NAME
+{
+    /* do not delete this TCB_START_MARKER */
 
-#include INC_GLUE_SA(x32comp/utcb.h)
+    word_t              compatibility_mode;     /* -256         */
+    word_t		padding0[15];		/* -254 .. -200 */
+    word_t		br[IPC_NUM_BR];		/* -196 .. -64	*/
+    threadid_t		my_global_id;		/* -60		*/
+    word_t		processor_no;		/* -56		*/
+    word_t		user_defined_handle;	/* -52		*/
+    threadid_t		pager;			/* -48		*/
+    threadid_t		exception_handler;	/* -44		*/
+    u8_t		preempt_flags;		/* -40		*/
+    u8_t		cop_flags;
+    u16_t		reserved0[sizeof(word_t)/2-1];
+    word_t		error_code;		/* -36		*/
+    timeout_t		xfer_timeout;		/* -32		*/
+    threadid_t		intended_receiver;	/* -28		*/
+    threadid_t		virtual_sender;		/* -24		*/
+    word_t		reserved1[4];		/* -20 .. -4	*/
+    word_t              word_size_mask;         /* - 4 ..  0 */
+    word_t		mr[IPC_NUM_MR];		/* 0 .. 252	*/
 
-#else /* !defined(CONFIG_X86_COMPATIBILITY_MODE) || defined(BUILD_TCB_LAYOUT) */
-
-#define UTCB_NAME utcb_t
-#include INC_GLUE(utcb-body.h)
-#undef UTCB_NAME
-
-#include INC_API(generic-utcb.h)
-
-#endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) && !defined(BUILD_TCB_LAYOUT) */
+    
+    /* do not delete this TCB_END_MARKER */
 
 
-#endif /* !__GLUE__V4_X86__UTCB_H__ */
+} __attribute__((packed));
+typedef struct UTCB_NAME UTCB_NAME;

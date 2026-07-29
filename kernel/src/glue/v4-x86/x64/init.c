@@ -175,7 +175,7 @@ void SECTION(SEC_INIT) setup_gdt(x86_tss_t *tss, cpuid_t cpuid)
     x86_segdesc_set_seg (&gdt.segdsc[GDT_IDX(X86_UDS)], (u64_t) 0, X86_SEGDESC_DATA, 3, X86_SEGDESC_M_LONG, X86_SEGDESC_MSR_NONE);
 
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
-    gdt.segdsc[GDT_IDX(X86_UCS32)].set_seg((u64_t) 0, x86_segdesc_t::code, 3, x86_segdesc_t::m_comp);
+    x86_segdesc_set_seg (&gdt.segdsc[GDT_IDX(X86_UCS32)], (u64_t) 0, X86_SEGDESC_CODE, 3, X86_SEGDESC_M_COMP, X86_SEGDESC_MSR_NONE);
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
     /* TODO: Assertion correct ? */

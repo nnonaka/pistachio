@@ -144,6 +144,15 @@ struct x86_space_t {
 } __attribute__((aligned(X86_PTAB_BYTES)));
 typedef struct x86_space_t x86_space_t;
 
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+/* space_t derives from x86_space_t (glue/v4-x86/space.h), which is not yet
+   complete here, so this takes the base and the callers pass &space->base. */
+INLINE bool x86_space_is_compatibility_mode (x86_space_t *self)
+{
+    return self->data.compatibility_mode != 0;
+}
+#endif
+
 
 
 

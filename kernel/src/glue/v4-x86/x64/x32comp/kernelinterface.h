@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2006-2008,  Karlsruhe University
+ * Copyright (C) 2006, 2008,  Karlsruhe University
  *                
  * File path:     glue/v4-x86/x64/x32comp/kernelinterface.h
- * Description:   Version 4 kernel-interface page for Compatibility Mode
+ * Description:   32-bit twin of the kernel interface page
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,11 +26,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: kernelinterface.h,v 1.2 2006/10/20 14:47:27 reichelt Exp $
+ * $Id: types.h,v 1.2 2006/10/20 16:18:38 reichelt Exp $
  *                
  ********************************************************************/
-
-
 #ifndef __GLUE__V4_X86__X64__X32COMP__KERNELINTERFACE_H__
 #define __GLUE__V4_X86__X64__X32COMP__KERNELINTERFACE_H__
 
@@ -46,7 +44,7 @@
 #define KIP_SECTION		"kip_32"
 #define KIP_PROC_DESC_LOG2SIZE	4
 
-namespace x32 {
+#include INC_GLUE_SA(x32comp/x32-names.h)
 
 #undef __API__V4__KERNELINTERFACE_H__
 #undef __API__V4__MEMDESC_H__
@@ -54,13 +52,28 @@ namespace x32 {
 #undef __GENERIC__MEMREGION_H__
 #include INC_API(kernelinterface.h)
 
-}
+#define X32_UNRENAME
+#include INC_GLUE_SA(x32comp/x32-names.h)
+#undef X32_UNRENAME
 
+/*
+ * Put the KIP macros back to the 64-bit values for the rest of the
+ * translation unit -- FEATURESTRING places its strings by KIP_SECTION, and
+ * this header can land anywhere in an include chain.  Restoring rather than
+ * merely undefining, because the defaults live inside api/v4's include
+ * guards and so are not chosen a second time.  (This file is x64-only, so
+ * the values are the CONFIG_IS_64BIT ones.)
+ */
 #ifndef KIP_SECONDARY
 #undef KIP
 #undef KIP_BITS_WORD
 #undef KIP_SECTION
 #undef KIP_PROC_DESC_LOG2SIZE
+
+#define KIP			kip
+#define KIP_BITS_WORD		64
+#define KIP_SECTION		"kip"
+#define KIP_PROC_DESC_LOG2SIZE	5
 #endif
 
 

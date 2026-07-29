@@ -3,7 +3,7 @@
  * Copyright (C) 2006, 2008,  Karlsruhe University
  *                
  * File path:     glue/v4-x86/x64/x32comp/types.h
- * Description:   types for Compatibility Mode
+ * Description:   32-bit twins of the V4 API types
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,41 +37,48 @@
 #undef TIME_BITS_WORD
 #define TIME_BITS_WORD 32
 
-namespace x32 {
+/*
+ * The second copy of api/v4/types.h, with a 32-bit word.  x32-names.h renames
+ * everything it declares out of the way of the 64-bit copy already included
+ * above; see that header for how this stands in for `namespace x32'.
+ */
+#include INC_GLUE_SA(x32comp/x32-names.h)
 
-	typedef u32_t word_t;
-	typedef word_t addr_t;
+typedef u32_t word_t;
+typedef word_t addr_t;
 
 #undef __API__V4__TYPES_H__
 #include INC_API(types.h)
 
-}
+#define X32_UNRENAME
+#include INC_GLUE_SA(x32comp/x32-names.h)
+#undef X32_UNRENAME
 
-INLINE x32::time_t time_32(time_t t)
+INLINE x32_time_t time_32 (time_t t)
 {
-    x32::time_t r;
-    r.set_raw(t.raw);
+    x32_time_t r;
+    r.raw = t.raw;
     return r;
 }
 
-INLINE time_t time(x32::time_t t)
+INLINE time_t time_64 (x32_time_t t)
 {
     time_t r;
-    r.set_raw(t.raw);
+    r.raw = t.raw;
     return r;
 }
 
-INLINE x32::timeout_t timeout_32(timeout_t t)
+INLINE x32_timeout_t timeout_32 (timeout_t t)
 {
-    x32::timeout_t r;
-    r.set_raw(t.raw);
+    x32_timeout_t r;
+    r.raw = (x32_word_t) t.raw;
     return r;
 }
 
-INLINE timeout_t timeout(x32::timeout_t t)
+INLINE timeout_t timeout_64 (x32_timeout_t t)
 {
     timeout_t r;
-    r.set_raw(t.raw);
+    r.raw = t.raw;
     return r;
 }
 
