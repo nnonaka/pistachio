@@ -165,7 +165,13 @@ SECTIONS
 	{
 	    *(.kdebug);
 	    *(.kdebug-bss);
-	    *(.comment);	
+	    /* NB: .comment is claimed by /DISCARD/ below, and must not be
+	       matched here.  With CONFIG_KDB off there is no .kdebug input, so
+	       .comment would be this section's only content -- and .comment is
+	       not SHF_ALLOC, which makes the whole output section non-alloc.
+	       The location counter then does not run through it, `.' wraps past
+	       2^64, and .init is linked a gigabyte high: the kernel loads over
+	       sigma0 and kickstart refuses to boot it. */
 	}
 	. = ALIGN(4K);
 #include <generic/linkersets.ldi> 

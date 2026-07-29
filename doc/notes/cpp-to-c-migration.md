@@ -5551,3 +5551,96 @@ compile and are reachable, but nothing has called them.
 
 Gate: reference config byte-identical (332328, disassembly identical),
 `tools/boottest` PASS, `tools/configsweep` 11/11.
+
+
+## §126 — Boot-testing all eleven: nine reach userland, and two never could
+
+With §125's sweep building every x64 configuration, the obvious next question
+is which of them run. Booted all eleven from clean-tree builds
+(`tools/configsweep`, then `tools/boottest` on each). Nine reach userland.
+
+    boot to the l4test menu (9)   p4-smp  p4  p3  k8  p4-nokdb  p4-fp
+                                  p4-statictcbs  p4-cm  p4-fullkdb*
+    do not boot (2)               p4-newmdb  p4-iofp   (§121-§122)
+
+    * p4-fullkdb needs CONFIG_TBUF_PERFMON=n under QEMU (§124's rdpmc) and a
+      'g' at the KDB break-in prompt.  It was never failing -- it was waiting.
+
+All eleven were booted against one userland with sigma0 at 0x01000000 and the
+root task at 0x01400000, rather than the configured 0x00f00000/0x01000000:
+`p4-cm`'s extra `.kip_32` section pushes `.init` past sigma0's link base and
+kickstart refuses the overlap. Using the relinked pair for every configuration
+keeps the eleven runs comparable.
+
+### Two configurations were failing before the kernel ran
+
+`p3` and `p4-nokdb` linked `.init` at **0x40101000** — a gigabyte up, past the
+256 MB QEMU gives them — so kickstart saw the kernel's span swallow sigma0 and
+refused to launch.
+
+The cause is four characters in the linker script. `.kdebug` collected
+`*(.comment)`, and with `CONFIG_KDB` off there is no `.kdebug` input at all, so
+`.comment` was the output section's only content. `.comment` is not
+`SHF_ALLOC`; a section whose entire content is non-alloc is itself non-alloc;
+the location counter does not run through a non-alloc section; `.` wrapped past
+2^64, and `. - KERNEL_OFFSET` came out a gigabyte high.
+
+`.comment` was *already* listed in the script's `/DISCARD/` — the earlier match
+simply won. Deleting it from `.kdebug` fixes the link and, incidentally, stops
+a 50-byte `GCC: (Ubuntu 13.3.0-...)` identification string being loaded into an
+allocated, executable section of every kernel this tree has built.
+
+### And one was triple-faulting on its first `printf`
+
+`k8` launched and then exited QEMU within five seconds with no output at all.
+`-d int` showed a single `v=0e` straight into `v=08`; `-d in_asm` showed the
+last block executed was
+
+    mov  -0x1b4b(%rip),%rax      # kdb_current_console
+    shl  $0x5,%rax               # sizeof(kdb_console_t)
+    jmp  *-0x3f3f92b0(%rax)      # kdb_consoles[cur].putc
+
+jumping to 0, running off through the BIOS area and into `.rodata`. That is
+`putc`, on the very first `printf` — the `CONFIG_VERBOSE_INIT` banner.
+
+`k8`'s configuration has `CONFIG_DEBUG` set and `CONFIG_KDB` **unset**. That
+combination compiles the debug output but no console driver: every driver is
+gated on a `CONFIG_KDB_CONS_*`, and those need `CONFIG_KDB`. The linker set is
+empty, `kdb_consoles[0].putc` is null, and the first character printed is a
+triple fault — nothing to see, and no way to see it.
+
+`init_console` and the console-switch command have always tested that pointer
+before calling it. `putc` and `getc` never did, in this tree or in the upstream
+import. They do now: two instructions in the debug path, and `k8` boots.
+
+Note what the l4test output on `k8` is and is not. The kernel prints nothing —
+it has no console. The banner and menu on the serial line come from the
+*userland's* own COM driver (`user/lib/io`), so reaching the menu still proves
+kernel, sigma0 and root task all ran. What it does not prove is that anything
+in the kernel printed. The menu then polls a console that is not there, so
+`k8` spins: 174167 `int3` in sixty seconds, against thirteen interrupts total
+for `p4-smp` sitting idle at the same prompt. That is the userland busy-waiting
+on an empty console, not a kernel fault.
+
+### The gate, and a lesson about the gate
+
+    709 symbols in common, 706 with identical bodies
+
+The three that differ are `putc` and `getc` — the null tests, deliberate — and
+`cmd_virt_to_phys`, which is not a code change at all: the `.comment` bytes sat
+directly after it, so objdump had been disassembling them as part of that
+symbol. Its own instructions are untouched.
+
+Getting that number required admitting the comparison had been wrong. The
+ad-hoc script used up to here diffed two whole disassemblies and piped the
+result through `head -60`. That is fine while changes are tiny — and every
+earlier check in this migration produced two or twenty-two differing lines, well
+inside the window, so those conclusions stand. But `putc` growing by sixteen
+bytes shifts every symbol after it in `.kdebug`, and the honest diff was 10635
+lines: `head` reported fifteen hunks of "only a call target moved" and hid the
+rest. A truncated verification does not fail loudly; it agrees with you.
+
+`tools/cmpsyms` replaces it: split at symbol boundaries, drop each
+instruction's own address, replace hex literals and branch targets with a
+placeholder, compare bodies. Whole-section shifts stop mattering and the number
+means what it says.

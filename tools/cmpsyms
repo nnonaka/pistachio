@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""cmpsyms REF NEW -- compare two kernel images symbol body by symbol body.
+
+Whole-section shifts (a function growing moves everything after it) swamp a
+plain disassembly diff, so normalise: split at symbol boundaries, drop each
+instruction's own address, and replace every hex literal and branch target
+with a placeholder.  What is left is what the function actually does.
+"""
+import re, subprocess, sys
+
+HEAD = re.compile(r'^([0-9a-f]+) <(.+)>:$')
+HEX  = re.compile(r'\b(?:0x)?[0-9a-f]{2,}\b')
+
+def bodies(path):
+    out = subprocess.run(['objdump', '-d', '--no-show-raw-insn', path],
+                         capture_output=True, text=True).stdout
+    syms, cur = {}, None
+    for ln in out.splitlines():
+        m = HEAD.match(ln.strip())
+        if m:
+            cur = m.group(2); syms[cur] = []
+        elif cur and '\t' in ln:
+            insn = ln.split('\t', 1)[1]
+            insn = re.sub(r'<[^>]*>', '<S>', insn)      # symbolic targets
+            syms[cur].append(HEX.sub('H', insn).strip())
+    return syms
+
+a, b = bodies(sys.argv[1]), bodies(sys.argv[2])
+only_a, only_b = sorted(set(a) - set(b)), sorted(set(b) - set(a))
+common = sorted(set(a) & set(b))
+diff = [s for s in common if a[s] != b[s]]
+print(f"{len(common)} symbols in common, {len(common)-len(diff)} with identical bodies")
+if only_a: print(f"only in {sys.argv[1]}: {', '.join(only_a)}")
+if only_b: print(f"only in {sys.argv[2]}: {', '.join(only_b)}")
+for s in diff:
+    print(f"\n--- {s}")
+    import difflib
+    for l in difflib.unified_diff(a[s], b[s], lineterm='', n=1):
+        if l[:3] not in ('---', '+++', '@@ '): print("   " + l)

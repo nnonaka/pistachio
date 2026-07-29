@@ -94,13 +94,24 @@ void SECTION(SEC_KDEBUG) putc (char c)
     }
 #endif
     
-    cons->putc (c);
+    /* A configuration can compile the debug output (CONFIG_DEBUG) without
+       compiling any console driver -- every driver is gated on a
+       CONFIG_KDB_CONS_*, and those need CONFIG_KDB.  x86-x64-k8 is such a
+       configuration.  The linker set is then empty and this is a call through
+       a null pointer on the very first printf, which is a triple fault before
+       a character of output: nothing to see, and no way to see it.  init and
+       the console-switch command already test for the pointer; putc and getc
+       did not. */
+    if (cons->putc)
+	cons->putc (c);
 
 }
 
 char getc (bool block)
 {
-    return kdb_consoles[kdb_current_console].getc (block);
+    kdb_console_t * cons = &kdb_consoles[kdb_current_console];
+
+    return cons->getc ? cons->getc (block) : 0;
 }
 
 DECLARE_CMD (cmd_toggle_console, config, 'c', "console", "Toggle console");
