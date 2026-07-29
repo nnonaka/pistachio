@@ -34,13 +34,13 @@ LDSCRIPT = $(SRCDIR)/src/glue/$(API)-$(ARCH)/$(SUBARCH)/linker.lds
 SOURCES += $(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, init.cc exception.cc \
 	space.cc user.cc thread.cc trap.S trampoline.S memcontrol.cc)
 
-SOURCES+=	src/generic/linear_ptab_walker.cc \
+SOURCES+=	src/generic/linear_ptab_walker.c \
 		src/generic/mapping_alloc.c
 ifeq ("$(CONFIG_NEW_MDB)","y")
 SOURCES+=	src/generic/mdb.c \
 		src/generic/mdb_mem.c
 else
-SOURCES+=	src/generic/mapping.cc
+SOURCES+=	src/generic/mapping.c
 endif
 
 CFLAGS_src/glue/$(API)-$(ARCH)/$(SUBARCH)/pagefault = -fomit-frame-pointer

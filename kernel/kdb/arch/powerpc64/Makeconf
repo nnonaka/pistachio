@@ -37,4 +37,4 @@ SOURCES+=	kdb/arch/powerpc64/disas.cc
 endif
 
 SOURCES +=	kdb/generic/linear_ptab_dump.c \
-		kdb/generic/mapping.cc
+		kdb/generic/mapping.c

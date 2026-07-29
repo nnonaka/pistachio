@@ -45,21 +45,26 @@ for tar in "$TOP"/contrib/configs/$PATTERN.kernel.tar; do
 	    "$d/config/config.h" | sed 's/=1$/=y/' > "$cfg"
     fi
 
+    subarch=x64
+    grep -q '^CONFIG_SUBARCH_X32=y' "$cfg" && subarch=x32
+    # CPU names the source tree and Mk/Makeconf.x86 know (CFLAGS_$(CPU)).
     cpu=p4
-    grep -q '^CONFIG_CPU_X86_P3=y' "$cfg" && cpu=p3
-    grep -q '^CONFIG_CPU_X86_K8=y' "$cfg" && cpu=k8
+    for c in I486:i486 I586:i586 I686:i686 P3:p3 P4:p4 K8:k8; do
+	grep -q "^CONFIG_CPU_X86_${c%%:*}=y" "$cfg" && cpu=${c##*:}
+    done
     sched=rr
     grep -q '^CONFIG_X_SCHED_HS=y' "$cfg" && sched=hs
 
     sed -e "s|^BUILDDIR.*|BUILDDIR = \$(CURDIR)|" \
+	-e "s|^SUBARCH=.*|SUBARCH=$subarch|" \
 	-e "s|^CPU=.*|CPU=$cpu|" -e "s|^SCHED=.*|SCHED=$sched|" \
 	"$REF/Makeconf.local" > "$d/Makeconf.local"
     cp "$REF/Makefile" "$d/Makefile"
 
     if (cd "$d" && make -j"$JOBS" > build.log 2>&1); then
-	printf '%-24s OK    %s bytes\n' "$name" "$(stat -c%s "$d/x86-kernel")"
+	printf '%-26s OK    %s bytes\n' "$name" "$(stat -c%s "$d/x86-kernel")"
     else
-	printf '%-24s FAIL  %s errors  (%s)\n' "$name" \
+	printf '%-26s FAIL  %s errors  (%s)\n' "$name" \
 	       "$(grep -c ' error:' "$d/build.log")" "$d/build.log"
 	rc=1
     fi
