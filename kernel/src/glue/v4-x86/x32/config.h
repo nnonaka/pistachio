@@ -196,8 +196,8 @@
 #define IDT_IOAPIC_MAX		0xf0
 
 /* Page size for APIC and ACPI mappings */
-#define APIC_PGENTSZ	        pgent_t::size_4k
-#define ACPI_PGENTSZ	        pgent_t::size_4m
+#define APIC_PGENTSZ	        X86_PGSIZE_4K
+#define ACPI_PGENTSZ	        X86_PGSIZE_4M
 
 #define EXC_INTERRUPT(name)	X86_EXCNO_ERRORCODE(name, 0)				
 #define NUM_EXC_REGS		13	      

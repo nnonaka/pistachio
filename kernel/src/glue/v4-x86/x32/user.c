@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002-2004, 2006-2008,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x32/user.cc
+ * File path:     glue/v4-x86/x32/user.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -50,8 +50,8 @@
 
 
 #define SYSCALL_STUB(name)		\
-    extern "C" void entry_##name ();	\
-    extern "C" void user_##name ()
+    void entry_##name ();	\
+    void user_##name ()
     
 
 #define SYSCALL_LABEL(name)		\
@@ -60,7 +60,7 @@
     "	int	%0		\n"
 
 
-extern "C" void user_ipc() 
+void user_ipc() 
 {
     __asm__ (
 	"	movl	%%esi, (%%edi)	\n"	// store MR0 into UTCB
@@ -105,7 +105,7 @@ extern "C" void user_ipc()
 	"i"(X86_UCS));
 }
 
-extern "C" void user_lipc() 
+void user_lipc() 
 {
     __asm__ (
 	"	movl	%%esi, (%%edi)	\n"	// store MR0 into UTCB
@@ -353,61 +353,63 @@ X86_EXCNO_ERRORCODE(exc_user_syscall, 0)
 {
     /* eip points to the system call entry in the user's own kip area,
        calculate address in kernel address space */
-    addr_t entry = (addr_t) (frame->eip - (u32_t)get_current_space()->get_kip_page_area().get_base() + (u32_t)get_kip() - 2);
+    fpage_t kip_area = space_get_kip_page_area (get_current_space_c ());
+    addr_t entry = (addr_t) (frame->__base.eip - (u32_t) fpage_get_base (&kip_area)
+			     + (u32_t) get_kip() - 2);
 
     /* syscalls are dispatched by IP */
     if (IS_SYSCALL(exchange_registers))
     {
 	// Note: dest was a local id if the zero flag is set
-	sys_exchange_registers(threadid(frame->eax),
-			       frame->ecx, 
-			       frame->edx, frame->esi,
-			       frame->edi, frame->ebx,
-			       threadid(frame->ebp), 
-			       frame->eflags & X86_FLAGS_ZF,
+	sys_exchange_registers(threadid_from_raw(frame->__base.eax),
+			       frame->__base.ecx, 
+			       frame->__base.edx, frame->__base.esi,
+			       frame->__base.edi, frame->__base.ebx,
+			       threadid_from_raw(frame->__base.ebp), 
+			       frame->__base.eflags & X86_FLAGS_ZF,
 			       frame);
     } 
 
     else if (IS_SYSCALL(thread_switch))
     {
-	sys_thread_switch(threadid(frame->eax));
+	sys_thread_switch(threadid_from_raw(frame->__base.eax));
     }
 
     else if (IS_SYSCALL(unmap))
     {
-	sys_unmap(frame->eax);
+	sys_unmap(frame->__base.eax);
     }
 
     else if ( IS_SYSCALL(schedule) )
     {
-	sys_schedule(threadid(frame->eax), 
-		     frame->edx, frame->esi, 
-		     frame->ecx, frame->edi, frame);
+	sys_schedule(threadid_from_raw(frame->__base.eax), 
+		     frame->__base.edx, frame->__base.esi, 
+		     frame->__base.ecx, frame->__base.edi, frame);
     }
 
     else if (IS_SYSCALL(thread_control))
     {
-	sys_thread_control(threadid(frame->eax), // dest
-			   threadid(frame->esi), // space
-			   threadid(frame->edx), // sched
-			   threadid(frame->ecx), // pager
-			   frame->edi, frame);
+	sys_thread_control(threadid_from_raw(frame->__base.eax), // dest
+			   threadid_from_raw(frame->__base.esi), // space
+			   threadid_from_raw(frame->__base.edx), // sched
+			   threadid_from_raw(frame->__base.ecx), // pager
+			   frame->__base.edi, frame);
     }
 
     else if (IS_SYSCALL(space_control))
     {
-	sys_space_control(threadid(frame->eax),		  // dest
-			  frame->ecx,			  // control
-			  (fpage_t){{ raw: frame->edx }}, // kip
-			  (fpage_t){{ raw: frame->esi }}, // utcb
-			  threadid(frame->edi),		  // redirector
+	sys_space_control(threadid_from_raw(frame->__base.eax),		  // dest
+			  frame->__base.ecx,			  // control
+			  (fpage_t){{ raw: frame->__base.edx }}, // kip
+			  (fpage_t){{ raw: frame->__base.esi }}, // utcb
+			  threadid_from_raw(frame->__base.edi),		  // redirector
 			  frame);
     }
 
     else if (IS_SYSCALL(memory_control))
     {
-	sys_memory_control(frame->eax, frame->ecx, frame->edx,
-			   frame->ebx, frame->ebp, frame);
+	sys_memory_control(frame->__base.eax, frame->__base.ecx, frame->__base.edx,
+			   frame->__base.ebx, frame->__base.ebp, frame);
     }
 
     else

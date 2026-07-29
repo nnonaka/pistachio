@@ -186,7 +186,7 @@ void SECTION(SEC_INIT) init_bootmem (void)
 
 #if defined(CONFIG_SUBARCH_X32)
     // Were we booted via RMGR?
-    if (!get_kip()->main_mem.is_empty())
+    if (!mem_region_is_empty (&get_kip()->main_mem))
     {
         word_t end = (word_t)get_kip()->main_mem.high;
 
@@ -195,8 +195,8 @@ void SECTION(SEC_INIT) init_bootmem (void)
 	if (end < virt_to_phys (KERNEL_AREA_END))
 	    end = virt_to_phys(KERNEL_AREA_END);
 
-        get_kip()->reserved_mem1.set((addr_t) (end - ADDITIONAL_KMEM_SIZE),
-                                     (addr_t) end);
+        mem_region_set (&get_kip()->reserved_mem1,
+			(addr_t) (end - ADDITIONAL_KMEM_SIZE), (addr_t) end);
     }
 #endif
 

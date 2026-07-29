@@ -44,15 +44,8 @@
 #define IOPERMBITMAP_SIZE		(X86_X32_IOPERMBITMAP_BITS / 8)
 
 
-class x86_x32_tss_t 
+struct x86_x32_tss_t
 {
-public:
-    void setup(u16_t ss0);
-    void set_esp0(u32_t esp);
-    u32_t get_esp0();
-    addr_t get_io_bitmap();
-
-private:
     u32_t	link;
     u32_t	esp0, ss0;
     u32_t	esp1, ss1;
@@ -67,30 +60,31 @@ private:
     u8_t	io_bitmap[IOPERMBITMAP_SIZE] X86_X32_IOPERMBITMAP_ALIGNMENT;
     u8_t	stopper;
 };
+typedef struct x86_x32_tss_t x86_x32_tss_t;
 
-INLINE void x86_x32_tss_t::set_esp0(u32_t esp)
+/* C forms of the x86_x32_tss_t methods; the fields are C-visible.  Named
+   x86_tss_* like the x64 pair, so the shared glue calls one spelling. */
+INLINE void x86_tss_set_esp0 (x86_x32_tss_t *self, u32_t esp)
 {
-    esp0 = esp;
+    self->esp0 = esp;
 }
 
-INLINE u32_t x86_x32_tss_t::get_esp0()
+INLINE u32_t x86_tss_get_esp0 (x86_x32_tss_t *self)
 {
-    return esp0;
+    return self->esp0;
 }
 
-INLINE void x86_x32_tss_t::setup(u16_t ss0)
+INLINE void x86_tss_setup (x86_x32_tss_t *self, u16_t ss0)
 {
-    this->ss0 = ss0;
-    iopbm_offset = (u16_t)((u32_t)io_bitmap - (u32_t)this);
-    stopper = 0xff;
-}
-    
- 
-INLINE addr_t x86_x32_tss_t::get_io_bitmap()
-{
-    return (addr_t) io_bitmap;
+    self->ss0 = ss0;
+    self->iopbm_offset = (u16_t)((u32_t) self->io_bitmap - (u32_t) self);
+    self->stopper = 0xff;
 }
 
+INLINE addr_t x86_tss_get_io_bitmap (x86_x32_tss_t *self)
+{
+    return (addr_t) self->io_bitmap;
+}
 
 extern x86_x32_tss_t tss;
 

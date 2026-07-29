@@ -25,7 +25,7 @@ END_DECLS
 /* register name / debug-register-list tables: plain globals (not class
    statics) so they can be defined in C (x64/exception.c). */
 extern const char  * x86_exceptionframe_name[X86_EXCEPTIONREGS_NUM_REGS];
-extern const word_t  x86_exceptionframe_dbgreg[18];
+extern const word_t  x86_exceptionframe_dbgreg[X86_EXC_NUM_DBGREGS];
 #endif
 
 /*
@@ -36,8 +36,9 @@ struct x86_exceptionframe_t { struct x86_exceptionregs_t __base; };
 typedef struct x86_exceptionframe_t x86_exceptionframe_t;
 
 #if defined(CONFIG_DEBUG)
-/* C forms of x86_exceptionframe_t::dump_flags / ::dump (kdb uses them). */
-#define X86_EXC_NUM_DBGREGS	18
+/* C forms of x86_exceptionframe_t::dump_flags / ::dump (kdb uses them).
+   X86_EXC_NUM_DBGREGS comes from the subarch trapgate.h -- x64 dumps 18
+   registers, x32 twelve. */
 
 INLINE void x86_exceptionframe_dump_flags (x86_exceptionframe_t *self)
 {

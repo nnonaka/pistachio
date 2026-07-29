@@ -61,6 +61,24 @@
 #define X86_EXC_SPREG	20
 #define X86_EXC_SSREG	21
 
+/*
+ * Subarchitecture-neutral aliases.  arch/x86/trapgate.h and the shared glue
+ * files index the frame by role rather than by register name, so that one body
+ * of code serves both subarchitectures; x32/trapgate.h defines the same set
+ * over its own layout.  The x64 spellings above stay for x64-only code.
+ */
+#define X86_EXC_DIREG	X86_EXC_RDIREG
+#define X86_EXC_SIREG	X86_EXC_RSIREG
+#define X86_EXC_BPREG	X86_EXC_RBPREG
+#define X86_EXC_DREG	X86_EXC_RDXREG
+#define X86_EXC_BREG	X86_EXC_RBXREG
+#define X86_EXC_CREG	X86_EXC_RCXREG
+#define X86_EXC_AREG	X86_EXC_RAXREG
+
+#if defined(CONFIG_DEBUG)
+#define X86_EXC_NUM_DBGREGS	18
+#endif
+
 struct x86_exceptionregs_t
 {
 

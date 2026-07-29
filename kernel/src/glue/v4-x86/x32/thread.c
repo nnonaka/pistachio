@@ -34,6 +34,13 @@
 #include INC_API(schedule.h)
 #include INC_ARCH_SA(tss.h)
 
+/*
+ * NOT CONVERTED -- see x32/ktcb.h, which #errors under the same gate.  No
+ * configuration in contrib/configs sets CONFIG_X_CTRLXFER_MSG, so nothing here
+ * is compiled, and nothing here has been compiled at any point in this
+ * migration.  The file is C so that the build issues no C++; its contents are
+ * still the C++ they were.
+ */
 #if defined(CONFIG_X_CTRLXFER_MSG)
 
 word_t arch_ktcb_t::get_x86_gpregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)

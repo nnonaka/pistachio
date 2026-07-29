@@ -66,7 +66,7 @@ const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2] =
 };
 
 #if defined(CONFIG_DEBUG)
-const word_t x86_exceptionframe_dbgreg[18] = 
+const word_t x86_exceptionframe_dbgreg[X86_EXC_NUM_DBGREGS] = 
 {
     X86_EXC_RAXREG,  X86_EXC_RBXREG,
     X86_EXC_RCXREG,  X86_EXC_RDXREG,

@@ -49,42 +49,31 @@
 #else
 #define X86_CTRLXFER_FLAGMASK		(word_t) (X86_USER_FLAGMASK)
 #define X86_CTRLXFER_FAULT_MAX          0
-class arch_hvm_ktcb_t 
-{
-};
 #endif
 
-typedef bitmask_t<u32_t> ctrlxfer_mask_t;
 
-class arch_ktcb_t : public arch_hvm_ktcb_t
-{
-    /* TCB_START_MAKER */
-    /* TCB_END_MARKER */
-
-public:
+struct arch_ktcb_t {
+    /* Like x64, x32 carries no arch-specific ktcb state in any configuration
+       this tree builds -- the CONFIG_X_CTRLXFER_MSG members below were static
+       and the HVM base class empty.  arch_ktcb_t is a by-value member of
+       tcb_t and an empty struct is a GNU C extension of size 0, which would
+       shift every field after `arch'; the explicit byte pins the size at 1,
+       matching the layout tcb_layout.h is generated against. */
+    char __empty;
+};
+typedef struct arch_ktcb_t arch_ktcb_t;
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-    word_t get_x86_gpregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr);
-    word_t set_x86_gpregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr);
-
-    word_t get_x86_fpuregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr) { UNIMPLEMENTED(); return 0;}
-    word_t set_x86_fpuregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr) { UNIMPLEMENTED(); return 0;}
-
-    static get_ctrlxfer_regs_t get_ctrlxfer_regs[arch_ctrlxfer_item_t::id_max];
-    static set_ctrlxfer_regs_t set_ctrlxfer_regs[arch_ctrlxfer_item_t::id_max];
-
-    
-#if defined(CONFIG_DEBUG)
-    word_t get_ctrlxfer_reg(word_t id, word_t reg);
-#endif
-
-    static const word_t fault_max = X86_CTRLXFER_FAULT_MAX;
-
+typedef bitmask_t<u32_t> ctrlxfer_mask_t;
+/*
+ * NOT CONVERTED.  These were arch_ktcb_t methods and static tables; their
+ * definitions are in x32/thread.c, likewise unconverted.  No configuration in
+ * contrib/configs sets CONFIG_X_CTRLXFER_MSG, so none of this is compiled and
+ * none of it has been compiled at any point in this migration -- converting it
+ * blind is how the gate-blind deletions of §95, §116 and §123 happened.  It
+ * needs a configuration that turns the option on to convert against.
+ */
+#error CONFIG_X_CTRLXFER_MSG: x32 ctrlxfer is not converted (see x32/ktcb.h)
 #endif /* defined(CONFIG_X_CTRLXFER_MSG) */
-
-    
-    friend class tcb_t;
-    friend class x86_hvm_space_t;
-};
 
 #endif /* !__GLUE_V4_X86__X32__KTCB_H__ */

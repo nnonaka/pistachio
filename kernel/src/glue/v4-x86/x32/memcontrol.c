@@ -38,45 +38,50 @@
 DECLARE_TRACEPOINT (SYSCALL_MEMORY_CONTROL);
 
 
+/* space_t::mapctrl, in C -- defined in glue/v4-x86/space.c. */
+fpage_t space_mapctrl (space_t *self, fpage_t fpage, mdb_ctrl_t ctrl, word_t attribute, bool unmap_all);
+
 SYS_MEMORY_CONTROL (word_t control, word_t attrib0, word_t attrib1,
 		    word_t attrib2, word_t attrib3)
 {
     tcb_t * current = get_current_tcb ();
-    space_t * space = current->get_space ();
+    space_t * space = tcb_get_space (current);
+    mdb_ctrl_t ctrl;
+    word_t idx;
 
     TRACEPOINT (SYSCALL_MEMORY_CONTROL, 
 		"SYS_MEMORY_CONTROL: control=%lx, attribs=[%lx %lx %lx %lx]\n",
 		control, attrib0, attrib1, attrib2, attrib3);
 
-    // Check parameters
+    /* Check parameters */
 
     if (! is_privileged_space (space))
     {
-	current->set_error_code (ENO_PRIVILEGE);
+	tcb_set_error_code (current, ENO_PRIVILEGE);
 	return_memory_control (0);
     }
 
     if (control >= IPC_NUM_MR)
     {
-        current->set_error_code (EINVALID_PARAM);
+	tcb_set_error_code (current, EINVALID_PARAM);
 	return_memory_control (0);
     }
 
-    // MemCtrl is a special call to MapCtrl
+    /* MemCtrl is a special call to MapCtrl */
 
-    mdb_t::ctrl_t ctrl (0);
+    ctrl.raw = 0;
     ctrl.mapctrl_self = 1;
     ctrl.set_attribute = 1;
 
-    // Perform MapCtrl on each provided fpage
+    /* Perform MapCtrl on each provided fpage */
 
-    for (word_t idx = 0; idx <= control; idx++)
+    for (idx = 0; idx <= control; idx++)
     {
 	fpage_t fpage;
 	word_t attr;
 
-	fpage.raw = current->get_mr (idx);
-	if (fpage.is_nil_fpage ())
+	fpage.raw = tcb_get_mr (current, idx);
+	if (fpage_is_nil_fpage (&fpage))
 	    continue;
 
 	switch (fpage.raw & 0x3)
@@ -87,18 +92,18 @@ SYS_MEMORY_CONTROL (word_t control, word_t attrib0, word_t attrib1,
 	    default: attr = attrib3; break;
 	}
 
-	// Transform into PAT value
+	/* Transform into PAT value */
 	if (attr > 0)
 	    attr--;
 
-	// Check for valid PAT value
+	/* Check for valid PAT value */
 	if (attr > 7 || attr == 5 || attr == 6)
 	{
-	    current->set_error_code (EINVALID_PARAM);
+	    tcb_set_error_code (current, EINVALID_PARAM);
 	    return_memory_control (0);
 	}
 
-	space->mapctrl (fpage, ctrl, attr, false);
+	space_mapctrl (space, fpage, ctrl, attr, false);
     }
 
     return_memory_control (1);

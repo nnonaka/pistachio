@@ -66,128 +66,79 @@ extern struct transTable_t {
 	word_t size;
 } transTable[TRANSLATION_TABLE_ENTRIES];
 
-#define PGSIZE_KTCB	(pgent_t::size_4k)
-#define PGSIZE_UTCB	(pgent_t::size_4k)
-#define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? pgent_t::size_4m : pgent_t::size_4k)
-
-#define PGSIZE_KIP	(pgent_t::size_4k)
+#define PGSIZE_KTCB	X86_PGSIZE_4K
+#define PGSIZE_UTCB	X86_PGSIZE_4K
+#define PGSIZE_KERNEL	((KERNEL_PAGE_SIZE == X86_SUPERPAGE_SIZE) ? X86_PGSIZE_4M : X86_PGSIZE_4K)
+#define PGSIZE_KIP	X86_PGSIZE_4K
 #define PGSIZE_SIGMA    PGSIZE_KERNEL
 
+/* forward declarations - space_t depends on tcb_t and utcb_t */
+struct tcb_t;
+typedef struct tcb_t tcb_t;
+struct utcb_t;
+typedef struct utcb_t utcb_t;
 
-class utcb_t;
-class tcb_t;
-class space_t;
+struct space_t;
+typedef struct space_t space_t;
 
-class x86_space_t 
-{
-public:
-    enum access_e {
-	read		= 0,
-	write		= 2,
-	readwrite	= -1,
-	execute		= 0
+/* Hoisted so C can name the access kinds; access_e was a signed enum
+   (readwrite = -1).  Mirrors the x64 header. */
+#define SPACE_ACCESS_READ	0
+#define SPACE_ACCESS_WRITE	2
+#define SPACE_ACCESS_READWRITE	(-1)
+#define SPACE_ACCESS_EXECUTE	0
+
+/*
+ * top_pdir_t was nested in x86_space_t.  Hoisted to a top-level struct so
+ * x86_space_t's data (which holds a top_pdir_t*) is C-visible, exactly as
+ * x64/space.h does with its own.
+ */
+struct x86_top_pdir_t {
+    union {
+	pgent_t pgent[1024];
+	struct {
+	    x86_pgent_t user[USER_AREA_END >> X86_X32_PDIR_BITS];
+	    x86_pgent_t small[SMALLSPACE_AREA_SIZE >> X86_X32_PDIR_BITS];
+	    x86_pgent_t copy_area[COPY_AREA_COUNT][COPY_AREA_SIZE >> X86_X32_PDIR_BITS];
+	    x86_pgent_t readmem_area[MEMREAD_AREA_SIZE >> X86_X32_PDIR_BITS];
+	    space_t * space; /* back link ptr, "automagically" invalid */
+	    /* the rest, e.g., TSS, APIC_MAPPINGS, ... */
+	};
     };
+};
+typedef struct x86_top_pdir_t x86_top_pdir_t;
 
-    class top_pdir_t {
-    public:
-	union {
-	    pgent_t pgent[1024];
-	    struct {
-		x86_pgent_t user[USER_AREA_END >> X86_X32_PDIR_BITS];
-		x86_pgent_t small[SMALLSPACE_AREA_SIZE >> X86_X32_PDIR_BITS];
-		x86_pgent_t copy_area[COPY_AREA_COUNT][COPY_AREA_SIZE >> X86_X32_PDIR_BITS];
-		x86_pgent_t readmem_area[MEMREAD_AREA_SIZE >> X86_X32_PDIR_BITS];
-		space_t * space; /* back link ptr, "automagically" invalid */
-		/* the rest, e.g., TSS, APIC_MAPPINGS, ... */
-	    };
-	} ;
-    };
-
-public:
+/**
+ * The address space representation
+ */
+struct x86_space_t {
     /* Shadow pagetable */
     pgent_t user_pgent[USER_AREA_END >> X86_X32_PDIR_BITS];
-
     struct {
 	/* CPU-specific ptabs */
 	struct {
-	    top_pdir_t* top_pdir;
+	    x86_top_pdir_t* top_pdir;
 	    atomic_t thread_count;
 	} cpu_ptab [CONFIG_SMP_MAX_CPUS];
 	cpuid_t reference_ptab;
-
 	/* Administrative data */
 	fpage_t kip_area;
 	fpage_t utcb_area;
 	atomic_t thread_count;
-	
 #if defined(CONFIG_X86_IO_FLEXPAGES)
 	io_space_t *	io_space;
 #endif
-	
 #if defined(CONFIG_X86_SMALL_SPACES)
 	smallspace_id_t smallid;
 	x86_segdesc_t segdesc;
-	x86_space_t *prev;
-	x86_space_t *next;
+	struct x86_space_t *prev;
+	struct x86_space_t *next;
 #endif
 #if defined(CONFIG_X_X86_HVM)
 	x86_hvm_space_t hvm_space;
 #endif
     } data;
-    
-public:
-
-#if defined(CONFIG_X86_SMALL_SPACES)
-    bool make_small (smallspace_id_t id);
-    void make_large (void);
-    bool is_small (void);
-    bool is_smallspace_area (addr_t addr);
-    bool sync_smallspace (addr_t addr);
-    word_t smallspace_offset (void);
-    word_t smallspace_size (void);
-    
-    smallspace_id_t *smallid (void)
-	{ return &data.smallid; }
-    
-    x86_segdesc_t * segdesc (void)
-	{ return &data.segdesc; }
-
-    x86_space_t * get_prev (void) { return data.prev; }
-    x86_space_t * get_next (void) { return data.next; }
-    void set_prev (x86_space_t * p) { data.prev = p; }
-    void set_next (x86_space_t * n) { data.next = n; }
-
-    void dequeue_polluted (void);
-    void enqueue_polluted (void);
-
-#endif
-
-    static const addr_t sign_extend(addr_t addr) { return addr; }
-    
-} __attribute__((aligned(X86_PAGE_SIZE)));
-
-#if defined(CONFIG_X86_SMALL_SPACES)
-INLINE bool x86_space_t::is_small (void)
-{
-    return smallid ()->is_small ();
-}
-
-INLINE bool x86_space_t::is_smallspace_area (addr_t addr)
-{
-    return (addr >= (addr_t) SMALLSPACE_AREA_START && 
-	    addr < (addr_t) SMALLSPACE_AREA_END);
-}
-
-INLINE word_t x86_space_t::smallspace_offset (void)
-{
-    return smallid ()->offset () + SMALLSPACE_AREA_START;
-}
-
-INLINE word_t x86_space_t::smallspace_size (void)
-{
-    return smallid ()->size ();
-}
-
-#endif /* CONFIG_X86_SMALL_SPACES */
+};
+typedef struct x86_space_t x86_space_t;
 
 #endif /* !__GLUE_V4_X86__X32__SPACE_H__ */

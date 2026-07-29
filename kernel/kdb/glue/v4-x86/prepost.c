@@ -336,7 +336,7 @@ bool kdb_pre (void)
 		// KDB_PrintChar()
 		//
 		// the character to print is passed in the low byte of the register
-		putc((char) f->__base.regs[X86_EXC_RAXREG]);
+		putc((char) f->__base.regs[X86_EXC_AREG]);
 		break;
 
 	    case 0x1:
@@ -344,7 +344,7 @@ bool kdb_pre (void)
 		//
 		// KDB_PrintString()
 		//
-		addr_t user_addr = (addr_t) f->__base.regs[X86_EXC_RAXREG];
+		addr_t user_addr = (addr_t) f->__base.regs[X86_EXC_AREG];
 		while (readmem_u8 (space, user_addr, &c) && (c != 0))
 		{
 		    putc(c);
@@ -372,14 +372,14 @@ bool kdb_pre (void)
 		//
 		// KDB_ReadChar_Blocked()
 		//
-	    	f->__base.regs[X86_EXC_RAXREG] = getc (true); 
+	    	f->__base.regs[X86_EXC_AREG] = getc (true); 
 		break;
 		
 	    case 0x8:
 		//
 		// KDB_ReadChar()
 		//
-	    	f->__base.regs[X86_EXC_RAXREG] = getc (false);
+	    	f->__base.regs[X86_EXC_AREG] = getc (false);
 		break;
 
 

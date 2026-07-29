@@ -5644,3 +5644,94 @@ rest. A truncated verification does not fail loudly; it agrees with you.
 instruction's own address, replace hex literals and branch targets with a
 placeholder, compare bodies. Whole-section shifts stop mattering and the number
 means what it says.
+
+
+## §127 — x32: the other half of the architecture, and why none of it built
+
+Boot-testing the x32 configurations turned out to be a question about building
+them. **None of the twenty had ever built in this tree.** They do compile now —
+`x86-x32-p4` reaches the link with zero errors — and stop one symbol short of a
+kernel for a reason that is not in the source.
+
+### Three failures deep, and the cause was a filename
+
+The first sweep gave every x32 configuration the same three errors:
+`tcb_layout.h: No such file or directory`. But the generator had not failed —
+it had never run, because `make` had no dependency information at all.
+
+`Mk/Makeconf`'s `.depend` rule ends:
+
+    done 2>&1 | $(GREP) . && $(RM_F) $@ && exit -1 || exit 0
+
+Any output at all from the preprocessing loop deletes `.depend` — and then
+`|| exit 0` reports success. `make` proceeds with no dependencies, nothing
+generates `include/tcb_layout.h`, and every object fails on the missing header.
+The output in question was `No rule to make target
+'src/generic/linear_ptab_walker.cc'`: the x32 `Makeconf` still named three
+files this migration had renamed to `.c` long ago. Fixed, along with the same
+staleness in the powerpc64 kdb `Makeconf`.
+
+### What was actually left of x32
+
+Thirteen headers still C++, and fifteen `.cc` files. Converted this pass, in
+the order the compiler asked for them:
+
+    arch/x86/x32/     trapgate.h  ptab.h  tss.h  segdesc.h
+    glue/v4-x86/x32/  ktcb.h  tcb.h  space.h  syscalls.h  config.h  hwirq.h
+                      init.c  exception.c  space.c  user.c  memcontrol.c
+                      thread.c
+    kdb/              arch/x86/x32/x86.c  glue/v4-x86/x32/space.c
+
+`x86-x32-p4`'s error count went 100 → 96 → 74 → 69 → 4 → 0.
+
+### The x64 migration had folded x64 into the shared files
+
+Three shared files turned out to be x64-only in their bodies, because there was
+no second subarchitecture to keep them honest:
+
+  - `glue/v4-x86/thread.c` — `switch_to`, `do_ipc`, `return_from_ipc`,
+    `return_from_user_interruption`, `copy_mrs`, the `notify` trio and
+    `initial_switch_to` are all register-level asm. Split on `CONFIG_IS_64BIT`,
+    which is the idiom that file already used for `return_to_user` and
+    `EXC_FRAME_SIZE`.
+  - `glue/v4-x86/space.c` — six x64-isms: the canonical-address sign extension
+    (x32 has no non-canonical hole, so it is the identity), the kernel-PDP
+    accessors (a level of the four-level page table x32 does not have), and the
+    copy-area shift.
+  - `glue/v4-x86/exception.c` and `init.c` — `frame->ds`, `mem_region_t::set`
+    and friends, inside `#if defined(CONFIG_SUBARCH_X32)` blocks that no build
+    had ever compiled. The ninth and tenth appearances of the gate-blind
+    pattern; they cost nothing to fix once something finally compiled them.
+
+Two spellings had to converge. `X86_EXC_RAXREG` and friends named x64
+registers in code shared with x32, so both subarchitectures now define a
+role-based set — `X86_EXC_AREG`, `X86_EXC_DREG`, `X86_EXC_IPREG` — and the
+shared glue indexes by role. Likewise `x86_idtdesc_set` takes x64's `ist`
+argument on both, ignored on x32, so `glue/v4-x86/idt.c` has one call to make.
+
+`X86_EXC_NUM_DBGREGS` was hardcoded to 18 in the shared `trapgate.h`; x32 dumps
+twelve registers. It comes from the subarch header now.
+
+### Where it stops
+
+    ld: cannot find -lgcc: file in wrong format
+
+The one unresolved symbol is `__udivdi3` — 64-bit division on a 32-bit target,
+from `libgcc`. This machine has no 32-bit `libgcc.a`; `-m32` compiles, but
+`gcc-multilib` is not installed. That is the whole remaining distance between
+here and an `x86-x32-p4` kernel image, and it is not in the tree.
+
+### Not converted, and deliberately
+
+`CONFIG_X_CTRLXFER_MSG` — `arch_ktcb_t`'s static tables and their definitions in
+`x32/thread.c`. No configuration in `contrib/configs` sets the option, so it has
+not been compiled at any point in this migration, and §95, §116 and §123 are all
+records of what converting under an uncompiled gate produces. `x32/ktcb.h`
+`#error`s if the option is turned on, which is a worse state than before only
+for someone who was already going to have to do this work.
+
+The five configurations outside the core set — HVM (`vmx.cc`, `hvm-vmx.cc`,
+`hvm-vtlb.cc`), logging, small spaces — are untouched: 4229 lines, and their
+configurations were never in this pass's scope.
+
+Gate: x64 unaffected, 709 symbols with 709 identical bodies.

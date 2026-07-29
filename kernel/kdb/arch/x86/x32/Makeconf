@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES+=	kdb/arch/x86/x32/x86.cc
+SOURCES+=	kdb/arch/x86/x32/x86.c
 
 SOURCES+=	kdb/generic/linear_ptab_dump.c
 

@@ -59,7 +59,7 @@ CMD(cmd_idt, cg)
     printf("\nIDT-dump: idt at %x\n", &idt);
     for (word_t i = 0; i < sizeof(idt)/sizeof(x86_idtdesc_t); i++)
     {
-	x86_idtdesc_t e = idt.get_descriptor(i);
+	x86_idtdesc_t e = idt.descriptors[i];
 	if (e.x.d.p)
 	    printf("%2x -> %4x:%x, dpl=%d, %s (%x:%x)\n", i,
 		   e.x.d.sel,

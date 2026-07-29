@@ -199,12 +199,12 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     case 0xee:  /* out %al,        port %dx (byte)  */
     case 0x6c:  /* insb		   port %dx (byte)  */
     case 0x6e:  /* outsb           port %dx (byte)  */
-	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
+	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 0, instr);
     case 0xed:  /* in  %eax,   port %dx (dword) */
     case 0xef:  /* out %eax,   port %dx (dword) */
     case 0x6d:  /* insd	       port %dx (dword) */
     case 0x6f:  /* outsd       port %dx (dword) */
-	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
+	return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 2, instr);
     case 0x66:
     {
 	if (!readmem_u8 (space, addr_offset(instr, 1), &i[1]))
@@ -223,7 +223,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	case 0xef:  /* out %ax, port %dx  (word) */
 	case 0x6d:  /* insw     port %dx  (word) */
 	case 0x6f:  /* outsw    port %dx  (word) */
-	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 1, instr);
 	}
     }
     case 0xf3:
@@ -251,12 +251,12 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
         case 0xee:  /* out %al,    port %dx (byte)  */
         case 0x6c:  /* insb        port %dx (byte)  */
         case 0x6e:  /* outsb       port %dx (byte)  */
-	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 0, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 0, instr);
         case 0xed:  /* in  %eax,   port %dx (dword) */
         case 0xef:  /* out %eax,   port %dx (dword) */
         case 0x6d:  /* insd        port %dx (dword) */
         case 0x6f:  /* outsd       port %dx (dword) */
-	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 2, instr);
+	    return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 2, instr);
         case 0x66:
 	{
             /* operand size override prefix */
@@ -275,7 +275,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
             case 0xef:  /* out %ax, port %dx  (word) */
             case 0x6d:  /* insw	    port %dx  (word) */
             case 0x6f:  /* outsw    port %dx  (word) */
-		return handle_io_pagefault(current, frame->__base.regs[X86_EXC_RDXREG] & 0xFFFF, 1, instr);
+		return handle_io_pagefault(current, frame->__base.regs[X86_EXC_DREG] & 0xFFFF, 1, instr);
 	    }
 	}
 	}
@@ -292,9 +292,9 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
     	    /* wrmsr */
 	    if ( is_privileged_space_c (space) ) {
 		/* the MSR index is taken from ECX only, so truncating is correct */
-		x86_wrmsr ((u32_t) frame->__base.regs[X86_EXC_RCXREG],
-			   ((u64_t)(frame->__base.regs[X86_EXC_RAXREG])) |
-			   ((u64_t)(frame->__base.regs[X86_EXC_RDXREG])) << 32);
+		x86_wrmsr ((u32_t) frame->__base.regs[X86_EXC_CREG],
+			   ((u64_t)(frame->__base.regs[X86_EXC_AREG])) |
+			   ((u64_t)(frame->__base.regs[X86_EXC_DREG])) << 32);
 		frame->__base.regs[X86_EXC_IPREG] += 2;
 		return true;
 	    } break;
@@ -303,9 +303,9 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	    /* rdmsr */
 	    if ( is_privileged_space_c (space) ) {
 		/* the MSR index is taken from ECX only, so truncating is correct */
-		u64_t val = x86_rdmsr ((u32_t) frame->__base.regs[X86_EXC_RCXREG]);
-		frame->__base.regs[X86_EXC_RAXREG] = (u32_t) val;
-		frame->__base.regs[X86_EXC_RDXREG] = (u32_t)(val >> 32);
+		u64_t val = x86_rdmsr ((u32_t) frame->__base.regs[X86_EXC_CREG]);
+		frame->__base.regs[X86_EXC_AREG] = (u32_t) val;
+		frame->__base.regs[X86_EXC_DREG] = (u32_t)(val >> 32);
 		frame->__base.regs[X86_EXC_IPREG] += 2;
 		return true;
 	    } break;
@@ -342,7 +342,7 @@ static bool handle_faulting_instruction (x86_exceptionframe_t * frame)
 	TRACEPOINT (X86_SEGRELOAD, "segment register reload");
 	reload_user_segregs_c ();
 #if defined(CONFIG_SUBARCH_X32)
-	frame->ds = frame->es = X86_UDS;
+	frame->__base.ds = frame->__base.es = X86_UDS;
 #endif
 	frame->__base.regs[X86_EXC_IPREG]++;
 
@@ -411,7 +411,7 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
          * interrupts since we can not be allowed to be preempted in
          * the reenter-trampoline.
          */
-        frame->cs = X86_KCS;
+        frame->__base.cs = X86_KCS;
         frame->eflags &= ~X86_FLAGS_IF;
         frame->ecx = (word_t) current->get_user_sp ();
         frame->eip = (word_t) reenter_sysexit;
@@ -433,15 +433,15 @@ X86_EXCWITH_ERRORCODE(exc_gp, X86_EXC_GENERAL_PROTECTION)
              "	mov	%%gs, %w1	\n"
              :"=r"(fs), "=r"(gs));
 
-        if ((frame->ds & 0xffff) == 0 || (frame->es & 0xffff) == 0 ||
+        if ((frame->__base.ds & 0xffff) == 0 || (frame->__base.es & 0xffff) == 0 ||
             fs == 0 || gs == 0 )
         {
             printf ("segment register reload\n");
 
             TRACEPOINT (X86_SEGRELOAD, "segment register reload");
             reload_user_segregs_c ();
-            frame->ds = frame->es =
-                (frame->cs & 0xffff) == X86_UCS ? X86_UDS : X86_KDS;
+            frame->__base.ds = frame->__base.es =
+                (frame->__base.cs & 0xffff) == X86_UCS ? X86_UDS : X86_KDS;
             return;
         }
     }
@@ -497,9 +497,9 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
         {
             /* lock; nop */
 	    fpage_t kip_area = space_get_kip_page_area (space);
-            frame->__base.regs[X86_EXC_RAXREG] = (word_t) fpage_get_base (&kip_area);
-            frame->__base.regs[X86_EXC_RCXREG] = api_version_to_word (&get_kip()->api_version);
-            frame->__base.regs[X86_EXC_RSIREG] = kip_get_kernel_id_raw (get_kip());
+            frame->__base.regs[X86_EXC_AREG] = (word_t) fpage_get_base (&kip_area);
+            frame->__base.regs[X86_EXC_CREG] = api_version_to_word (&get_kip()->api_version);
+            frame->__base.regs[X86_EXC_SIREG] = kip_get_kernel_id_raw (get_kip());
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
             if (space_is_compatibility_mode (space))
             {
@@ -509,12 +509,12 @@ X86_EXCNO_ERRORCODE(exc_invalid_opcode, X86_EXC_INVALIDOPCODE)
                                                  thread_info_get_system_base (&get_kip()->thread_info));
                 x32_thread_info_set_user_base (&x32_get_kip()->thread_info,
                                                thread_info_get_user_base (&get_kip()->thread_info));
-                frame->__base.regs[X86_EXC_RDXREG] = x32_api_flags_to_word (&x32_get_kip()->api_flags);
+                frame->__base.regs[X86_EXC_DREG] = x32_api_flags_to_word (&x32_get_kip()->api_flags);
                 frame->__base.regs[X86_EXC_IPREG] += 2;
                 return;
             }
 #endif /* defined(CONFIG_X86_COMPATIBILITY_MODE) */
-            frame->__base.regs[X86_EXC_RDXREG] = api_flags_to_word (&get_kip()->api_flags);
+            frame->__base.regs[X86_EXC_DREG] = api_flags_to_word (&get_kip()->api_flags);
             frame->__base.regs[X86_EXC_IPREG] += 2;
             return;
         }

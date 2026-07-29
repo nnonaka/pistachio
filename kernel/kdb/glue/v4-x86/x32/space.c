@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2007,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/x32/space.cc
+ * File path:     kdb/glue/v4-x86/x32/space.c
  * Description:   Various space management stuff
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -36,14 +36,13 @@
 #include <linear_ptab.h>
 
 
-void get_ptab_dump_ranges (addr_t * vaddr, word_t * num,
-			   pgent_t::pgsize_e *max_size)
+void get_ptab_dump_ranges (addr_t * vaddr, word_t * num, int *max_size)
 {
-    const pgent_t::pgsize_e max = pgent_t::size_max;
+    const word_t max = X86_PGSIZE_MAX;
 
     *vaddr = (addr_t) 0;
     *num = page_table_size (max);
-    *max_size = max;
+    *max_size = (int) max;
 
     switch (get_choice ("Memory area", "Complete/User/Kernel/Tcb/Manual"
 #if defined(CONFIG_X86_SMALL_SPACES)

@@ -32,22 +32,13 @@
 #ifndef __ARCH__X86__X32__SEGDESC_H__
 #define __ARCH__X86__X32__SEGDESC_H__
 
-class x86_segdesc_t 
+/* segtype_e values as macros so C can reference them. */
+#define X86_SEGDESC_CODE	0xb
+#define X86_SEGDESC_DATA	0x3
+#define X86_SEGDESC_TSS		0x9
+
+struct x86_segdesc_t 
 {
-public:
-    enum segtype_e
-    {
-	code = 0xb,
-	data = 0x3,
-	tss  = 0x9
-    };
-
-    void set_seg(u32_t base, u32_t limit, int dpl, segtype_e type);
-    void set_sys(u32_t base, u32_t limit, int dpl, segtype_e type);
-
-    word_t get_base() { return (x.d.base_high << 24) | x.d.base_low; };
-
-private:
     union {
 	u32_t raw[2];
 	struct {
@@ -64,75 +55,72 @@ private:
 	    u32_t base_high	:  8;
 	} d __attribute__((packed));
     } x;
-    friend class kdb_t;
-#if defined(CONFIG_X_X86_HVM)
-    friend class arch_hvm_ktcb_t;
-#endif
 };
+typedef struct x86_segdesc_t x86_segdesc_t;
 
-INLINE void x86_segdesc_t::set_seg(u32_t base, u32_t limit, 
-				    int dpl, segtype_e type)
+INLINE word_t x86_segdesc_get_base (x86_segdesc_t *self)
+{
+    return (self->x.d.base_high << 24) | self->x.d.base_low;
+}
+
+/* C forms of x86_segdesc_t::set_seg / ::set_sys (the union is C-visible). */
+INLINE void x86_segdesc_set_seg (x86_segdesc_t *self, u32_t base, u32_t limit,
+				 int dpl, int type)
 {
     if (limit > ( 1 << 20)) 
     {
-	x.d.limit_low  = (limit >> 12) & 0xFFFF;
-	x.d.limit_high = (limit >> 28) & 0xF;
-	x.d.g = 1;	/* 4K granularity	*/
+	self->x.d.limit_low  = (limit >> 12) & 0xFFFF;
+	self->x.d.limit_high = (limit >> 28) & 0xF;
+	self->x.d.g = 1;	/* 4K granularity	*/
     }
     else
     {
-	x.d.limit_low  =  limit & 0xFFFF;
-	x.d.limit_high =  limit >> 16;
-	x.d.g = 0;	/* 1B granularity	*/
+	self->x.d.limit_low  =  limit & 0xFFFF;
+	self->x.d.limit_high =  limit >> 16;
+	self->x.d.g = 0;	/* 1B granularity	*/
     }
 
-    x.d.base_low   = base & 0xFFFFFF;
-    x.d.base_high  = (base >> 24) & 0xFF;
-    x.d.type = type;
-    x.d.dpl = dpl;
-    
-    /* default fields */
-    x.d.p = 1;	/* present		*/
-    x.d.d = 1;	/* 32-bit segment	*/
-    x.d.s = 1;	/* non-system segment	*/
-    
-    /* unused fields */
-    x.d.avl = 0;
-}
-
-INLINE void x86_segdesc_t::set_sys(u32_t base, u32_t limit, 
-				    int dpl, segtype_e type)
-{
-    x.d.limit_low  = limit & 0xFFFF;
-    x.d.limit_high = limit >> 16;
-    x.d.base_low   = base        & 0xFFFFFF;
-    x.d.base_high  = (base >> 24) &     0xFF;
-    x.d.type = type;
-    x.d.dpl = dpl;
+    self->x.d.base_low   = base & 0xFFFFFF;
+    self->x.d.base_high  = (base >> 24) & 0xFF;
+    self->x.d.type = type;
+    self->x.d.dpl = dpl;
 
     /* default fields */
-    x.d.p = 1;	/* present		*/
-    x.d.g = 0;	/* byte granularity	*/
-    x.d.d = 0;	/* 32-bit segment	*/
-    x.d.s = 0;	/* non-system segment	*/
-    
+    self->x.d.p = 1;	/* present		*/
+    self->x.d.d = 1;	/* 32-bit segment	*/
+    self->x.d.s = 1;	/* non-system segment	*/
+
     /* unused fields */
-    x.d.avl = 0;
+    self->x.d.avl = 0;
+}
+
+INLINE void x86_segdesc_set_sys (x86_segdesc_t *self, u32_t base, u32_t limit,
+				 int dpl, int type)
+{
+    self->x.d.limit_low  = limit & 0xFFFF;
+    self->x.d.limit_high = limit >> 16;
+    self->x.d.base_low   = base        & 0xFFFFFF;
+    self->x.d.base_high  = (base >> 24) &     0xFF;
+    self->x.d.type = type;
+    self->x.d.dpl = dpl;
+
+    /* default fields */
+    self->x.d.p = 1;	/* present		*/
+    self->x.d.g = 0;	/* byte granularity	*/
+    self->x.d.d = 0;	/* 32-bit segment	*/
+    self->x.d.s = 0;	/* non-system segment	*/
+
+    /* unused fields */
+    self->x.d.avl = 0;
 }
 
 
-class x86_idtdesc_t 
-{
-public:
-    enum type_e 
-    {
-	interrupt = 6,
-	trap = 7
-    };
+/* type_e values as macros so C can reference them. */
+#define X86_IDTDESC_INTERRUPT	6
+#define X86_IDTDESC_TRAP	7
 
-    void set(u16_t segsel, void (*address)(), type_e type, int dpl);
-    
-private:
+struct x86_idtdesc_t 
+{
     union {
 	u32_t raw[2];
 	
@@ -148,11 +136,8 @@ private:
 	    u32_t offset_high	: 16;
 	} d;
     } x;
-    friend class kdb_t;
-#if defined(CONFIG_X_X86_HVM)
-    friend class arch_hvm_ktcb_t;
-#endif
 };
+typedef struct x86_idtdesc_t x86_idtdesc_t;
 
 
 /* x86_idtdesc_t::set
@@ -162,22 +147,26 @@ private:
  * - dpl sets the numerical maximum CPL of allowed calling code
  */
 
-INLINE void x86_idtdesc_t::set(u16_t segsel, void (*address)(), 
-				type_e type, int dpl)
+/* `ist' is the x64 interrupt-stack-table index; x32 has no IST, and takes the
+   argument only so glue/v4-x86/idt.c has one spelling to call. */
+INLINE void x86_idtdesc_set (x86_idtdesc_t *self, u16_t segsel, void (*address)(void), 
+			     int type, int dpl, int ist)
 {
-    x.d.offset_low  = ((u32_t) address      ) & 0xFFFF;
-    x.d.offset_high = ((u32_t) address >> 16) & 0xFFFF;
-    x.d.sel = segsel;
-    x.d.dpl = dpl;
-    x.d.type = type;
+    (void) ist;
+
+    self->x.d.offset_low  = ((u32_t) address      ) & 0xFFFF;
+    self->x.d.offset_high = ((u32_t) address >> 16) & 0xFFFF;
+    self->x.d.sel = segsel;
+    self->x.d.dpl = dpl;
+    self->x.d.type = type;
     
     /* set constant values */
-    x.d.p = 1;	/* present	*/
-    x.d.d = 1;	/* size is 32	*/
+    self->x.d.p = 1;	/* present	*/
+    self->x.d.d = 1;	/* size is 32	*/
 
     /* clear reserved fields */
-    x.d.res0 = x.d.res1 = 0;
-};
+    self->x.d.res0 = self->x.d.res1 = 0;
+}
 
 
 #endif /* !__ARCH__X86__X32__SEGDESC_H__ */

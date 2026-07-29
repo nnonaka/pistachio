@@ -33,19 +33,36 @@
 #ifndef __ARCH__X86__X32__TRAPGATE_H__
 #define __ARCH__X86__X32__TRAPGATE_H__
 
-class x86_exceptionframe_t;
+#define X86_EXCEPTIONREGS_NUM_REGS 17
 
-class x86_exceptionregs_t
+/*
+ * Exception-frame register indices into regs[], as macros so C can name them;
+ * the C++ reg_e enum this replaces used the same values.  The names are the
+ * subarchitecture-neutral ones arch/x86/trapgate.h and the shared glue code
+ * index with -- x64/trapgate.h defines the same set over its own layout.
+ */
+#define X86_EXC_ESREG	1
+#define X86_EXC_DSREG	2
+#define X86_EXC_DIREG	3	/* Dreg */
+#define X86_EXC_SIREG	4	/* Sreg */
+#define X86_EXC_BPREG	5	/* Breg */
+#define X86_EXC_BREG	7	/* breg -- ebx */
+#define X86_EXC_DREG	8	/* dreg -- edx */
+#define X86_EXC_CREG	9	/* creg -- ecx */
+#define X86_EXC_AREG	10	/* areg -- eax */
+#define X86_EXC_EREG	11
+#define X86_EXC_IPREG	12
+#define X86_EXC_CSREG	13
+#define X86_EXC_FREG	14
+#define X86_EXC_SPREG	15
+#define X86_EXC_SSREG	16
+
+#if defined(CONFIG_DEBUG)
+#define X86_EXC_NUM_DBGREGS	12
+#endif
+
+struct x86_exceptionregs_t
 {
-public:
-    static const word_t		num_regs = 17;
-    
-    enum reg_e {
-	 esreg =  1,	 dsreg =  2,	 Dreg  =  3, 	 Sreg  =  4,  
-	 Breg  =  5,  	 breg  =  7,  	 dreg  =  8,	 creg  =  9, 
-	 areg  = 10, 	 ereg  = 11,	 ipreg = 12, 	 csreg = 13, 
-	 freg  = 14,	 spreg = 15,	 ssreg = 16, 
-    };
     union
     {
 	struct
@@ -69,14 +86,11 @@ public:
 	    u32_t esp;			/* 15 */
 	    u32_t ss;			/* 16 */
 	};
-	word_t			regs[num_regs];
+	word_t			regs[X86_EXCEPTIONREGS_NUM_REGS];
     };
 
-#if defined(CONFIG_DEBUG)
-    static const word_t		num_dbgregs = 12;
-#endif
-    
 };
+typedef struct x86_exceptionregs_t x86_exceptionregs_t;
 
 /*
  * If KEEP_LAST_BRANCHES is enabled we should clear the LBR flag prior

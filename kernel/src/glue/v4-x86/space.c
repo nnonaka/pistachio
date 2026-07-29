@@ -59,8 +59,14 @@ space_t * space_top_pdir_to_space (word_t ptab);
 space_t * active_cpu_space_get (cpuid_t cpu);
 #endif
 
-/* sign-extend an address to canonical form (x86_space_t::sign_extend). */
+/* sign-extend an address to canonical form (x86_space_t::sign_extend).
+   Only x64 has a non-canonical hole; on x32 every address is already
+   canonical, so this is the identity. */
+#if defined(CONFIG_SUBARCH_X64)
 static inline word_t sign_ext (addr_t addr) { return (word_t) addr | X86_X64_SIGN_EXTENSION; }
+#else
+static inline word_t sign_ext (addr_t addr) { return (word_t) addr; }
+#endif
 
 /* C form of active_cpu_space_t (a C++ class in space.h; used only here). */
 typedef struct { struct { space_t *space; char __pad[CACHE_LINE_SIZE - sizeof (space_t *)]; } active_space[CONFIG_SMP_MAX_CPUS]; } active_cpu_space_t;
@@ -769,11 +775,15 @@ x86_top_pdir_t * space_get_top_pdir (space_t *self, cpuid_t cpu)
 word_t space_get_top_pdir_phys (space_t *self, cpuid_t cpu)
 { return (word_t) virt_to_phys (&space_get_top_pdir (self, cpu)->pgent[0].pgent); }
 
+/* The kernel PDP is a level of the x64 four-level page table; x32's top_pdir
+   has no such entry. */
+#if defined(CONFIG_SUBARCH_X64)
 pgent_t * x86_top_pdir_get_kernel_pdp_pgent (x86_top_pdir_t *self)
 { return pgent_subtree (&self->kernel_pdp, (struct space_t *) self, X86_PGSIZE_512G); }
 
 x86_kernel_pdp_t * x86_top_pdir_get_kernel_pdp (x86_top_pdir_t *self)
 { return (x86_kernel_pdp_t *) x86_top_pdir_get_kernel_pdp_pgent (self); }
+#endif /* defined(CONFIG_SUBARCH_X64) */
 
 /* active_cpu_space itself is defined inside the CONFIG_SMP block above, and
    the only caller (tcb_switch_to in thread.c) is guarded the same way; without
@@ -1112,7 +1122,12 @@ void align_memregion (mem_region_t *region, word_t size)
    CONFIG_X86_SMALL_SPACES off). */
 addr_t tcb_copy_area_real_address (tcb_t *self, addr_t addr)
 {
-    word_t copyarea_num = (((word_t) addr - COPY_AREA_START) >> X86_X64_PDP_BITS) / (COPY_AREA_SIZE >> X86_X64_PDP_BITS);
+#if defined(CONFIG_SUBARCH_X64)
+#define COPY_AREA_SHIFT	X86_X64_PDP_BITS
+#else
+#define COPY_AREA_SHIFT	X86_X32_PDIR_BITS
+#endif
+    word_t copyarea_num = (((word_t) addr - COPY_AREA_START) >> COPY_AREA_SHIFT) / (COPY_AREA_SIZE >> COPY_AREA_SHIFT);
     word_t raddr = 0;
     word_t pgsize = X86_PGSIZE_MAX - COPY_AREA_PDIRS + 1;
     for (word_t i = 0; i < COPY_AREA_PDIRS; i++)

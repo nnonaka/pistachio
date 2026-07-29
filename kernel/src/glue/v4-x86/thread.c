@@ -43,9 +43,14 @@
 # define EXC_FRAME_SIZE ((sizeof(x86_exceptionframe_t)/BYTES_WORD) - 4)
 #endif
 
-/* sys_ipc (the IPC syscall handler) is defined in C in api/v4/ipc.c; tcb_do_ipc
-   below calls it directly. */
+/* sys_ipc (the IPC syscall handler) is defined in C in api/v4/ipc.c.  x64's
+   tcb_do_ipc calls it directly; x32's reaches it from inline asm, because its
+   calling convention hands back MR1/MR2 in registers. */
+#if defined(CONFIG_IS_64BIT)
 x86_x64_sysret_t sys_ipc (timeout_t timeout, threadid_t to, threadid_t from);
+#else
+extern void notify_trampoline (void);
+#endif
 
 /* These were declared only in the C++ branches of x64/tcb.h (notify_prologue),
    space.h (active_cpu_space_set) and tcb.h (the present-list globals).  Those
@@ -229,7 +234,11 @@ void tcb_lock_state_init (tcb_t *self)
 }
 
 
-/* IPC / thread-switch / notify -- the arch bodies translated from x64/tcb.h. */
+/* IPC / thread-switch / notify -- the arch bodies translated from the
+   subarchitectures' tcb.h.  These are register-level code; the two
+   subarchitectures share their shape and nothing else. */
+#if defined(CONFIG_IS_64BIT)
+
 msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t timeout)
 {
     msg_tag_t tag;
@@ -258,6 +267,58 @@ void tcb_return_from_user_interruption (tcb_t *self)
 	     : "r" (&tcb_get_stack_top (self)[- (word_t) sizeof (x86_exceptionframe_t) / 8 - 1]));
 }
 
+#else /* !defined(CONFIG_IS_64BIT) */
+
+msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t timeout)
+{
+    msg_tag_t tag;
+    word_t mr1, mr2, dummy;
+    __asm__ __volatile__("pushl	%%ebp		\n"
+			 "pushl	%%ecx		\n"
+			 "call	sys_ipc		\n"
+			 "addl	$4, %%esp	\n"
+			 "movl	%%ebp, %%ecx	\n"
+			 "popl	%%ebp		\n"
+			 : "=S"(tag.raw),
+			   "=b"(mr1),
+			   "=c"(mr2),
+			   "=a"(dummy),
+			   "=d"(dummy)
+			 : "a"(threadid_get_raw (&to)),
+			   "d"(threadid_get_raw (&from)),
+			   "c"(timeout.raw)
+			 : "edi", "memory");
+    tcb_set_mr (self, 1, mr1);
+    tcb_set_mr (self, 2, mr2);
+    return tag;
+}
+
+void tcb_return_from_ipc (tcb_t *self)
+{
+    threadid_t local = tcb_get_local_id (self);
+    msg_tag_t tag = tcb_get_tag (self);
+
+    __asm__ ("movl %0, %%esp\n"
+	     "mov  %3, %%ebp\n"
+	     "ret\n"
+	     :
+	     : "r" (&tcb_get_stack_top (self)[KSTACK_RET_IPC]),
+	       "S" (tag.raw),
+	       "b" (tcb_get_mr (self, 1)),
+	       "r" (tcb_get_mr (self, 2)),
+	       "D" (threadid_get_raw (&local)));
+}
+
+void tcb_return_from_user_interruption (tcb_t *self)
+{
+    __asm__ ("movl %0, %%esp\n"
+	     "ret\n"
+	     :
+	     : "r" (&tcb_get_stack_top (self)[- (word_t) sizeof (x86_exceptionframe_t) / 4 - 2]));
+}
+
+#endif /* defined(CONFIG_IS_64BIT) */
+
 void tcb_switch_to (tcb_t *self, tcb_t *dest)
 {
     word_t dummy;
@@ -270,13 +331,18 @@ void tcb_switch_to (tcb_t *self, tcb_t *dest)
 	tcb_resources_save (&self->resources, self);
 
     /* modify stack in tss */
+#if defined(CONFIG_IS_64BIT)
     tss.rsp[0] = (u64_t) tcb_get_stack_top (dest);
+#else
+    x86_tss_set_esp0 (&tss, (u32_t) (word_t) tcb_get_stack_top (dest));
+#endif
 
     tbuf_record_event (TP_DETAIL, 0, "switch %t => %t", (word_t) self, (word_t) dest);
 
 #if defined(CONFIG_SMP)
     active_cpu_space_set (tcb_get_cpu (self), dest->space);
 #endif
+#if defined(CONFIG_IS_64BIT)
     __asm__ __volatile__ (
 	"/* switch_to_thread */			\n\t"
 	"movq	%[dtcb], %%r11			\n\t"	/* save dest			*/
@@ -322,6 +388,58 @@ void tcb_switch_to (tcb_t *self, tcb_t *dest)
 	: /* clobber - trash global registers */
 	  "memory", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
 	);
+#else /* !defined(CONFIG_IS_64BIT) */
+    __asm__ __volatile__ (
+	"/* switch_to_thread */	\n\t"
+	"pushl	%%ebp		\n\t"
+
+	"pushl	$3f		\n\t"	/* store return address	*/
+
+	"movl	%%esp, %c4(%1)	\n\t"	/* switch stacks	*/
+	"movl	%c4(%2), %%esp	\n\t"
+#if !defined(CONFIG_CPU_X86_P4)
+	"movl	%%cr3, %8	\n\t"	/* load current ptab */
+	"cmpl	$0, %c5(%2)	\n\t"	/* if kernel thread-> use current */
+	"je	2f		\n\t"
+#endif
+	"cmpl	%7, %8		\n\t"	/* same page dir?	*/
+	"je	2f		\n\t"
+#if defined(CONFIG_CPU_X86_P4)
+	"cmpl	$0, %c5(%2)	\n\t"	/* kernel thread (space==NULL)?	*/
+	"jne	1f		\n\t"
+	"movl	%8, %c6(%2)	\n\t"	/* rewrite dest->pdir_cache */
+	"jmp	2f		\n\t"
+
+	"1:			\n\t"
+#endif
+	"movl	%7, %%cr3	\n\t"	/* reload pagedir */
+	"2:			\n\t"
+	"popl	%%edx		\n\t"	/* load activation addr */
+	"movl	%3, %%gs:0	\n\t"	/* update current UTCB */
+
+	"jmp	*%%edx		\n\t"
+	"3:			\n\t"
+	"movl	%2, %1		\n\t"	/* restore this */
+	"popl	%%ebp		\n\t"
+	"/* switch_to_thread */	\n\t"
+	: /* trash everything */
+	  "=a" (dummy)				/* 0 */
+	:
+	"b" (self),				/* 1 */
+	"S" (dest),				/* 2 */
+	"D" (threadid_get_raw (&dest->myself_local)),	/* 3 */
+	"i" (OFS_TCB_STACK),			/* 4 */
+	"i" (OFS_TCB_SPACE),			/* 5 */
+	"i" (OFS_TCB_PDIR_CACHE),		/* 6 */
+	"a" (dest->pdir_cache),			/* 7 */
+#if defined(CONFIG_CPU_X86_P4)
+	"c" (self->pdir_cache)			/* 8 */
+#else
+	"c" (dest->pdir_cache)			/* 8 -- dummy */
+#endif
+	: "edx", "memory"
+	);
+#endif /* defined(CONFIG_IS_64BIT) */
 
     if (EXPECT_FALSE (resource_bits_have_resources (&self->resource_bits)))
 	tcb_resources_load (&self->resources, self);
@@ -337,7 +455,11 @@ void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count)
     /* use optimized IA32 copy loop -- uses complete cacheline transfers */
     __asm__ __volatile__ (
 	"cld\n"
+#if defined(CONFIG_IS_64BIT)
 	"rep  movsq (%0), (%1)\n"
+#else
+	"rep  movsl (%0), (%1)\n"
+#endif
 	: "=S" (dummy), "=D" (dummy), "=c" (dummy)
 	: "c" (count), "S" (&self->utcb->mr[start]),
 	  "D" (&dest->utcb->mr[start]));
@@ -400,6 +522,8 @@ void tcb_copy_mrs (tcb_t *self, tcb_t *dest, word_t start, word_t count)
 }
 #endif /* !defined(CONFIG_X86_COMPATIBILITY_MODE) */
 
+#if defined(CONFIG_IS_64BIT)
+
 void tcb_notify (tcb_t *self, void (*func)(void))
 {
     *(--self->stack) = (word_t) func;
@@ -421,15 +545,47 @@ void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t arg1, w
     *(--self->stack) = (word_t) notify_prologue;
 }
 
+#else /* !defined(CONFIG_IS_64BIT) */
+
+/* x32 returns into func directly for the no-argument form, and through
+   notify_trampoline -- which always removes two parameters -- otherwise. */
+void tcb_notify (tcb_t *self, void (*func)(void))
+{
+    *(--self->stack) = (word_t) func;
+}
+void tcb_notify_word (tcb_t *self, void (*func)(word_t), word_t arg1)
+{
+    self->stack--;
+    *(--self->stack) = arg1;
+    *(--self->stack) = (word_t) notify_trampoline;
+    *(--self->stack) = (word_t) func;
+}
+void tcb_notify_word2 (tcb_t *self, void (*func)(word_t, word_t), word_t arg1, word_t arg2)
+{
+    *(--self->stack) = arg2;
+    *(--self->stack) = arg1;
+    *(--self->stack) = (word_t) notify_trampoline;
+    *(--self->stack) = (word_t) func;
+}
+
+#endif /* defined(CONFIG_IS_64BIT) */
+
 
 
 
 void   initial_switch_to_c (tcb_t *tcb)
 {
+#if defined(CONFIG_IS_64BIT)
     __asm__ ("movq %0, %%rsp\n"
 	     "retq\n"
 	     :
 	     : "r" (tcb->stack));
+#else
+    __asm__ ("movl %0, %%esp\n"
+	     "ret\n"
+	     :
+	     : "r" (tcb->stack));
+#endif
     while (1);
 }
 

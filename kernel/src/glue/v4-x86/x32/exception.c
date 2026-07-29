@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2004-2008, 2010,  Karlsruhe University
  *                
- * File path:     glue/v4-x86/x32/exception.cc
+ * File path:     glue/v4-x86/x32/exception.c
  * Description:   exception handling
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -46,29 +46,29 @@
 const word_t x86_exc_reg_mr2reg[NUM_EXC_REGS][2] = 
 {    
     {  3, ~0UL  /* EXC */ }, 
-    {  1, x86_exceptionframe_t::ipreg  /* EIP */ }, 
-    {  2, x86_exceptionframe_t::freg   /* EFL */ },
-    {  4, x86_exceptionframe_t::ereg   /* ERR */},  
-    {  5, x86_exceptionframe_t::Dreg   /* EDI */},  
-    {  6, x86_exceptionframe_t::Sreg   /* ESI */},  
-    {  7, x86_exceptionframe_t::Breg   /* EBP */}, 
-    {  8, x86_exceptionframe_t::spreg  /* ESP */},  
-    {  9, x86_exceptionframe_t::breg   /* EBX */},  
-    { 10, x86_exceptionframe_t::dreg   /* EDX */}, 
-    { 11, x86_exceptionframe_t::creg   /* ECX */}, 
-    { 12, x86_exceptionframe_t::areg   /* EAX */ }
+    {  1, X86_EXC_IPREG  /* EIP */ }, 
+    {  2, X86_EXC_FREG   /* EFL */ },
+    {  4, X86_EXC_EREG   /* ERR */},  
+    {  5, X86_EXC_DIREG   /* EDI */},  
+    {  6, X86_EXC_SIREG   /* ESI */},  
+    {  7, X86_EXC_BPREG   /* EBP */}, 
+    {  8, X86_EXC_SPREG  /* ESP */},  
+    {  9, X86_EXC_BREG   /* EBX */},  
+    { 10, X86_EXC_DREG   /* EDX */}, 
+    { 11, X86_EXC_CREG   /* ECX */}, 
+    { 12, X86_EXC_AREG   /* EAX */ }
 };
 
 
 #if defined(CONFIG_DEBUG)
-const word_t x86_exceptionframe_dbgreg[18] = 
+const word_t x86_exceptionframe_dbgreg[X86_EXC_NUM_DBGREGS] = 
 {
-    x86_exceptionframe_t::areg,  x86_exceptionframe_t::breg,
-    x86_exceptionframe_t::creg,  x86_exceptionframe_t::dreg,
-    x86_exceptionframe_t::Sreg,  x86_exceptionframe_t::Dreg,
-    x86_exceptionframe_t::Breg,  x86_exceptionframe_t::freg,
-    x86_exceptionframe_t::csreg, x86_exceptionframe_t::ssreg,
-    x86_exceptionframe_t::dsreg, x86_exceptionframe_t::esreg,
+    X86_EXC_AREG,  X86_EXC_BREG,
+    X86_EXC_CREG,  X86_EXC_DREG,
+    X86_EXC_SIREG,  X86_EXC_DIREG,
+    X86_EXC_BPREG,  X86_EXC_FREG,
+    X86_EXC_CSREG, X86_EXC_SSREG,
+    X86_EXC_DSREG, X86_EXC_ESREG,
 };
 
 const char *x86_exceptionframe_name[X86_EXCEPTIONREGS_NUM_REGS] = 

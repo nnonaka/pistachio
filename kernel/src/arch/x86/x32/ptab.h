@@ -45,143 +45,26 @@
 #define MDB_PGSHIFTS		{ 12, 22, 32 }
 #define MDB_NUM_PGSIZES		(2)
 
-#define X86_PGSIZES		{  size_4k = 0,	size_4m = 1, size_4g = 2, \
-				   size_sync = size_4m, size_superpage = size_4m, size_max = size_4m }
+/* Page sizes as macros so C can name them; the C++ pagesize_e enums that used
+   to carry these values alias them through X86_PGSIZES. */
+#define X86_PGSIZE_4K		0
+#define X86_PGSIZE_4M		1
+#define X86_PGSIZE_4G		2
+#define X86_PGSIZE_SYNC		X86_PGSIZE_4M
+#define X86_PGSIZE_SUPERPAGE	X86_PGSIZE_4M
+#define X86_PGSIZE_MAX		X86_PGSIZE_4M
+#define PGENT_SIZE_MAX		X86_PGSIZE_MAX
 
-class pgent_t;
+#define X86_PGSIZES		{  size_4k = X86_PGSIZE_4K, size_4m = X86_PGSIZE_4M,	\
+				   size_4g = X86_PGSIZE_4G,				\
+				   size_sync = X86_PGSIZE_SYNC,				\
+				   size_superpage = X86_PGSIZE_SUPERPAGE,		\
+				   size_max = X86_PGSIZE_MAX }
 
 #include <debug.h>
-class x86_pgent_t 
+
+struct x86_pgent_t 
 {
-public:
-    enum pagesize_e {
-	size_4k = 0,
-	size_4m = 1
-    };
-
-    // predicates
-    bool is_valid() 
-	{ return pg.present == 1; }
-
-    bool is_writable() 
-	{ return pg.rw == 1; }
-
-    bool is_executable() 
-	{ return pg.present == 1; }
-
-    bool is_accessed()
-	{ return pg.accessed == 1; }
-
-    bool is_dirty()
-	{ return pg.dirty == 1; }
-
-    bool is_superpage()
-	{ return pg.size == 1; }
-
-    bool is_kernel()
-	{ return pg.privilege == 0; }
-
-    bool is_write_through()
-	{ return pg.write_through == 1; }
-
-    bool is_cache_disabled()
-	{ return pg.cache_disabled == 1; }
-    
-    bool is_pat(pagesize_e size)
-	{ 
-#if defined(CONFIG_X86_PAT)
-	    return (size == size_4k ? pg.size : pg4m.pat); 
-#else
-	    return false;
-#endif
-	}
-    
-    bool is_global ()
-	{ return pg.global == 1; }
-    
-    bool is_cpulocal ()
-	{ return pg.cpulocal == 1; }
-
-    // retrieval
-    addr_t get_address(pagesize_e size)
-	{ return (addr_t) (raw & (size == size_4k ? X86_PAGE_MASK :
-				  X86_SUPERPAGE_MASK)); }
-
-    x86_pgent_t * get_ptab()
-	{ return (x86_pgent_t*)(raw & X86_PAGE_MASK); }
-
-    u32_t get_raw()
-	{ return raw; }
-
-    // modification
-    void clear()
-	{ raw = 0; }
-
-    void set_entry(addr_t addr, pagesize_e size, u32_t attrib)
-	{ 
-	    if (size == size_4k)
-		raw = ((u32_t)(addr) & X86_PAGE_MASK) | (attrib & X86_PAGE_FLAGS_MASK);
-	    else
-		raw = ((u32_t)(addr) & X86_SUPERPAGE_MASK) | X86_PAGE_SUPER |
-		    (attrib & X86_SUPERPAGE_FLAGS_MASK);
-	}
-
-    void set_ptab_entry(addr_t addr, u32_t attrib)
-	{
-	    raw = ((u32_t)(addr) & X86_PAGE_MASK) | 
-		X86_PAGE_VALID |
-		(attrib & X86_X32_PTAB_FLAGS_MASK);
-	}
-		
-    // attributes
-    
-    void set_cacheability (bool cacheable, pagesize_e size)
-	{
-	    this->pg.cache_disabled = !cacheable;
-#if defined(CONFIG_X86_PAT)
-	    if (size == size_4k) 
-		pg.size = 0;
-	    else
-		pg4m.pat = 0;
-#endif
-	}
-
-    void set_pat (word_t pat, pagesize_e size)
-	{
-	    pg.write_through  = (pat & 1) ? 1 : 0;
-	    pg.cache_disabled = (pat & 2) ? 1 : 0;
-#if defined(CONFIG_X86_PAT)
-	    if (size == size_4k)
-		pg.size  = (pat & 4) ? 1 : 0;
-	    else
-		pg4m.pat = (pat & 4) ? 1 : 0;
-#endif
-	}
-
-    void set_global (bool global)
-    {
-	this->pg.global = global;
-    }
-
-
-    void set_cpulocal (bool local)
-    {
-	this->pg.cpulocal = local;
-    }
-    
-    void set_accessed (bool accessed)
-    {
-	this->pg.accessed = accessed;
-    }
-
-    void set_dirty (bool dirty)
-    {
-	this->pg.dirty = dirty;
-    }
-
-
-	      
-private:
     union {
 	struct {
 	    unsigned present		:1;
@@ -223,9 +106,92 @@ private:
 
 	u32_t raw;
     };
-
-    friend class pgent_t;
 };
+typedef struct x86_pgent_t x86_pgent_t;
+
+/*
+ * C forms of the x86_pgent_t methods.  Same names as the x64 set
+ * (arch/x86/x64/ptab.h), so generic/linear_ptab_walker.c and the glue see one
+ * spelling on both subarchitectures.  `size' arguments are word_t holding an
+ * X86_PGSIZE_* value.
+ */
+INLINE bool x86_pgent_is_valid (x86_pgent_t *self)		{ return self->pg.present == 1; }
+INLINE bool x86_pgent_is_writable (x86_pgent_t *self)		{ return self->pg.rw == 1; }
+INLINE bool x86_pgent_is_executable (x86_pgent_t *self)		{ return self->pg.present == 1; }
+INLINE bool x86_pgent_is_accessed (x86_pgent_t *self)		{ return self->pg.accessed == 1; }
+INLINE bool x86_pgent_is_dirty (x86_pgent_t *self)		{ return self->pg.dirty == 1; }
+INLINE bool x86_pgent_is_superpage (x86_pgent_t *self)		{ return self->pg.size == 1; }
+INLINE bool x86_pgent_is_kernel (x86_pgent_t *self)		{ return self->pg.privilege == 0; }
+INLINE bool x86_pgent_is_write_through (x86_pgent_t *self)	{ return self->pg.write_through == 1; }
+INLINE bool x86_pgent_is_cache_disabled (x86_pgent_t *self)	{ return self->pg.cache_disabled == 1; }
+INLINE bool x86_pgent_is_global (x86_pgent_t *self)		{ return self->pg.global == 1; }
+INLINE bool x86_pgent_is_cpulocal (x86_pgent_t *self)		{ return self->pg.cpulocal == 1; }
+
+INLINE word_t x86_pgent_is_pat (x86_pgent_t *self, word_t size)
+{
+#if defined(CONFIG_X86_PAT)
+    return (size == X86_PGSIZE_4K ? self->pg.size : self->pg4m.pat);
+#else
+    (void) self; (void) size;
+    return 0;
+#endif
+}
+
+INLINE addr_t x86_pgent_get_address (x86_pgent_t *self, word_t size)
+{
+    return (addr_t) (self->raw & (size == X86_PGSIZE_4K ? X86_PAGE_MASK : X86_SUPERPAGE_MASK));
+}
+
+INLINE x86_pgent_t * x86_pgent_get_ptab (x86_pgent_t *self)	{ return (x86_pgent_t *) (self->raw & X86_PAGE_MASK); }
+INLINE u32_t x86_pgent_get_raw (x86_pgent_t *self)		{ return self->raw; }
+INLINE void x86_pgent_clear (x86_pgent_t *self)			{ self->raw = 0; }
+
+INLINE void x86_pgent_set_entry (x86_pgent_t *self, addr_t addr, word_t size, u32_t attrib)
+{
+    if (size == X86_PGSIZE_4K)
+	self->raw = ((u32_t)(addr) & X86_PAGE_MASK) | (attrib & X86_PAGE_FLAGS_MASK);
+    else
+	self->raw = ((u32_t)(addr) & X86_SUPERPAGE_MASK) | X86_PAGE_SUPER |
+	    (attrib & X86_SUPERPAGE_FLAGS_MASK);
+}
+
+INLINE void x86_pgent_set_ptab_entry (x86_pgent_t *self, addr_t addr, u32_t attrib)
+{
+    self->raw = ((u32_t)(addr) & X86_PAGE_MASK) | X86_PAGE_VALID |
+	(attrib & X86_X32_PTAB_FLAGS_MASK);
+}
+
+INLINE void x86_pgent_set_cacheability (x86_pgent_t *self, bool cacheable, word_t size)
+{
+    self->pg.cache_disabled = !cacheable;
+#if defined(CONFIG_X86_PAT)
+    if (size == X86_PGSIZE_4K)
+	self->pg.size = 0;
+    else
+	self->pg4m.pat = 0;
+#else
+    (void) size;
+#endif
+}
+
+INLINE void x86_pgent_set_pat (x86_pgent_t *self, word_t pat, word_t size)
+{
+    self->pg.write_through  = (pat & 1) ? 1 : 0;
+    self->pg.cache_disabled = (pat & 2) ? 1 : 0;
+#if defined(CONFIG_X86_PAT)
+    if (size == X86_PGSIZE_4K)
+	self->pg.size  = (pat & 4) ? 1 : 0;
+    else
+	self->pg4m.pat = (pat & 4) ? 1 : 0;
+#else
+    (void) size;
+#endif
+}
+
+INLINE void x86_pgent_set_global (x86_pgent_t *self, bool global)	{ self->pg.global = global; }
+INLINE void x86_pgent_set_cpulocal (x86_pgent_t *self, bool local)	{ self->pg.cpulocal = local; }
+INLINE void x86_pgent_set_accessed (x86_pgent_t *self, bool accessed)	{ self->pg.accessed = accessed; }
+INLINE void x86_pgent_set_dirty (x86_pgent_t *self, bool dirty)		{ self->pg.dirty = dirty; }
 
 #endif /* !ASSEMBLY */
 

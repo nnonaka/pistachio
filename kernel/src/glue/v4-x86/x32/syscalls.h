@@ -47,29 +47,31 @@
 #define SYS_IPC(to, from, timeout)				\
   void __attribute__ ((regparm (2))) sys_ipc (to, from, timeout)
 
-#define RETURN_IPC_SANITY					\
-    if (!current->get_state().is_running())			\
-    {	printf("line %d\n", __LINE__);				\
-	enter_kdebug("return_ipc ! running");}			\
-    if (current->queue_state.is_set(queue_state_t::wakeup))	\
-    {	printf("line %d\n", __LINE__);				\
+#define RETURN_IPC_SANITY						\
+    if (!thread_state_is_running (&current->thread_state))		\
+    {	printf("line %d\n", __LINE__);					\
+	enter_kdebug("return_ipc ! running");}				\
+    if (queue_state_is_set (&current->queue_state, QUEUE_STATE_WAKEUP))	\
+    {	printf("line %d\n", __LINE__);					\
 	enter_kdebug("return_ipc in wakeup");}
 
 
 #define return_ipc(from)			\
 {						\
     const timeout_t * t = &timeout - 1;		\
+    threadid_t __return_ipc_local = tcb_get_local_id (current);	\
+    threadid_t __return_ipc_from = (from);	\
     asm("leal %0, %%esp	\n"			\
 	"movl %4, %%ebp	\n"			\
 	"ret		\n"			\
 	:					\
 	: 					\
 	"m"(*t),				\
-	"a"(from.get_raw()),			\
-	"S"(current->get_tag().raw),		\
-	"b"(current->get_mr(1)),		\
-	"c"(current->get_mr(2)),		\
-	"D"(current->get_local_id().get_raw()));\
+	"a"(threadid_get_raw (&__return_ipc_from)),	\
+	"S"(tcb_get_tag (current).raw),		\
+	"b"(tcb_get_mr (current, 1)),		\
+	"c"(tcb_get_mr (current, 2)),		\
+	"D"(threadid_get_raw (&__return_ipc_local)));\
 	while(1);				\
 }
 
@@ -83,7 +85,7 @@
 
 #define return_thread_control(result)		\
 {						\
-    __frame->eax = result;			\
+    __frame->__base.eax = result;			\
     return;					\
 }
 
@@ -98,8 +100,8 @@
 
 #define return_space_control(result, control)	\
 {						\
-    __frame->eax = result;			\
-    __frame->ecx = control;			\
+    __frame->__base.eax = result;			\
+    __frame->__base.ecx = control;			\
     return;					\
 }
 
@@ -115,8 +117,8 @@
 
 #define return_schedule(result, time_control)		\
 {							\
-    __frame->eax = result;				\
-    __frame->edx = time_control; 			\
+    __frame->__base.eax = result;				\
+    __frame->__base.edx = time_control; 			\
     return;						\
 }
 
@@ -133,13 +135,14 @@
 #define return_exchange_registers(result,			\
     control, sp, ip, flags, pager, handle)			\
 {								\
-    __frame->eax = (result).get_raw();				\
-    __frame->ecx = control;					\
-    __frame->edx = sp;						\
-    __frame->esi = ip;						\
-    __frame->edi = flags;					\
-    __frame->ebx = handle;					\
-    __frame->ebp = pager.get_raw();				\
+    threadid_t __xr_pager = (pager);				\
+    __frame->__base.eax = (result);				\
+    __frame->__base.ecx = control;					\
+    __frame->__base.edx = sp;						\
+    __frame->__base.esi = ip;						\
+    __frame->__base.edi = flags;					\
+    __frame->__base.ebx = handle;					\
+    __frame->__base.ebp = threadid_get_raw (&__xr_pager);	\
     return;							\
 }
 
@@ -184,16 +187,16 @@
 
 #define return_memory_control(result)		\
 {						\
-    __frame->eax = result;			\
+    __frame->__base.eax = result;			\
     return;					\
 }
 
 
 
 /* entry functions for exceptions */
-extern "C" void exc_user_sysipc(void);
-extern "C" void exc_user_syscall(void);
-extern "C" void exc_user_privsyscall(void);
+void exc_user_sysipc(void);
+void exc_user_syscall(void);
+void exc_user_privsyscall(void);
 
 
 #endif /* !__GLUE_V4_X86__X32__SYSCALLS_H__ */

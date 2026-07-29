@@ -31,8 +31,8 @@
 
 LDSCRIPT = $(SRCDIR)/src/glue/$(API)-$(ARCH)/$(SUBARCH)/linker.lds
 
-SOURCES += $(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, init.cc exception.cc \
-	space.cc user.cc thread.cc trap.S trampoline.S memcontrol.cc)
+SOURCES += $(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, init.c exception.c \
+	space.c user.c thread.c trap.S trampoline.S memcontrol.c)
 
 SOURCES+=	src/generic/linear_ptab_walker.c \
 		src/generic/mapping_alloc.c

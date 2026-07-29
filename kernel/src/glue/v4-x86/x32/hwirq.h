@@ -54,7 +54,7 @@
 
 
 #define HW_IRQ(num)							\
-    extern "C" void hwirq_##num();					\
+    void hwirq_##num(void);						\
     __asm__ (								\
         "	.section .text					\n"	\
         "	.align 16					\n"	\

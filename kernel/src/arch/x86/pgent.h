@@ -99,7 +99,7 @@ INLINE void pgent_sync (pgent_t *self, struct space_t *s, word_t pgsize)
 INLINE void pgent_set_global (pgent_t *self, struct space_t *s, word_t pgsize, bool global)
 {
 #if defined(CONFIG_X86_PGE)
-    self->pgent.pg4k.global = global;
+    x86_pgent_set_global (&self->pgent, global);
     pgent_sync (self, s, pgsize);
 #endif
 }
@@ -107,7 +107,7 @@ INLINE void pgent_set_global (pgent_t *self, struct space_t *s, word_t pgsize, b
 INLINE void pgent_set_cpulocal (pgent_t *self, struct space_t *s, word_t pgsize, bool local)
 {
     (void) s; (void) pgsize;
-    self->pgent.pg4k.cpulocal = local;
+    x86_pgent_set_cpulocal (&self->pgent, local);
 }
 
 INLINE bool pgent_is_kernel (pgent_t *self, struct space_t *s, word_t pgsize)
@@ -136,11 +136,7 @@ INLINE void pgent_dump_misc (pgent_t *self, struct space_t *s, word_t pgsize)
 
 INLINE void pgent_set_cacheability (pgent_t *self, struct space_t *s, word_t pgsize, bool cacheable)
 {
-    self->pgent.pg4k.cache_disabled = !cacheable;
-    if (pgsize == X86_PGSIZE_4K)
-	self->pgent.pg4k.pat = 0;
-    else
-	self->pgent.pg2m.pat = 0;
+    x86_pgent_set_cacheability (&self->pgent, cacheable, pgsize);
     pgent_sync (self, s, pgsize);
 }
 
