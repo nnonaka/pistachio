@@ -5876,3 +5876,40 @@ been built in this tree at all:
 
 Ten of nineteen configurations reached userland when §128 was written; twelve
 do now, and thirteen with `TBUF_PERFMON` off.
+
+
+## §130 — Small spaces: the thirteenth gate-blind block
+
+    sigma0 accessed kernel space @ df001000, ip=df001000 - deny
+
+`df001000` is `UTRAMP_MAPPING`, and the instruction pointer is in it, so sigma0
+was executing there. With `CONFIG_X86_SMALL_SPACES` and `CONFIG_X86_SYSENTER`
+together, `sysexit` cannot return straight to the user IP — the user code
+segment is limited to the small space — so `x32/trap.S` sends it to a
+four-instruction trampoline that reloads `%ds` and `%ss` and does an `lret`.
+The trampoline is its own linker section, placed at `UTRAMP_MAPPING`, which is
+inside the kernel area, and it therefore has to be mapped back into every
+address space with user rights:
+
+    #if defined(CONFIG_X86_SMALL_SPACES) && defined(CONFIG_X86_SYSENTER)
+        /* User-level trampoline for ipc_sysexit, readonly but global. */
+        extern word_t _start_utramp_p[];
+        add_mapping ((addr_t) UTRAMP_MAPPING, (addr_t) &_start_utramp_p,
+                     pgent_t::size_4k, false, false, true);
+    #endif
+
+That block was in `space.cc`'s `init_kernel_mappings` and did not survive
+§119's conversion of the file. It is the thirteenth of these — a conditional
+compiled by no configuration in the tree at the time it was rewritten, so
+nothing could report it missing. The first user-level instruction sigma0
+executes after its first IPC is in that page, so the fault is immediate and
+total: the config had never got a single instruction into the root task.
+
+Restored verbatim, with `cacheable` spelled out (it was a C++ default
+argument). `x86-x32-p4-smallspaces` reaches the l4test menu, and driving the
+suite through it gets the KIP tests, IA-32 exception IPC and the start of
+memtest with no assertion and no kdb entry.
+
+Thirteen of nineteen x32 configurations reach userland now, fourteen with
+`TBUF_PERFMON` off. Gate: `x86-x64-p4-smp`, 706 symbols with 706 identical
+bodies — the restored block is inside a gate x64 does not set.

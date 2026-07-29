@@ -458,6 +458,16 @@ static void SECTION(".init.memory") space_init_kernel_mappings (space_t *self)
     space_add_mapping (self, (addr_t) UTCB_MAPPING, virt_to_phys (utcb_page),
 		       X86_PGSIZE_4K, true, false, true, true);
 
+#if defined(CONFIG_X86_SMALL_SPACES) && defined(CONFIG_X86_SYSENTER)
+    /* User-level trampoline for ipc_sysexit, readonly but global. */
+    {
+	extern word_t _start_utramp_p[];
+	space_add_mapping (self, (addr_t) UTRAMP_MAPPING,
+			   (addr_t) &_start_utramp_p,
+			   X86_PGSIZE_4K, false, false, true, true);
+    }
+#endif
+
 #if defined(CONFIG_SUBARCH_X64)
     /* map syscalls read-only/executable to user */
     ASSERT (((word_t) end_syscalls - (word_t) start_syscalls) <= KERNEL_PAGE_SIZE);
