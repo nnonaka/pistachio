@@ -49,9 +49,12 @@ struct spinlock_t {
 typedef struct spinlock_t spinlock_t;
 
 /* Without SMP there is nothing to serialise against, so the operations are
-   no-ops -- but they must exist.  The C++ version declared none at all, which
-   meant any unconditional lock()/unlock() call (platform/ppc44x/bic.h has
-   several) simply did not compile on a uniprocessor build, in either language. */
+   no-ops -- but they must exist, because callers such as platform/ppc44x/bic.h
+   and uic.c lock unconditionally.  Upstream declares the same four as empty
+   class members; only init() gains an argument here, matching the SMP form
+   below.  Note the struct is empty, so C sizes it 0 where C++ sized it 1:
+   every struct in the tree holding a spinlock_t is four bytes smaller on a
+   uniprocessor build.  Notes §143. */
 INLINE void spinlock_init (spinlock_t *self, word_t val) { }
 INLINE void spinlock_lock (spinlock_t *self) { }
 INLINE void spinlock_unlock (spinlock_t *self) { }
