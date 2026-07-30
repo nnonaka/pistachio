@@ -6430,3 +6430,63 @@ Against `f201f44`: `x86-x64-p4-smp`, which has neither `CONFIG_NEW_MDB` nor IO
 flexpages, is 706 symbols with 704 identical bodies -- `extended_transfer` and
 the constructor table that shifted when it shrank. `x86-x64-p4-newmdb` is 559
 with 538, and every one of the twenty-one that moved is MDB code.
+
+
+## §137 — `p4-fullkdb`: §124's `rdpmc`, and why it looked like a hang
+
+Both `fullkdb` configurations stop after the last line of verbose init and
+produce nothing further. §124 had already named the cause on x32 -- QEMU has no
+`rdpmc` -- but not the mechanism, and the x64 one had not been connected to it.
+It is the same fault, and the mechanism is worth writing down because it is not
+a hang.
+
+QEMU exits. `-no-reboot` turns a triple fault into a clean exit, so the harness
+sees a truncated serial log and no process. `-d int` shows the whole chain:
+
+     0: v=0e  IP=ffffffffc0610ad0  CR2=fffffffe80010018
+     1: v=06  IP=ffffffffc0612ef5  SP=ffffffffc0a01d40
+     2: v=06  IP=ffffffffc0617515  SP=ffffffffc0a01b90
+     3: v=06  IP=ffffffffc0617515  SP=ffffffffc0a019e0
+     ...
+    check_exception old: 0xe new 0xe
+    check_exception old: 0x8 new 0xe
+
+One legitimate page fault in the KTCB area, then an invalid opcode, then the
+same invalid opcode over and over with the stack pointer dropping 0x1b0 a time
+until it reaches `0xffffffffc0a00000` -- `_start_cpu_local`, the bottom of the
+CPU-local area -- where the push faults, the fault becomes a double fault and
+then a triple. Both `v=06` addresses are inside `__tbuf_record_event`, at
+
+    mov    $0xc,%ecx
+    rdpmc
+
+`CONFIG_TBUF_PERFMON` sets `tracebuffer->config.pmon` in
+`tracebuffer_initialize`, and `tracerecord_store_arch` in
+`arch/x86/tracebuffer.h` then reads counters 12 and 14 with `rdpmc` on every
+record. The `rdpmc` is compiled in unconditionally and gated at run time on
+that bit, which is why turning the option off does not remove the 150 `rdpmc`
+sites from the image -- it stops them executing. QEMU's TCG raises #UD.
+
+The recursion is the part that turns a missing instruction into a triple fault:
+`exc_invalid_opcode` is itself a traced path, so the #UD handler records a
+tracepoint on the way in, which executes `rdpmc`, which raises #UD. Nothing in
+that loop makes progress and nothing bounds the depth.
+
+Nothing here is a migration fault -- `tracebuffer_initialize` matches the C++
+`initialize()` line for line, including all four option tests -- and on a P4
+with the counters it works. So the fix is in the harness, which already edits
+`config.h` to give itself a serial console: `tools/boottest` now also turns
+`CONFIG_TBUF_PERFMON` off, with a notice, for the same reason and in the same
+place. Only the two `fullkdb` configurations set it.
+
+Both now boot to the `l4test` menu, which closes §124 as well. Ten of eleven x64
+configurations boot; the one that does not is `p4-statictcbs`, which §135
+explains cannot be given a serial console at all. On x32, nineteen of twenty
+boot -- `p4-statictcbs` there is the same story.
+
+One aside worth recording, since it cost a wrong answer first time round:
+`cp -r` of a configured build directory does not give you a forkable copy. The
+`.depend` it copies names the *original* directory's `config.h` by absolute
+path, so editing the copy's `config.h` rebuilds nothing and the stale objects
+link into a kernel that appears to contradict the diagnosis. Extract the config
+tar afresh instead.

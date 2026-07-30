@@ -69,6 +69,19 @@ if grep -q '^#undef  *CONFIG_KDB_CONS_COM' "$CONFIG_H"; then
     sed -i 's/^#undef  *CONFIG_KDB_CONS_COM/#define CONFIG_KDB_CONS_COM 1/' "$CONFIG_H"
 fi
 
+# --- 1b. CONFIG_TBUF_PERFMON does not survive QEMU (idempotent) ------------
+# It sets tracebuffer->config.pmon, and every tracebuffer record then reads the
+# performance counters with rdpmc, which QEMU's TCG does not implement: #UD.
+# The invalid-opcode handler is itself a traced path, so it executes rdpmc on
+# the way in and faults again, one stack frame deeper, until RSP walks off the
+# bottom of the CPU-local area and the #PF becomes a #DF and then a triple
+# fault -- QEMU exits, which reads as a silent hang.  See notes §124 and §137.
+# Turning it off changes nothing on hardware that has the counters.
+if grep -q '^#define  *CONFIG_TBUF_PERFMON' "$CONFIG_H"; then
+    echo "boottest: disabling CONFIG_TBUF_PERFMON (QEMU has no rdpmc) in $CONFIG_H"
+    sed -i 's/^#define  *CONFIG_TBUF_PERFMON  *1/#undef  CONFIG_TBUF_PERFMON/' "$CONFIG_H"
+fi
+
 # --- 2. build the kernel ---------------------------------------------------
 echo "boottest: building kernel ..."
 make -C "$BUILDDIR" >"$BUILDDIR/.boottest-build.log" 2>&1 \
