@@ -7404,3 +7404,155 @@ opens the platform, and the segment MMU comes with it. Behind it sit
 member definitions in `pgent-pghash_functions.h`, and eight more `.cc` files
 under `platform/ofppc` and `kdb/platform/ofppc`. That is a section's worth of
 work, not a loose end, and it is the last of it on this architecture.
+
+
+## §144 — OFPPC: one commit in 2010, and the eleven ways it broke a platform
+
+§143 closed by naming `CONFIG_PLAT_OFPPC` with the segment MMU as the last
+unconverted configuration on this architecture, and estimated it at a section's
+worth of work. That was right about the size and wrong about the shape. The
+C++ was the smaller half.
+
+`powerpc.cml:155` offers two platforms and OFPPC is the **default**:
+
+    choices powerpc_platform
+	    PLAT_OFPPC
+	    PLAT_PPC44X
+	    default PLAT_OFPPC
+
+So the platform a bare `ARCH_POWERPC=y` selects is the one that has not built
+since 2010.
+
+### The blocker, and what it points at
+
+Configured for OFPPC the tree stops before compiling anything, on an assertion
+in its own headers:
+
+    src/glue/v4-powerpc/config.h:98: error: "The page hash area overlaps the cpu data area."
+
+It is not a stale check. The arithmetic:
+
+    DEVICE   0xD0000000 - 0xD2000000
+    PINNED   0xD2000000 - 0xD3000000
+    CONSOLE  0xD3000000 - 0xD4000000
+    PGHASH   0xD4000000 - 0xD6000000	(32M, 32M-aligned)
+    CPU_AREA 0xD4000000 + 128K		(KERNEL_CPU_OFFSET)
+
+`PGHASH_AREA_START` is `CONSOLE_AREA_END`, and `CONSOLE_AREA_END` is where the
+cpu area begins. Before **d52a5e2**, "Added support for PPC440 processors", the
+page hash sat at `DEVICE_AREA_END` and its 32MB ended exactly at
+`KERNEL_CPU_OFFSET` -- the check passed with nothing to spare. That commit
+inserted the 16MB pinned and 16MB console areas into the span the hash occupied
+and repointed `PGHASH_AREA_START` at `CONSOLE_AREA_END`. PPC440 selects
+`CONFIG_PPC_MMU_TLB`, so the whole `#ifdef CONFIG_PPC_MMU_SEGMENTS` block the
+assertion lives in was never compiled by its author.
+
+Every one of the ten further defects below is from the same commit or the same
+neglect, and `master` reproduces all of them.
+
+### Eleven things wrong, none of them the migration's
+
+  1. **The layout.** Above. Nothing can go back where it was -- there is no
+     32MB-aligned 32MB slot left below `0xD4000000` -- and shrinking
+     `PGHASH_AREA_SIZE` would cap the largest hash `pghash_init` may pick at
+     run time. `KERNEL_CPU_OFFSET` moves to `0xD6000000` on segment-MMU builds
+     only, which is forced: 128KB-aligned for its BAT, clear of the hash below
+     and of `KTCB_AREA_START` above, in the 160MB that was already empty.
+     ppc44x keeps `0xD4000000`.
+  2. **Eight `#ifdef CONFIG_PPC_MMU_SEGMENT`** -- singular, defined by no
+     `.cml`, read by nothing. §141 found this misspelling class in one place
+     and §142 in a second; this is the third and by far the worst. It switches
+     off `insert_4k_mapping`, `flush_4k_mapping`, the reference-bit sync, and
+     the whole `pdir_cache`/`sync_kernel_space`/`handle_hash_miss` sequence in
+     thread switch. With it misspelt **nothing is ever put into the hardware
+     page hash and nothing is ever taken out**. The port could not have worked
+     even if it had compiled.
+  3. `current->pdir_cache` in `switch_to`, where no `current` is in scope.
+  4. `ppc_esr_read`, `ppc_tcr_read`/`write`, `ppc_tsr_write` outside the
+     `CONFIG_PPC_BOOKE` block defining the SPRs they name; `space.c` and
+     `init.c` include `swtlb.h`, which reaches the same SPRs, unconditionally.
+  5. `install_exception_handlers` called ~200 lines before its `static`
+     definition with no declaration on this branch.
+  6. `_except_extern_int` names both the vector slot and the `.init` template
+     copied into it -- `except.S` does not assemble on any non-BookE build.
+  7. `get_of1275_tree` called from ten 32-bit files, declared only in
+     `arch/powerpc64/1275tree.h`.
+  8. No `platform/ofppc/platform.h`, though `init.c` includes
+     `INC_PLAT(platform.h)` unconditionally -- and the same commit replaced
+     init's `ofppc_get_cpu_speed`/`ofppc_get_cpu_count` calls with the neutral
+     pair, orphaning both.
+  9. `startup.S` branches to `l4_powerpc_init`, defined nowhere; the entry
+     point is `startup_system`.
+ 10. `linker.lds` includes neither `ctors.ldi` nor `mdb.ldi` -- the §132 class.
+ 11. `space-pghash.cc` is in `SOURCES` with **no includes at all**;
+     `tcb_resources_enable_copy_area` calls a method on a type that does not
+     exist; `opic_in32be` assembles a form `lwz` does not have;
+     `TRACEPOINT(hash_miss_cnt)` passes one argument to a macro taking two.
+
+One is ours and worth recording as such: **`asid.h`**. The C++ was
+`template <class T, int SIZE> class asid_manager_t`, so nothing existed until
+something named the instantiation. Spelling the single instantiation out made
+an array unconditionally sized by `CONFIG_MAX_NUM_ASIDS`, which
+`glue/v4-powerpc/config.h` defines only on the `CONFIG_PPC_MMU_TLB` branch. A
+template's laziness was doing work the conversion did not notice it was
+relying on. §141's audits compared return types and parameter lists and would
+not have caught it; the defect is at the instantiation point, not the
+signature.
+
+### The conversion
+
+Eleven files, ~2,550 lines. `pgent-pghash.h` and its functions header;
+`pghash.cc` and `space-pghash.cc`; `1275tree`, `intctrl`, `opic` and `ofppc` on
+the platform side; `io`, `of1275`, `ofppc`, `opic` and `reset` in the kdb.
+
+Two things are worth naming. `of1275_device_t::get_prop` was **three
+overloads** -- by name, by index, and a word-sized wrapper -- and all three keep
+distinct C names; collapsing an overload set to its narrowest member is exactly
+what §140 spent a section chasing. And `opic.h` turned out to be a byte-for-byte
+duplicate of `intctrl.h` **sharing its include guard**, so whichever a
+translation unit reached first expanded and the other became a no-op; keeping
+the two in step was never checked by anything, and `opic.h` now names the other.
+
+Where upstream's intent could not be recovered it is not guessed:
+`tcb_resources_enable_copy_area` casts to a `ppc_resource_bits_t` that exists
+nowhere, and is left explicitly unimplemented with the original body kept in a
+comment.
+
+### Verification
+
+    ofppc     0 errors, 0 implicit declarations, links, 231,060 bytes
+    ebony     0 errors, 0 implicit declarations, links, 892,504 bytes
+    bgp       0 errors, 0 implicit declarations, links, 1,467,032 bytes
+
+The blocks that no configuration selects are compiled anyway, the way §142
+compiled its dead branches: `CONFIG_PPC_MMU_SEGMENT` and
+`CONFIG_KDB_CONS_OF1275` defined on the command line, zero errors in each of
+`space.c`, `thread.c`, `pghash.c`, `of1275.c`, `ofppc.c` and `reset.c`.
+
+**ppc44x is unchanged.** Rebuilt from scratch against the §142 binary the
+instruction stream is identical -- same count, same mnemonics, same order, no
+function differing in length -- and fifteen bytes differ, all of them `li`
+immediates carrying `__LINE__`. That is why `dtree_remap` is split per platform
+with upstream's ppc44x text left alone rather than merged behind a shared
+accessor: the merged version was correct and cost four instructions in the one
+PowerPC kernel that runs.
+
+`x86-x64-p4` was rebuilt because two *generic* headers were touched
+(`asid.h`, `memregion.h`): `.text`, `.data` and `.rodata` byte-identical, 28,457
+instructions unchanged.
+
+### What this is not
+
+It builds and links. **It has not been booted** -- there is no ofppc hardware
+and no emulator here, and the layout change in item 1 is therefore verified
+only by the two assertions it was made to satisfy. Item 2 is the more serious
+caveat: with the guard left misspelt, as it is, a segment-MMU kernel still
+never touches its page hash. Correcting that spelling is a behavioural change
+to code that has never executed, and belongs to whoever brings the port up on
+real hardware -- together with the note that the corrected code now compiles,
+which is the part that could be settled here.
+
+With this, **every configuration selectable on the 32-bit PowerPC architecture
+compiles and links**: both platforms, both subplatforms. What remains C++ in
+the tree is powerpc64 (21 files, no toolchain here), the three OF platforms
+that belong to it, and the five dead files §143 listed.
