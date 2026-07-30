@@ -284,9 +284,18 @@ case $ARCH in
 	default_roottask_linkbase=00300000
 	;;
   amd64)
+	dnl The amd64 kernel links its physical image at 0x600000 and gives every
+	dnl differently-mapped region a 2M superpage of its own, then reserves a
+	dnl megabyte of boot memory and puts .init above that -- so its physical
+	dnl footprint is 0x600000 plus 2M per region, and it grows by a whole
+	dnl superpage whenever a configuration adds one.  CONFIG_X86_COMPATIBILITY_MODE
+	dnl adds .kip_32, which took the footprint to 0xf166a8 and put the boot-memory
+	dnl hole across the old sigma0 base of 0x00f00000: kickstart refused to boot
+	dnl it, and had it not, the kernel would have allocated boot memory over
+	dnl sigma0's image.  These bases leave room for four more such regions.
   	default_kickstart_linkbase=00100000
-	default_sigma0_linkbase=00f00000
-	default_roottask_linkbase=01000000
+	default_sigma0_linkbase=01800000
+	default_roottask_linkbase=01900000
 	;;
 esac
 

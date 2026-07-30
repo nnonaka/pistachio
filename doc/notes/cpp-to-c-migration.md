@@ -6266,3 +6266,79 @@ The new code carries nineteen `-Wconversion` / `-Wsign-conversion` warnings,
 all narrowings that were implicit in the C++ (MSR reads into `word_t`, the
 `s32_t` one-bit flags in `vmcs_exectr_pinbased_t`, the 4-bit `cr_num` field).
 They are faithful and left alone.
+
+
+## §135 — `x86-x64-p4-cm`: the kernel had grown past sigma0
+
+§131 recorded `x86-x64-p4-cm` as not getting past kickstart, and §134 as a
+link-base conflict. It is, and it is a real one, not a false positive:
+
+    kernel    (0x0010a000-0x00149ff0)   => 0x00f0f000
+      (0x0010a1e0-0x00122700) -> 0x00600000-0x00618520
+      (0x00122700-0x00123007) -> 0x00800000-0x00800907
+      (0x00123020-0x00123c2a) -> 0x00a00000-0x00a00c0a
+      (0x00124000-0x00129194) -> 0x00c00000-0x00c05194
+      (0x0012a000-0x00138430) -> 0x00e00000-0x00e0e430
+      (0x00139000-0x001406a8) -> 0x00f0f000-0x00f166a8
+     sigma0    (0x0014a000-0x00166aa8)   => 0x00f00000
+      (0x0014a0c0-0x001502e0) -> 0x00f00000-0x00f06220
+         Conflict with module 0 (0x00600000-0x00f166a8)
+
+The tempting reading is that kickstart is too coarse. `elf_load` reports the
+*enclosing* range of a module's segments and `check_memory` tests against that,
+so the kernel occupies `0x600000-0xf166a8` as far as the check is concerned;
+sigma0 at `0xf00000-0xf06220` sits in the gap between the fifth segment
+(ends `0xe0e430`) and the sixth (starts `0xf0f000`) and overlaps neither.
+
+The gap is not free space. `x64/linker.lds` reads
+
+    _start_bootmem = .;
+    . = . + BOOTMEM_SIZE;
+    _end_bootmem = .;
+    _start_init = . - KERNEL_OFFSET;
+
+so between the last loaded section and `.init` there is a megabyte of boot
+memory that has no ELF section and therefore no `PT_LOAD` segment. For this
+kernel that is `0xe0f000-0xf0f000`, and sigma0 is inside it. A per-segment
+conflict check would have let the load through and the kernel would then have
+allocated boot memory over sigma0's image. The coarse check is right here, for
+a reason it does not state.
+
+Why this configuration and no other: the amd64 kernel links its physical image
+at `0x600000` and gives each differently-mapped region a 2M superpage of its
+own -- `.text`, `.syscalls`, `.cpulocal`, `.data` -- so the footprint is
+`0x600000` plus 2M per region plus BOOTMEM_SIZE plus `.init`, and it grows by a
+whole superpage whenever a configuration adds a region. `CONFIG_X86_COMPATIBILITY_MODE`
+adds `.kip_32`, a fifth: `x86-x64-p4-smp` ends at `0xd20df8`, comfortably below
+sigma0, and `x86-x64-p4-cm` at `0xf166a8`, above it. `x64/linker.lds` already
+carries a comment about this failure mode, from the `.comment`/`/DISCARD/`
+interaction in §120: "the kernel loads over sigma0 and kickstart refuses to
+boot it."
+
+So the fix is to give the kernel room, which is what kickstart's message asks
+for. `user/configure.in`'s amd64 defaults move from
+
+    default_sigma0_linkbase=00f00000        ->  01800000
+    default_roottask_linkbase=01000000      ->  01900000
+
+24M and 25M, leaving space for four more superpage regions before this can
+recur. `configure` is generated, not tracked, and `autoconf` reproduces the
+patched script exactly. Nothing in the tree hard-codes either address; the ia32
+defaults (sigma0 at `0x20000`, below the kernel) are untouched, so x32 is
+unaffected.
+
+`x86-x64-p4-cm` now boots to the `l4test` menu. Seven of eleven x64
+configurations boot, where six did before, and the four that do not are
+unchanged by this:
+
+  - `p4-iofp` and `p4-newmdb` take the same early kernel fault at
+    `ffffffffc0602a68`, the one §131 left undiagnosed.
+  - `p4-fullkdb` now prints the virtual-memory layout and stops there.
+  - `p4-statictcbs` cannot be boot-tested at all. Its shipped tar has a
+    `config.h` and no `.config`, and that `config.h` enables
+    `CONFIG_KDB_CONS_OF1275`, `_PSIM_COM` and `_KBD` -- PowerPC consoles -- with
+    `CONFIG_KDB_CONS_COM` off. `tools/boottest` turns `CONFIG_KDB_CONS_COM` on
+    in `config.h`, but the console sources are selected from `.config`, so the
+    link fails on `printf` and `init_console`. The configuration compiles under
+    `tools/configsweep`, which derives its own `.config`; it just has no console
+    a serial harness can read.
