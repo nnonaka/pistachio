@@ -7052,3 +7052,208 @@ unchanged, as a signed-to-unsigned compare must be.
 `glue/v4-powerpc/space-swtlb.c` are PowerPC-only; nothing shared was touched, so
 the x86 gate is not implicated and stands where §140 left it at thirty-one of
 thirty-one.
+
+## §142 — The dead branches compile: the three inactive configs §141 listed
+
+§141 inventoried C++ syntax surviving in already-converted `.c` files behind
+options the one buildable PowerPC configuration does not select, and declined to
+fix it: *"none can be compiled here to check the fix, and guessing at a rewrite
+that cannot be verified is how the two asm out-parameters in §140 got their
+indirection lost in the first place."*
+
+That premise was wrong. `rules.cml:270` reads `unless ARCH_X86 or ARCH_POWERPC
+suppress dependent SMP`, and `TRACEBUFFER` is generic — both options are
+selectable on this port, and the console options are a plain either/or in
+`powerpc.cml:143`. All three branches can be compiled here, by the same scratch
+tree recipe §84 used for x86. What follows is that build.
+
+### CONFIG_SMP
+
+89 errors, in exactly the files §141 named plus one it missed
+(`kdb/glue/v4-powerpc/thread.c`). Four are conversion leftovers and are fixed:
+
+  - `space-swtlb.c` `init_swtlb[idx].tlb0.read(idx)` and `.write(idx)`, six
+    calls, to `ppc_tlb0_read (&init_swtlb[idx].tlb0, idx)` and so on. Note
+    `ppc_tlb1_*` takes `word_t index` where `ppc_tlb0_*` and `ppc_tlb2_*` take
+    `int` -- the upstream inconsistency §141 recorded, left as it is.
+  - `init.c` `cpu_start_lock.lock()` / `.unlock()`, three calls, to
+    `spinlock_lock (&cpu_start_lock)` / `spinlock_unlock`.
+  - `tcb.h` `get_idle_tcb()->get_cpu()`. Neither spelling survives: `get_cpu`
+    is `tcb_get_cpu` and `get_idle_tcb` is `get_idle_tcb_c`, but this header is
+    included from `api/v4/tcb.h:209`, ahead of both declarations (`:232` and
+    `:324`), so the body reaches `__idle_tcb->cpu` directly, exactly as
+    `accessors.c:244` defines the accessor.
+  - `kdb/glue/v4-powerpc/thread.c`'s `INLINE u16_t dbg_get_current_cpu()`,
+    deleted. In C `INLINE` is `static inline`, which collides with the `extern`
+    declaration in `src/kdb/tracepoints.h`; in C++ it did not. It had no caller
+    in its own translation unit, so `TP_CPU` has always bound to the shared
+    definition in `kdb/api/v4/tcb.c` and removing it changes nothing. The
+    sibling `dbg_get_current_tcb` had already gone the same way earlier.
+
+**The rest is not ours, and is worse than §141 assumed.** Two errors are
+structural, and `master` compiled with `powerpc-linux-gnu-g++` and
+`CONFIG_SMP=y` reproduces both verbatim:
+
+    src/glue/v4-powerpc/tcb.h: error: redefinition of 'cpuid_t get_current_cpu()'
+    src/glue/v4-powerpc/space-swtlb.cc: error: 'current_cpu' was not declared in this scope
+
+`api/v4/cpu.h:69` defines `get_current_cpu()` unguarded, `glue/v4-powerpc/tcb.h`
+defines it again under `CONFIG_SMP`, and both land in one translation unit.
+Which was meant is not recoverable from the source: x86 has no override at all
+and relies on the `cpu.h` one, which is fed by `current_cpu = cpu` in `space.c`
+precisely as `space-swtlb.c:198` does here -- so the PowerPC copy looks
+vestigial. That is inference about code that has never run, so it is translated
+and left in place with the reasoning written beside it, not deleted.
+
+`current_cpu` is the one upstream defect fixed here, because it admits no
+behavioural choice: it is defined in `api/v4/smp.c:39` and declared nowhere at
+file scope on this port (`cpu.h` has the `extern` *inside* the function body).
+`glue/v4-x86/space.h:21` already carries the identical declaration; ppc's
+`space.h` now does too.
+
+With the collision renamed away to isolate the question, **all 65 objects
+compile.** What remains is the link, and it settles the matter:
+
+    undefined reference to `tcb_lock_state_init'
+    undefined reference to `migrate_interrupt_start_c'
+    undefined reference to `space_switch_to_kernel_space'
+
+None of the three is implemented for PowerPC. `space_switch_to_kernel_space` is
+*declared* in `master`'s ppc `space.h` and defined nowhere; the other two do not
+appear in the PowerPC tree at all, in `master` or here. The linker also reports
+`.cpu` overlapping `.eh_frame`. So PowerPC SMP is not a configuration someone
+switched off -- it was never finished. §141's framing of these as "a compile
+error waiting for whoever first enables the feature" understated it: enabling it
+is a porting job, not a build fix.
+
+### CONFIG_TRACEBUFFER
+
+Tested without SMP, which is the combination that can actually link. Five
+sites, all conversion leftovers, all fixed:
+
+  - `arch/powerpc/tracebuffer.h`, still holding `tracerecord_t::store_arch` and
+    `tracebuffer_t::initialize` as out-of-line member definitions. Now
+    `tracerecord_store_arch (self, config)` and `tracebuffer_initialize (self)`,
+    matching the x86 header, which had already been collapsed. `current = 0`
+    becomes `atomic_set (&self->current, 0)` -- `current` is an `atomic_t`, so
+    the assignment went through `operator=`.
+  - `space-swtlb.c`'s `setup_tracebuffer`: `get_kernel_space()->map_device_pinned(...)`,
+    `get_kip()->memory_info.insert(memdesc_t::reserved, ...)` and
+    `tracebuffer->initialize()`. The four-argument `insert` was a forwarder to
+    the five-argument one with `subtype = 0` (`master`'s `kernelinterface.h:99`);
+    only the latter has a C form, so the `0` is now written out, as x86's
+    `init.c:291` already does.
+
+**`powerpc-kernel` builds and links, 1,459,004 bytes.** A configuration that
+did not previously compile.
+
+### CONFIG_KDB_CONS_BGP_JTAG
+
+`kdb/platform/ppc44x/io.c` still had `jtag_console_t` as a half-converted
+`typedef struct` with three member functions inside it. De-classed the same way
+`bgp_mailbox_t` above it already was, into `jtag_console_send_command`,
+`jtag_console_putc` and `jtag_console_init`, with the two `cons.` call sites
+updated.
+
+Selecting JTAG *alone* then fails to link: `init_jtag()` calls `init_bgtree()`,
+whose definition sits inside the `CONFIG_KDB_CONS_BGP_TREE` guard, while
+`powerpc.cml:143` offers the two consoles independently. `master` has the same
+structure, so this is upstream and is left alone. With both consoles selected
+the kernel builds and links, 1,461,884 bytes.
+
+### CONFIG_DYNAMIC_TCBS, and the one defect this migration created
+
+The first three branches were the ones §141 had listed. Enumerating every
+`CONFIG_*` guard appearing in a PowerPC `.c` file and testing it against the
+config turned up more that are off, so the remaining selectable ones --
+`DYNAMIC_TCBS` (in place of `STATIC_TCBS`), `KDB_BREAKIN` with
+`KDB_BREAKIN_ESCAPE`, and `KDB_CONS_COM` -- were built together. The break-in
+and serial-console branches were clean. Dynamic TCBs were not, and the first
+error is **the only defect in this whole section that the conversion
+introduced**:
+
+    src/api/v4/tcb.h: error: conflicting types for 'tcb_allocate';
+                             have 'tcb_t *(threadid_t)'
+
+`master`'s `tcb_t` declares `static tcb_t *allocate(threadid_t)` (`tcb.h:238`)
+and PowerPC adds a *non-static* `void allocate()` (`glue/v4-powerpc/tcb.h:189`).
+Different signatures, so C++ overloads them happily. De-classing flattened both
+to `tcb_allocate` and C has no overloading. x86 never defined the second one,
+which is why this went unseen until a PowerPC build selected dynamic TCBs.
+
+The PowerPC one is renamed `tcb_allocate_arch` rather than deleted, though it is
+demonstrably dead: nothing in either tree calls it, and the factory does the
+allocating touch itself via `kernel_stack[0]`.
+
+The rest of that branch is un-migrated C++ in `glue/v4-powerpc/space.c`'s
+`!CONFIG_STATIC_TCBS` block, and it is worth recording *how* it presented,
+because only one of the four was an error:
+
+  - `space_add_mapping` called with six arguments where it takes seven. The
+    seventh is `attrib`, which `master`'s `space.h:196` gave the default
+    `pgent_t::cache_standard`; C has no default arguments, so it is written out.
+  - `kmem_tcb` undeclared -- the file declares three other kmem groups but not
+    this one, since nothing else in it allocates TCBs.
+  - `sync_kernel_space(addr)`, `add_mapping(...)` and `get_dummy_tcb()`: two
+    implicit-`this` member calls and one renamed accessor, all three of which C
+    accepts as **warnings** (`-Wimplicit-function-declaration`), not errors.
+    They would have linked into calls to nonexistent symbols had the two real
+    errors above not stopped the build first.
+
+That last point is the standing rule restated: a sweep that greps only for
+`error:` reports a clean file that is not clean. Both `error:` and `implicit
+declaration` are now zero for this configuration.
+
+With all of `DYNAMIC_TCBS`, `KDB_BREAKIN`, `KDB_BREAKIN_ESCAPE`, `KDB_CONS_COM`,
+both BGP consoles and `TRACEBUFFER` selected at once, the kernel builds and
+links: 1,466,952 bytes.
+
+### Verification
+
+The base configuration was rebuilt from scratch and compared against the §141
+binary. `.data` and `.rodata` are identical; `.text` differs in **fifteen
+instructions, every one of them an `li` immediate**:
+
+    243 -> 249  322 -> 328                    (+6, glue/v4-powerpc/space.h)
+     98 -> 103  107 -> 112  171 -> 176
+    271 -> 276  285 -> 290  296 -> 301
+    318 -> 323                                (+5, glue/v4-powerpc/space.c)
+    581 -> 584  601 -> 604  626 -> 629
+    641 -> 644  690 -> 693  691 -> 694        (+3, glue/v4-powerpc/space-swtlb.c)
+
+Each is a `__LINE__` constant in an `ASSERT`, `WARNING`, `TRACEF` or `panic`,
+shifted by exactly the number of lines inserted above it in its own file. The
+mapping is one-to-one in all fifteen cases, and a filter for differences that
+are *not* `li` immediates returns nothing. Section sizes are unchanged at
+330,172 text and 9,768 data.
+
+Every file touched is PowerPC-only, so the x86 gate is not implicated and stands
+where §140 left it at thirty-one of thirty-one.
+
+### What is left
+
+Four options remain untested, and none is a build fix:
+
+  - `CONFIG_PPC_MMU_SEGMENTS` and `CONFIG_PPC_SEGMENT_LOOP` reach the segment
+    MMU path, which §139 records as unconverted wholesale --
+    `pgent-pghash_functions.h` alone still holds some twenty `pgent_t::` member
+    definitions. `CONFIG_PPC_MMU_SEGMENT`, singular, is the misspelling §141
+    found that no configuration defines.
+  - `CONFIG_PLAT_OFPPC` is a different platform entirely.
+  - `CONFIG_COMPORT`, tested as `#if CONFIG_COMPORT == 0` in
+    `kdb/platform/ppc44x/io.c`, is defined nowhere -- the file defines
+    `CONFIG_KDB_COMPORT`. The undefined identifier evaluates to `0`, so the
+    comparison is true and the FDT branch is taken; the `== 1` arm holds only an
+    `UNIMPLEMENTED()`. It works by accident, and is a second instance of the
+    same misspelling class as `PPC_MMU_SEGMENT`.
+
+So the honest statement is narrower than "no C++ remains": **every PowerPC
+configuration that can be selected on this platform now compiles and links,
+warning-clean and with no implicit declarations.** What is still C++ sits behind
+the segment MMU and the OFPPC platform, both of which are unconverted by
+design and recorded as such.
+
+The two structural findings, neither of them the migration's: PowerPC SMP is
+unimplemented upstream -- three entry points have no definition anywhere -- and
+the JTAG console cannot be selected without the tree console. Both belong to
+whoever revives the port.
