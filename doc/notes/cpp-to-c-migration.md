@@ -6882,6 +6882,11 @@ are the honest form of what used to be hidden -- `space.c`'s two
 and the source's own cast narrows it. A 36-bit physical address does not fit a
 32-bit kernel virtual address, and it is better for that to be legible.
 
+**§141 takes up the two conversion classes.** They are triaged rather than
+driven down: 1998 warnings are 243 distinct sites, and the reconstruction
+against the C++ baseline says they are upstream. The exception is a guest
+register taken into a signed `int` and bounds-checked on one side only.
+
 ### Verification
 
 `powerpc-kernel` links, from a clean tree, with zero errors.
@@ -6891,3 +6896,159 @@ shared -- `generic/types.h`, `generic/asid.h` and `generic/linear_ptab_walker.c`
 -- and those are covered the usual way: `tools/configsweep 'x86-*'` builds all
 thirty-one shipped x86 configurations, and `tools/boottest` boots each of them
 to the `l4test` menu. **Thirty-one of thirty-one, unchanged from §138.**
+
+
+## §141 — The two conversion warning classes, and why almost none of them is ours
+
+§140 left `-Wsign-conversion` (1046) and `-Wconversion` (952) untouched and
+called them "the bulk". They are, and the question this section answers is not
+how to silence them but whether any of them is conversion fallout. On x86 the
+same two classes went from 190 to 14 over earlier sections, and it was tempting
+to read that as a target. It is not the same situation.
+
+### Why the x86 method does not transfer
+
+On x86 the count came down because each warning could be judged against a C++
+build of the same file: `g++` and `gcc` diagnose the same implicit conversions,
+so a warning that appeared only after conversion was, by construction, ours.
+There is no `powerpc-linux-gnu-g++` on this machine, so that differential does
+not exist here. Compiling the PowerPC tree with `-Wconversion` for the first
+time produces two thousand warnings with no baseline to subtract.
+
+So the baseline had to be reconstructed from the source. `master` at `8be66aa`
+is the pre-migration C++ tree, and every converted file has a counterpart there.
+
+### What the reconstruction says
+
+The 1998 warnings are 243 distinct source locations -- headers are counted once
+per including translation unit, and `swtlb.h` alone accounts for 602 of them
+from fourteen lines. Of the 243, one is the toolchain's own `stdarg.h`. Of the
+remaining 242, **117 are textually identical to the C++**, once `self->` and
+`->`/`.` are normalised: the same expression, in the same file, warning for the
+same reason it would have warned in 2010 had anyone turned the flag on.
+
+The other 125 differ textually, and reading them, the difference is in every
+case the mechanical shape of the conversion rather than the arithmetic:
+`regs->get_register(instr.ra())` became
+`except_regs_get_register (regs, ppc_instr_ra (instr))`. The operands, and
+therefore the conversions, are the same.
+
+Two audits were run over the whole PowerPC tree rather than over the warning
+sites, because a warning only fires where a narrowing is *reachable*, and the
+defect being looked for is a type that got narrower:
+
+  - **Return types.** 515 C++ methods indexed from `master` and paired against
+    the C functions that replaced them. Three mismatches, all artefacts of
+    pairing by name across files (`read` exists in four unrelated classes).
+    No drift.
+  - **Parameter types.** Same pairing, comparing argument lists. Three
+    mismatches: two are the `tlb_t` -> `ppc_hvm_tlb_t` nested-type rename, one
+    is an unnamed parameter in a declaration. No drift.
+
+That leaves the case §140 was actually about -- an overload set collapsing to
+its narrower member, which a signature comparison passes because the surviving
+signature does match one of the originals. There is exactly one such set in
+play, `addr_offset(addr_t, addr_t)` beside `addr_offset(addr_t, word_t)` in
+`generic/types.h`, and the wide one was already inside `#if defined(__cplusplus)`
+upstream. It never existed for C. Dropping it was right, and any caller that
+had depended on it would have surfaced as `-Wint-conversion`, which §140 drove
+to zero.
+
+**The conclusion is that these two classes are upstream.** They are worth
+leaving alone, and worth not re-opening: narrowing a `word_t` into a four-bit
+`erpn` field is what the hardware layout requires, `s16_t d()` returning an
+unsigned sixteen-bit bitfield is how a D-form displacement is sign-recovered,
+and `int index` on `ppc_tlb0_write` beside `word_t index` on `ppc_tlb1_write` is
+an inconsistency the original authors left and the conversion faithfully kept.
+Changing any of them is a behaviour change to a tree that cannot be run here.
+
+### The one that was not benign
+
+`ppc_softhvm_tlbre` and `ppc_softhvm_tlbwe` emulate the guest's TLB access
+instructions. Both took the entry index from a guest register into an `int`:
+
+    int idx = except_regs_get_register (regs, ppc_instr_ra (instr));
+    if (idx < PPC_MAX_TLB_ENTRIES)
+        ... self->tlb[idx] ...
+
+`except_regs_get_register` returns `word_t`. As an `int`, every guest value with
+bit 31 set is negative, passes `idx < 64`, and indexes `tlb[]` from before its
+start. In `tlbre` that is an out-of-bounds read returned to the guest in a
+register; in `tlbwe` it is an out-of-bounds *write*, at a guest-chosen negative
+offset, with a guest-supplied value. `tlb[]` is a member of `ppc_softhvm_t`, so
+what precedes it is other kernel state. The `is_user` check above it only
+establishes that the guest is in its own supervisor mode, which under a
+soft-hypervisor is exactly the caller you are defending against.
+
+Both are `word_t` now. This is upstream -- `master`'s `softhvm.cc` has the same
+`int` and the same one-sided test -- and it is the fourth of the same kind as
+§140's `bgic_is_masked` and the two alignment tests: a bug that C++ compiled as
+silently as C, surfaced only because `-Wsign-conversion` was finally turned on.
+
+The fix is one instruction wide and was confirmed in the disassembly rather than
+assumed, since a signed and an unsigned compare are the same size and the linked
+image is byte-for-byte identical either way:
+
+    before:  c003a508:  2c 03 00 3f    cmpwi   r3,63
+    after:   c003a508:  28 03 00 3f    cmplwi  r3,63
+
+`-Wsign-conversion` is 1046 -> 1044.
+
+### C++ still inside the .c files
+
+Two of the three `#if 0` blocks in the converted swtlb path had been left in
+C++: `check_tlb`'s `vm->tlb[entry].vaddr_in_entry(...)` in
+`glue/v4-powerpc/softhvm.c` and `dump_tlb`'s
+`ppc_mmucr_read (&mmucr).get_search_id()` in `space-swtlb.c` -- the latter also
+needing a statement split, because `ppc_mmucr_read` returns `void` in C and
+fills its argument. Both are converted and were verified by compiling them with
+the guard flipped to `#if 1`.
+
+Looking for the rest of that pattern found that it is not confined to `#if 0`.
+The PowerPC port builds exactly one configuration, and the conversion is
+complete for exactly that configuration. C++ syntax survives in live blocks
+that this configuration does not select:
+
+    CONFIG_SMP                  space-swtlb.c:190-192, 489-491
+                                init.c:446, 522, 528
+                                tcb.h:186
+    CONFIG_TRACEBUFFER          space-swtlb.c:508, 510, 513
+    CONFIG_KDB_CONS_BGP_JTAG    kdb/platform/ppc44x/io.c:295, 318
+
+None of these is a warning; each is a compile error waiting for whoever first
+enables the feature. They are listed rather than fixed because none can be
+compiled here to check the fix, and guessing at a rewrite that cannot be
+verified is how the two asm out-parameters in §140 got their indirection lost in
+the first place. The segment-MMU path (`pgent-pghash_functions.h`, `pgtab.h`,
+the `CONFIG_PPC_MMU_SEGMENT` arms of `space.c` and `thread.c`) and the Ebony
+board header are unconverted wholesale, which §139 already records.
+
+### An upstream `#ifdef` that never fires
+
+While inventorying those guards: `powerpc.cml` derives **`PPC_MMU_SEGMENTS`**,
+plural, and seventeen sites test `CONFIG_PPC_MMU_SEGMENTS` correctly. Eight
+sites test `CONFIG_PPC_MMU_SEGMENT`, singular, which no configuration defines:
+
+    arch/powerpc/pgent-pghash_functions.h:47, 144, 170
+    glue/v4-powerpc/config.h:160
+    glue/v4-powerpc/space.c:118, 137, 145
+    glue/v4-powerpc/thread.c:681
+
+On a segment-MMU configuration -- IBM 750 or PPC604 -- those eight blocks are
+silently omitted, including `space_add_mapping`'s call to `insert_4k_mapping`
+and `thread.c`'s `pdir_cache` assignment. All eight are in `master` verbatim, so
+this is upstream and predates the conversion by fifteen years. It is recorded
+and not corrected: correcting the spelling would
+enable eight blocks of never-compiled C++ in a path that has not been converted,
+on hardware that cannot be built for here. It belongs to whoever revives the
+segment MMU.
+
+### Verification
+
+Clean rebuild, zero errors, `powerpc-kernel` at 330,172 text / 9,768 data --
+unchanged, as a signed-to-unsigned compare must be.
+
+`arch/powerpc/softhvm.c`, `glue/v4-powerpc/softhvm.c` and
+`glue/v4-powerpc/space-swtlb.c` are PowerPC-only; nothing shared was touched, so
+the x86 gate is not implicated and stands where §140 left it at thirty-one of
+thirty-one.
