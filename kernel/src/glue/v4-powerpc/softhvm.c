@@ -191,9 +191,11 @@ static void check_tlb( ppc_softhvm_t *vm )
 	{
 	    bool found = false;
 	    for (int entry = 0; entry < PPC_MAX_TLB_ENTRIES; entry++)
-		if (vm->tlb[entry].vaddr_in_entry(ppc_tlb0_get_vaddr (&tlb0), vm->pid))
+		if (ppc_hvm_tlb_vaddr_in_entry (&vm->tlb[entry],
+						ppc_tlb0_get_vaddr (&tlb0), vm->pid))
 		    found = true;
-	    if (vm->shadow_tlb.vaddr_in_entry(ppc_tlb0_get_vaddr (&tlb0), vm->pid))
+	    if (ppc_hvm_tlb_vaddr_in_entry (&vm->shadow_tlb,
+					    ppc_tlb0_get_vaddr (&tlb0), vm->pid))
 		found = true;
 	    if (!found)
 	    {

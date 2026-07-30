@@ -84,9 +84,10 @@ void dump_tlb()
 	ppc_tlb0_read (&tlb0, i);
 	ppc_tlb1_read (&tlb1, i);
 	ppc_tlb2_read (&tlb2, i);
+	ppc_mmucr_read (&mmucr);
 
 	printf("%02d: %c [%02x:%d] %08x sz:%08x [%04x:%08x] U:%c%c%c S:%c%c%c  C:[%c%c%c%c%c]\n",
-	       i, ppc_tlb0_is_valid (&tlb0) ? 'V' : 'I', ppc_mmucr_read (&mmucr).get_search_id(),
+	       i, ppc_tlb0_is_valid (&tlb0) ? 'V' : 'I', ppc_mmucr_get_search_id (&mmucr),
 	       tlb0.trans_space, ppc_tlb0_get_vaddr (&tlb0), ppc_tlb0_get_size (&tlb0),
 	       (word_t)(ppc_tlb1_get_paddr (&tlb1) >> 32), (word_t)(ppc_tlb1_get_paddr (&tlb1)),
 	       tlb2.user_execute ? 'X' : '-', tlb2.user_write ? 'W' : '-', 
