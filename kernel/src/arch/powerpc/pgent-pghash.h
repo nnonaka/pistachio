@@ -3,7 +3,7 @@
  * Copyright (C) 1999-2010,  Karlsruhe University
  * Copyright (C) 2008-2009,  Volkmar Uhlig, IBM Corporation
  *                
- * File path:     glue/v4-powerpc/pgent.h
+ * File path:     arch/powerpc/pgent-pghash.h
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -31,13 +31,13 @@
  *                
  ********************************************************************/
 
-#ifndef __GLUE__V4_POWERPC__PGENT_H__
-#define __GLUE__V4_POWERPC__PGENT_H__
+#ifndef __ARCH__POWERPC__PGENT_PGHASH_H__
+#define __ARCH__POWERPC__PGENT_PGHASH_H__
 
 #include INC_ARCH(pghash.h)
 
-class space_t;
-class mapnode_t;
+struct space_t;   typedef struct space_t space_t;
+struct mapnode_t; typedef struct mapnode_t mapnode_t;
 
 #define HW_PGSHIFTS		{ 12, 22, 32 }
 #define HW_VALID_PGSIZES	(1 << 12)
@@ -46,9 +46,8 @@ class mapnode_t;
 #define MDB_NUM_PGSIZES		(2)
 
 
-class pgent_t
+struct pgent_t
 {
-public:
     union {
 	word_t		raw;
 	struct {
@@ -70,83 +69,51 @@ public:
 	    word_t pp		: 2;
 	} map;
     };
+};
+typedef struct pgent_t pgent_t;
 
-    /* The neutral spelling kdb/generic/linear_ptab_dump.c asks every port for. */
+/* The neutral spelling kdb/generic/linear_ptab_dump.c asks every port for. */
 #define PGENT_SIZE_MAX	size_max
 
 enum pgsize_e {
-	size_4k = 0,
-	size_4m = 1,
-	size_4g = 2,
-	size_max = size_4m
-    };
-
-    enum permission_e {
-	unused1 = 0,	// read/write
-	unused2 = 1,	// read/write
-	read_write = 2,
-	read_only = 3
-    };
-
-private:
-
-    // Page hash synchronization
-
-    inline void update_from_pghash( space_t * s, addr_t vaddr );
-
-    // Linknode access 
-
-    inline word_t get_linknode( void );
-    inline void set_linknode( word_t val );
-
-public:
-
-    // Predicates
-
-    inline bool is_valid( space_t * s, pgsize_e pgsize );
-    inline bool is_writable( space_t * s, pgsize_e pgsize );
-    inline bool is_readable( space_t * s, pgsize_e pgsize );
-    inline bool is_executable( space_t * s, pgsize_e pgsize );
-    inline bool is_subtree( space_t * s, pgsize_e pgsize );
-    inline bool is_kernel( space_t * s, pgsize_e pgsize );
-
-    // Retrieval
-
-    inline addr_t address( space_t * s, pgsize_e pgsize );
-    inline pgent_t * subtree( space_t * s, pgsize_e pgsize );
-    inline mapnode_t * mapnode( space_t * s, pgsize_e pgsize, addr_t vaddr );
-    inline addr_t vaddr( space_t * s, pgsize_e pgsize, mapnode_t * map );
-    inline word_t reference_bits( space_t *s, pgsize_e pgsize, addr_t vaddr );
-    inline word_t get_translation( space_t *s, pgsize_e pgsize );
-    inline word_t attributes ( space_t * s, pgsize_e pgsize );
-
-    // Modification
-
-    inline void flush( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    inline void clear( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    inline void make_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    inline void remove_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    inline void set_entry( space_t * s, pgsize_e pgsize, paddr_t paddr,
-			   word_t rwx, word_t attrib, bool kernel );
-    inline void set_writable( space_t * s, pgsize_e pgsize );
-    inline void set_readonly( space_t * s, pgsize_e pgsize );
-    inline void update_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    inline void revoke_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    inline void reset_reference_bits( space_t *s, pgsize_e pgsize );
-    inline void update_reference_bits( space_t *s, pgsize_e pgsz, word_t rwx );
-    inline void set_accessed( space_t *s, pgsize_e pgsize, word_t flag );
-    inline void set_dirty( space_t *s, pgsize_e pgsize, word_t flag );
-    inline void set_attributes ( space_t * s, pgsize_e pgsize, word_t attr );
-    inline void set_linknode( space_t * s, pgsize_e pgsize,
-	    mapnode_t * map, addr_t vaddr );
-
-    // Movement
-
-    pgent_t * next( space_t * s, pgsize_e pgsize, word_t num );
-
-    // Debug
-
-    void dump_misc (space_t * s, pgsize_e pgsize);
+    size_4k	= 0,
+    size_4m	= 1,
+    size_4g	= 2,
+    size_max	= size_4m
 };
 
-#endif	/* __GLUE__V4_POWERPC__PGENT_H__ */
+/* The swtlb pgent declares a cache_e whose values index its three-bit
+   `caching' field; the pghash pgent has no such field and upstream declares no
+   cache_e at all.  It is needed all the same: space.h's add_mapping carries
+   `word_t attrib = pgent_t::cache_standard' as a default argument, and
+   glue/v4-powerpc calls map_device with cache_standard and cache_inhibited by
+   name -- so master's C++ build of a segment-MMU configuration fails on the
+   declaration just as this one failed at the call sites.  The two values are
+   not invented: pgent_set_entry treats a nonzero attrib as
+   PPC_PAGE_CACHE_INHIBIT and pgent_attributes reads that bit back as 1, so 0
+   is the cached case and 1 the inhibited one, which is what the names must
+   mean here.  Notes §144. */
+enum cache_e {
+    cache_standard	= 0,
+    cache_inhibited	= 1
+};
+
+/* The PP field of a page hash entry.  Class-scoped as pgent_t::read_only and
+   so on upstream; at file scope here, which is safe -- arch/powerpc/pgtab.h is
+   the only other declarer of these names on this architecture and nothing
+   includes it. */
+enum permission_e {
+    unused1	= 0,	// read/write
+    unused2	= 1,	// read/write
+    read_write	= 2,
+    read_only	= 3
+};
+
+/* The operations on pgent_t are INLINE definitions in
+   arch/powerpc/pgent-pghash_functions.h, which arch/powerpc/pgent.h includes
+   straight after this file.  As in the swtlb pair, they are deliberately not
+   prototyped here: a non-static declaration followed by a static-inline
+   definition is a conflict in C, and every consumer reaches both headers
+   through pgent.h. */
+
+#endif	/* !__ARCH__POWERPC__PGENT_PGHASH_H__ */

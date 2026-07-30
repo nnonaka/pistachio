@@ -52,5 +52,16 @@ INLINE word_t mem_region_get_size (const mem_region_t *self)
 INLINE void mem_region_set (mem_region_t *self, addr_t low, addr_t high)
 { self->low = low; self->high = high; }
 
+/* Dropped when this header was converted, because the one caller --
+   glue/v4-powerpc/pghash.cc, choosing where to put the page hash -- is in a
+   configuration that did not build, so nothing missed it.  The body is
+   master's, unchanged.  Notes §144. */
+INLINE bool mem_region_is_intersection (const mem_region_t *self, mem_region_t reg)
+{
+    return ((reg.low >= self->low) && (reg.low < self->high)) ||
+	   ((reg.high > self->low) && (reg.high <= self->high)) ||
+	   ((reg.low <= self->low) && (reg.high >= self->high));
+}
+
 
 #endif /* !__GENERIC__MEMREGION_H__ */

@@ -319,8 +319,14 @@ struct ppc_esr_t
 };
 typedef struct ppc_esr_t ppc_esr_t;
 
+/* SPR_ESR is defined only inside the CONFIG_PPC_BOOKE block above, but this
+   accessor sits outside it; on a classic PowerPC the identifier is undeclared.
+   master has the identical depth mismatch, so a C++ build of an IBM750 or 604
+   configuration fails here too -- upstream, not conversion.  Notes §144. */
+#ifdef CONFIG_PPC_BOOKE
 INLINE word_t ppc_esr_read (ppc_esr_t *self)
 { self->raw = ppc_get_spr(SPR_ESR); return self->raw; }
+#endif
 
 struct ppc_tcr_t
 {
@@ -344,10 +350,13 @@ typedef struct ppc_tcr_t ppc_tcr_t;
    declaration must initialise explicitly -- see PPC_TCR_INIT. */
 #define PPC_TCR_INIT	((ppc_tcr_t) { .raw = 0 })
 
+/* SPR_TCR is BookE-only; see the note on ppc_esr_read. */
+#ifdef CONFIG_PPC_BOOKE
 INLINE void ppc_tcr_write (ppc_tcr_t *self)
 { ppc_set_spr(SPR_TCR, self->raw); }
 INLINE void ppc_tcr_read (ppc_tcr_t *self)
 { self->raw = ppc_get_spr(SPR_TCR); }
+#endif
 
 INLINE u64_t ppc_tcr_get_watchdog_period (ppc_tcr_t *self)
 { return 1ULL << (21 + (self->watchdog_period * 4)); }
@@ -379,8 +388,11 @@ INLINE ppc_tsr_t ppc_tsr_dec_irq (void)
     return tsr;
 }
 
+/* SPR_TSR is BookE-only; see the note on ppc_esr_read. */
+#ifdef CONFIG_PPC_BOOKE
 INLINE void ppc_tsr_write (ppc_tsr_t *self)
 { ppc_set_spr(SPR_TSR, self->raw); }
+#endif
 
 INLINE bool ppc_tsr_pending_irqs (ppc_tsr_t *self)
 {

@@ -71,6 +71,15 @@ INLINE void   asid_release (asid_t *self)		{ self->asid = ASID_INVALID; }
    declared here because space.h includes this header, not the other way round. */
 #define ASID_MANAGER_SIZE	CONFIG_MAX_NUM_ASIDS
 
+/* The C++ form was a template, so nothing below existed until something named
+   asid_manager_t<space_t, CONFIG_MAX_NUM_ASIDS>.  Spelling the one
+   instantiation out made it unconditional instead, and CONFIG_MAX_NUM_ASIDS is
+   not: glue/v4-powerpc/config.h defines it only on the CONFIG_PPC_MMU_TLB
+   branch, so a segment-MMU build reaches an array sized by an undefined
+   identifier.  Guarding here restores what the template gave for free.  Notes
+   §144. */
+#ifdef CONFIG_MAX_NUM_ASIDS
+
 struct asid_manager_t
 {
     word_t *free_list;
@@ -146,5 +155,7 @@ INLINE word_t asid_manager_reference (asid_manager_t *self, asid_t *asid)
     asid->timestamp = ++self->timestamp;
     return asid->asid;
 }
+
+#endif /* CONFIG_MAX_NUM_ASIDS */
 
 #endif /* !__ASID_H__ */

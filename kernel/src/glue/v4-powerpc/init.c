@@ -44,7 +44,10 @@
 #include INC_ARCH(cache.h)
 #include INC_ARCH(ppc750.h)
 #include INC_ARCH(pvr.h)
+/* swtlb.h reaches BookE-only SPRs; see the note in space.c. */
+#ifdef CONFIG_PPC_MMU_TLB
 #include INC_ARCH(swtlb.h)
+#endif
 
 #ifdef CONFIG_PLAT_OFPPC
 #include INC_PLAT(1275tree.h)
@@ -108,6 +111,20 @@ SECTION(SEC_INIT) void timer_init( word_t cpu_hz, word_t bus_hz, word_t cpu )
  *                            Platform init
  *
  *****************************************************************************/
+/* The device tree region is located the same way on both platforms -- the
+   BOOT_SPECIFIC memory descriptor with subtype 0xf -- but what sits in it
+   differs: a flattened device tree on ppc44x, an Open Firmware property spill
+   on ofppc.  Upstream types the pointer dtree_t*, which only ppc44x's fdt.h
+   defines, calls fdt_is_valid and reads ->size/->magic unconditionally, and
+   hands the result to get_of1275_tree()->init(), which takes a char*.  None of
+   that compiles on ofppc, in either language.
+
+   The two platforms are split apart rather than merged behind a shared
+   accessor: the ppc44x text below is upstream's, unchanged, so that the one
+   PowerPC kernel that runs keeps the object code it had.  Notes §144. */
+
+#if defined(CONFIG_PLAT_PPC44X)
+
 static dtree_t *dtree = NULL;
 static word_t dtree_size = 0;
 
@@ -147,19 +164,67 @@ SECTION(SEC_INIT) void dtree_remap( kernel_interface_page_t *kip )
     TRACE_INIT("Remapping device tree from %p to %p (sz=%x, magic=%x)\n", (word_t) pdtree, 
 	       dtreemapping, dtreemapping->size, dtreemapping->magic);
     
-
-#if defined(CONFIG_PLAT_OFPPC)
-    get_of1275_tree()->init( dtreemapping );
-#endif
-
-#if defined(CONFIG_PLAT_PPC44X)
     dtree = (dtree_t*)kmem_alloc(&kmem, kmem_misc, dtree_size);
     memcpy(dtree, dtreemapping, dtree_size);
     // XXX: unmap FDT
-#endif
 
 }
 
+#elif defined(CONFIG_PLAT_OFPPC)
+
+/* The Open Firmware spill is a byte blob: nothing on this platform gives it a
+   type, and of1275_tree_init takes the char* directly. */
+static char *dtree = NULL;
+static word_t dtree_size = 0;
+
+static char *get_dtree_spill (void)
+{
+    if (!dtree)
+    {
+        kernel_interface_page_t *kip = get_kip();
+        word_t i;
+        for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ ) 
+        {
+            memdesc_t *mdesc = memory_info_get_memdesc (&kip->memory_info, i);
+            
+            if( (memdesc_type (mdesc) == MEMDESC_BOOT_SPECIFIC) && 
+                (memdesc_subtype (mdesc) == 0xf) )
+            {
+                dtree = (char *) memdesc_low (mdesc);
+                dtree_size = memdesc_size (mdesc);
+                break;
+            }
+        }
+    }
+    return dtree;
+}
+
+SECTION(SEC_INIT) void dtree_remap( kernel_interface_page_t *kip )
+{
+    char *dtreemapping;
+    paddr_t pdtree = (paddr_t) get_dtree_spill ();
+    addr_t page = space_map_device (get_kernel_space(), pdtree, dtree_size, true, cache_standard );
+
+    dtreemapping = (char *)addr_offset(page, pdtree & (KERNEL_PAGE_SIZE - 1));
+
+    TRACE_INIT("Remapping device tree from %p to %p (sz=%x)\n",
+	       (word_t) pdtree, dtreemapping, dtree_size);
+
+    of1275_tree_init( get_of1275_tree(), dtreemapping );
+}
+
+#endif
+
+
+#ifdef CONFIG_PPC_MMU_SEGMENTS
+/* Defined static inside the CONFIG_PPC_MMU_SEGMENTS block far below, but
+   called from init_cpu well above it.  On ppc44x the non-static definition in
+   except_handlers.c is declared by space.h and the question does not arise; on
+   a segment-MMU build there is no declaration at all, so the call raised an
+   implicit one and the static definition then conflicted with it.  Notes
+   §144. */
+static SECTION(SEC_INIT) void install_exception_handlers( cpuid_t cpu );
+#endif
 
 /*****************************************************************************
  *
@@ -264,17 +329,7 @@ SECTION(SEC_INIT) static void kip_sc_init( kernel_interface_page_t *kip )
  *
  *****************************************************************************/
 #if defined(CONFIG_PPC_MMU_SEGMENTS)
-INLINE word_t cpu_phys_area( cpuid_t cpu )
-{
-    word_t cpu_phys = (word_t)memcfg_start_cpu_phys();
-    ASSERT( (cpu_phys & BAT_128K_PAGE_MASK) == cpu_phys );
-    return cpu_phys + cpu*KB(128);
-}
-
-INLINE word_t cpu_area_size( void )
-{
-    return (word_t)memcfg_end_cpu_phys() - (word_t)memcfg_start_cpu_phys();
-}
+/* cpu_phys_area and cpu_area_size now live in memcfg.h; see the note there. */
 
 #if defined(CONFIG_SMP)
 SECTION(SEC_INIT) static void reclaim_cpu_kmem()
@@ -477,8 +532,9 @@ EXTERN_C void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
     cpu_init( cpu );
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
-    get_pghash()->get_htab()->bat_map();
-    get_pghash()->get_htab()->activate( get_kernel_space()->get_segment_id() );
+    ppc_htab_bat_map (pghash_get_htab (get_pghash()));
+    ppc_htab_activate (pghash_get_htab (get_pghash()),
+		       space_get_segment_id (get_kernel_space()));
     /* i/o is now possible. */
 #elif defined(CONFIG_PPC_MMU_TLB)
     /* kick startup mappings */
@@ -503,14 +559,14 @@ EXTERN_C void SECTION(SEC_INIT) NORETURN startup_cpu ( cpuid_t cpu )
 static SECTION(SEC_INIT) void install_extern_int_handler( void )
 {
 #ifndef CONFIG_PPC_BOOKE
-    extern word_t _except_extern_int[], _except_extern_int_end[];
+    extern word_t _except_extern_int_template[], _except_extern_int_template_end[];
     word_t dst;
 
     // Copy the external interrupt handler into place, overwriting
     // the IPI init handler.
     dst = KERNEL_OFFSET + PHYS_EXCEPT_START + EXCEPT_OFFSET_EXTERNAL_INT;
-    memcpy_cache_flush( (word_t *)dst, (word_t *)_except_extern_int,
-	    (word_t)_except_extern_int_end - (word_t)_except_extern_int );
+    memcpy_cache_flush( (word_t *)dst, (word_t *)_except_extern_int_template,
+	    (word_t)_except_extern_int_template_end - (word_t)_except_extern_int_template );
 #endif
 }
 
@@ -536,7 +592,8 @@ SECTION(SEC_INIT) static void finish_api_init( void )
 
     // We now have a valid stack and can handle page faults.
 #ifdef CONFIG_PPC_MMU_SEGMENTS
-    get_pghash()->get_htab()->activate( get_kernel_space()->get_segment_id() );
+    ppc_htab_activate (pghash_get_htab (get_pghash()),
+		       space_get_segment_id (get_kernel_space()));
 #endif
 
     dtree_remap( get_kip() );
@@ -696,7 +753,7 @@ EXTERN_C void SECTION(SEC_INIT) startup_system ( word_t r3, word_t r4, word_t r5
     ASSERT( sizeof(utcb_t) == 512 );
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
-    if( !get_pghash()->init((word_t)kip_get_phys_mem(get_kip())) )
+    if( !pghash_init (get_pghash(), (word_t)kip_get_phys_mem(get_kip())) )
 	fatal( "unable to find a suitable location for the page hash." );
 #endif
     TRACE_INIT("Initializing mapping database\n");

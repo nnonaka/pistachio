@@ -679,13 +679,16 @@ void tcb_set_space (tcb_t *self, space_t * space)
     }
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
-    self->pdir_cache = (word_t)space->get_segment_id().raw;
+    self->pdir_cache = (word_t)space_get_segment_id (space).raw;
     TRACE_TCB("set_space(), space 0x%p, tcb 0x%p, kernel_space 0x%p\n", 
 	      space, self, get_kernel_space() );
 
-    space->sync_kernel_space( self );	/* Map self tcb into the space. */
-    space->handle_hash_miss( self );	/* Install self tcb into the pg hash. */
-    space->handle_hash_miss( space );	/* TODO: is self the solution? */
+    /* Both take an addr_t, and addr_t is void*, so the tcb and the space
+       arrive as their own addresses -- which is what the comments describe,
+       and what C++ passed too by the same implicit conversion. */
+    space_sync_kernel_space (space, self);	/* Map self tcb into the space. */
+    space_handle_hash_miss (space, self);	/* Install self tcb into the pg hash. */
+    space_handle_hash_miss (space, space);	/* TODO: is self the solution? */
 #endif
 }
 
@@ -733,7 +736,15 @@ void tcb_switch_to (tcb_t *self, tcb_t * dest)
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
     /* NOTE: pdir_cache holds the segment ID. */
-    if ( (dest->pdir_cache != current->pdir_cache) && (dest->pdir_cache != 0) )
+    /* Upstream writes `current->pdir_cache' (master's tcb.h:266), and nothing
+       named `current' is in scope there either -- no global, no parameter, no
+       member -- so this line has never compiled in either language.  It is
+       `self': the function is reached as current->switch_to(dest), so the
+       outgoing tcb is the receiver, which every other line in the body spells
+       `this'.  The two candidate readings, `this' and get_current_tcb(), are
+       the same pointer here, so the correction admits no behavioural choice.
+       Notes §144. */
+    if ( (dest->pdir_cache != self->pdir_cache) && (dest->pdir_cache != 0) )
     {
 	word_t dummy;
 	asm volatile (

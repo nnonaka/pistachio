@@ -36,6 +36,9 @@
 
 #include INC_ARCH(phys.h)
 #include INC_ARCH(page.h)
+#if defined(CONFIG_PPC_MMU_SEGMENTS)
+#include INC_ARCH(bat.h)	/* BAT_128K_PAGE_MASK, for cpu_phys_area below */
+#endif
 
 #if !defined(ASSEMBLY)
 
@@ -138,6 +141,25 @@ INLINE addr_t memcfg_end_cpu_phys()
     return memcfg_end_kernel_phys();
 }
 
+#endif
+
+
+#if defined(CONFIG_PPC_MMU_SEGMENTS)
+/* These were INLINE -- so static -- in init.c, but space-pghash.c calls
+   cpu_phys_area, which is why that file has an unresolved reference to it
+   upstream as well.  Moved beside the memcfg_* accessors they are written in
+   terms of, which both callers already include.  Notes §144. */
+INLINE word_t cpu_phys_area( cpuid_t cpu )
+{
+    word_t cpu_phys = (word_t)memcfg_start_cpu_phys();
+    ASSERT( (cpu_phys & BAT_128K_PAGE_MASK) == cpu_phys );
+    return cpu_phys + cpu*KB(128);
+}
+
+INLINE word_t cpu_area_size( void )
+{
+    return (word_t)memcfg_end_cpu_phys() - (word_t)memcfg_start_cpu_phys();
+}
 #endif
 
 #endif /* !__GLUE__V4_POWERPC__MEMCFG_H__ */

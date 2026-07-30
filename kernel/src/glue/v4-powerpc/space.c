@@ -43,7 +43,13 @@
 
 #include INC_GLUE(space.h)
 #include INC_GLUE(pghash.h)
+/* swtlb.h reaches SPR_PID and SPR_MMUCR, which ppc_registers.h defines only
+   inside CONFIG_PPC_BOOKE; upstream includes it unconditionally, so a classic
+   PowerPC build fails in it before reaching anything in this file.  Guarded to
+   the MMU variant that has a software TLB.  Notes §144. */
+#ifdef CONFIG_PPC_MMU_TLB
 #include INC_ARCH(swtlb.h)
+#endif
 
 DECLARE_TRACEPOINT(hash_miss_cnt);
 DECLARE_TRACEPOINT(hash_insert_cnt);
@@ -122,7 +128,10 @@ void space_add_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t size,
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
     ASSERT(pgsize == size_4k);
-    get_pghash()->insert_4k_mapping( this, vaddr, pgent);
+    /* Upstream passes `pgent', which this function has no such name for --
+       the leaf entry the walk above ends on is `pg', and it is what
+       pgent_set_entry has just written.  `this' is `self'. */
+    pghash_insert_4k_mapping (get_pghash(), self, vaddr, pg);
 #endif
 }
 
@@ -133,14 +142,14 @@ void space_add_4k_mapping (space_t *self, addr_t vaddr, paddr_t paddr, bool writ
     if( !pgent_is_valid (pgent, self, size_4m))
 	pgent_make_subtree (pgent, self, size_4m, kernel );
 
-    pgent = pgent_subtree (pgent, self, size_4m )->next( this, 
+    pgent = pgent_next (pgent_subtree (pgent, self, size_4m), self,
 	    size_4k, page_table_index(size_4k, vaddr) );
 
     pgent_set_entry (pgent, self, size_4k, paddr, writable ? 7 : 5, 
 		      attrib, kernel);
 
 #ifdef CONFIG_PPC_MMU_SEGMENT
-    get_pghash()->insert_4k_mapping( this, vaddr, pgent);
+    pghash_insert_4k_mapping (get_pghash(), self, vaddr, pgent);
 #endif
 }
 #endif
@@ -149,7 +158,7 @@ void space_flush_mapping (space_t *self, addr_t vaddr, word_t pgsize, pgent_t *p
 {
 #ifdef CONFIG_PPC_MMU_SEGMENT
     ASSERT(pgsize == size_4k);
-    get_pghash()->flush_4k_mapping( this, vaddr, pgent );
+    pghash_flush_4k_mapping (get_pghash(), self, vaddr, pgent);
 #endif
     ppc_invalidate_tlbe( vaddr );
 }

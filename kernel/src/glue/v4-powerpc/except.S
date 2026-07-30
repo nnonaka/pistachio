@@ -384,15 +384,23 @@ EXCEPTION(extern_int, EXCEPT_OFFSET_EXTERNAL_INT)
  * The external interrupt handler, to be copied into place after
  * ipi initialization.
  */
+	/* This template and the vector slot above are two different objects,
+	 * but upstream gives both the name _except_extern_int -- EXCEPTION()
+	 * emits it into .except, and then this block emits it again into
+	 * .init, so the assembler rejects the file on every non-BookE build.
+	 * init.c wants the template: it memcpys from this symbol to an address
+	 * it computes from EXCEPT_OFFSET_EXTERNAL_INT, not from the vector
+	 * symbol.  Renamed here and at that one use.  Notes §144.
+	 */
 	.section ".init"
-	.global	_except_extern_int
-	.global _except_extern_int_end
+	.global	_except_extern_int_template
+	.global _except_extern_int_template_end
 	.balign	4
-_except_extern_int:
+_except_extern_int_template:
 	EXCEPT_STACK
 	EXCEPT_PROLOG
 	CALL_HANDLER( except_extern_int_handler )
-_except_extern_int_end:
+_except_extern_int_template_end:
 #endif  /* CONFIG_PPC_BOOK */
 
 EXCEPTION_HANDLER(alignment, EXCEPT_OFFSET_ALIGNMENT)

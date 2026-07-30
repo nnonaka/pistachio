@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	glue/v4-powerpc/pghash.cc
+ * File path:	glue/v4-powerpc/pghash.c
  * Description:	PowerPC page hash handler.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: pghash.cc,v 1.13 2004/06/08 15:09:56 joshua Exp $
+ * $Id: pghash.c,v 1.13 2004/06/08 15:09:56 joshua Exp $
  *
  ***************************************************************************/
 
@@ -42,32 +42,33 @@
 
 pghash_t pghash;
 
-void pghash_t::update_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
+void pghash_update_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent)
 {
-    ppc_translation_t *pte = get_htab()->locate_pte( (word_t)vaddr,
-	    s->get_vsid(vaddr), pgent->map.pteg_slot, pgent->map.second_hash );
+    ppc_translation_t *pte = ppc_htab_locate_pte (pghash_get_htab (self), (word_t)vaddr,
+	    space_get_vsid (s, vaddr), pgent->map.pteg_slot, pgent->map.second_hash);
 
     if( pte && pte->x.v )
     {
-    	pte->create( (word_t)vaddr, 
-		pgent->get_translation(s, size_4k), pte->x.vsid );
+    	ppc_translation_create_from_entry( pte, (word_t)vaddr,
+		pgent_get_translation (pgent, s, size_4k), pte->x.vsid );
     }
 }
 
-void pghash_t::insert_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
+void pghash_insert_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent)
 {
     word_t pteg_slot, is_second_hash;
     ppc_translation_t *pte;
-    word_t vsid = s->get_vsid( vaddr );
+    word_t vsid = space_get_vsid (s, vaddr);
 
-    pte = get_htab()->find_insertion( (word_t)vaddr, vsid,
-	    &pteg_slot, &is_second_hash );
+    pte = ppc_htab_find_insertion (pghash_get_htab (self), (word_t)vaddr, vsid,
+	    &pteg_slot, &is_second_hash);
 
     // Check for a pre-existing, valid translation in the page hash.
     if( pte->x.v == 1 )
     {
-	space_t *evict_space = space_t::vsid_to_space( pte->x.vsid );
-	addr_t evict_addr = (addr_t)get_htab()->reverse_hash( pte );
+	space_t *evict_space = space_vsid_to_space( pte->x.vsid );
+	addr_t evict_addr = (addr_t)ppc_htab_reverse_hash (pghash_get_htab (self), pte);
+	pgent_t *evict_pgent;
 
 	TRACEF( "pghash eviction: vaddr %x, space %x\n", 
 		evict_addr, evict_space );
@@ -77,48 +78,50 @@ void pghash_t::insert_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
 	// TODO: ensure that we don't evict the translations of any of
 	// the currently used TCB's.  If this were to happen, the kernel
 	// stack for handling the page-fault would not have a translation!
-#warning JTL: page-hash eviction isn't sanity checked for TCB's.
-	pgent_t *evict_pgent;
+	/* JTL: page-hash eviction isn't sanity checked for TCB's.  Left as a
+	   comment rather than a #warning: the note is upstream's and still
+	   stands, but a #warning in a file that now compiles would fire on
+	   every build. */
 
 	// Flush in-flight updates to the translation.
 	sync();
 
 	// Update the page table's dirty + referenced bits.
-	evict_pgent = evict_space->page_lookup( evict_addr );
-	ASSERT( evict_pgent && evict_pgent->is_valid(evict_space, size_4k) );
-	evict_pgent->set_accessed( evict_space, size_4k, pte->x.r );
-	evict_pgent->set_dirty( evict_space, size_4k, pte->x.c );
+	evict_pgent = space_page_lookup (evict_space, evict_addr);
+	ASSERT( evict_pgent && pgent_is_valid (evict_pgent, evict_space, size_4k) );
+	pgent_set_accessed (evict_pgent, evict_space, size_4k, pte->x.r);
+	pgent_set_dirty (evict_pgent, evict_space, size_4k, pte->x.c);
 	pte->x.v = 0;
 
 	ppc_invalidate_tlbe( evict_addr );
     }
 
     // Insert a new translation.
-    pte->create( (word_t)vaddr, pgent->get_translation(s, size_4k), 
-	    vsid );
+    ppc_translation_create_from_entry( pte, (word_t)vaddr,
+	    pgent_get_translation (pgent, s, size_4k), vsid );
     pgent->map.pteg_slot = pteg_slot;
     pgent->map.second_hash = is_second_hash;
 }
 
-void pghash_t::flush_4k_mapping( space_t *s, addr_t vaddr, pgent_t *pgent )
+void pghash_flush_4k_mapping (pghash_t *self, space_t *s, addr_t vaddr, pgent_t *pgent)
 {
-    ppc_translation_t *pte = get_htab()->locate_pte( (word_t)vaddr,
-	    s->get_vsid(vaddr), pgent->map.pteg_slot, pgent->map.second_hash );
+    ppc_translation_t *pte = ppc_htab_locate_pte (pghash_get_htab (self), (word_t)vaddr,
+	    space_get_vsid (s, vaddr), pgent->map.pteg_slot, pgent->map.second_hash);
 
     if( pte && pte->x.v )
 	pte->x.v = 0;
 }
 
 
-SECTION(".init") bool pghash_t::init( word_t tot_phys_mem )
+SECTION(".init") bool pghash_init (pghash_t *self, word_t tot_phys_mem)
 {
     word_t size;
     word_t phys_start;
 
     // Try allocating memory for the page hash, starting with the optimal
     // size, and then by reducing the size by half.
-    for( size = get_htab()->optimal_size(tot_phys_mem); 
-	    size >= get_htab()->min_size();
+    for( size = ppc_htab_optimal_size (tot_phys_mem);
+	    size >= ppc_htab_min_size();
 	    size = size >> 1 )
     {
 	// Search through phys memory for a location that fits the page
@@ -127,25 +130,26 @@ SECTION(".init") bool pghash_t::init( word_t tot_phys_mem )
 		phys_start < (tot_phys_mem - size); 
 		phys_start += size )
 	{
-	    if( this->try_location(phys_start, size) )
-	       	return this->finish_init( phys_start, size );
+	    if( pghash_try_location (self, phys_start, size) )
+	       	return pghash_finish_init (self, phys_start, size);
 	}
     }
 
     return false;
 }
 
-SECTION(".init") bool pghash_t::try_location( word_t phys_start, word_t size )
+SECTION(".init") bool pghash_try_location (pghash_t *self, word_t phys_start, word_t size)
 {
     kernel_interface_page_t *kip = get_kip();
-
     mem_region_t test_region;
-    test_region.set( addr_t(phys_start), addr_t(phys_start+size) );
+    word_t i;
+
+    mem_region_set (&test_region, (addr_t)phys_start, (addr_t)(phys_start+size));
 
     // Look for overlap with the privileged servers.
-    if( kip->root_server.mem_region.is_intersection(test_region) ||
-	     kip->sigma0.mem_region.is_intersection(test_region) ||
-	     kip->sigma1.mem_region.is_intersection(test_region) )
+    if( mem_region_is_intersection (&kip->root_server.mem_region, test_region) ||
+	     mem_region_is_intersection (&kip->sigma0.mem_region, test_region) ||
+	     mem_region_is_intersection (&kip->sigma1.mem_region, test_region) )
     {
 	return false;
     }
@@ -153,16 +157,17 @@ SECTION(".init") bool pghash_t::try_location( word_t phys_start, word_t size )
     // Walk through the KIP's memory descriptors and search for any
     // reserved memory regions that collide with our intended memory
     // allocation.
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ )
+    for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	if( (mdesc->type() == memdesc_t::conventional) || mdesc->is_virtual() )
+	memdesc_t *mdesc = memory_info_get_memdesc (&kip->memory_info, i);
+	mem_region_t mdesc_region;
+
+	if( (memdesc_type (mdesc) == MEMDESC_CONVENTIONAL) || memdesc_is_virtual (mdesc) )
 	    continue;
 
-	mem_region_t mdesc_region;
-	mdesc_region.set( mdesc->low(), mdesc->high() );
+	mem_region_set (&mdesc_region, memdesc_low (mdesc), memdesc_high (mdesc));
 
-	if( mdesc_region.is_intersection(test_region) )
+	if( mem_region_is_intersection (&mdesc_region, test_region) )
 	    return false;
     }
 
@@ -171,16 +176,16 @@ SECTION(".init") bool pghash_t::try_location( word_t phys_start, word_t size )
     return true;
 }
 
-SECTION(".init") bool pghash_t::finish_init( word_t phys_start, word_t size )
+SECTION(".init") bool pghash_finish_init (pghash_t *self, word_t phys_start, word_t size)
 {
     addr_t virt_start = addr_align_up( (addr_t)PGHASH_AREA_START, size );
 
     // Insert a KIP memory descriptor to protect the page hash.
-    get_kip()->memory_info.insert( memdesc_t::reserved, false,
-	    (addr_t)phys_start, (addr_t)(phys_start + size) );
+    memory_info_insert (&get_kip()->memory_info, MEMDESC_RESERVED, 0, false,
+	    (addr_t)phys_start, (addr_t)(phys_start + size));
 
     // Initialize the page hash at the given location.
-    get_htab()->init( phys_start, (word_t)virt_start, size );
+    ppc_htab_init (pghash_get_htab (self), phys_start, (word_t)virt_start, size);
 
     TRACE_INIT( "Activated page hash at virtual address 0x%x,\n"
 	        "    physical address 0x%x, size 0x%x.\n",
@@ -188,4 +193,3 @@ SECTION(".init") bool pghash_t::finish_init( word_t phys_start, word_t size )
 
     return true;
 }
-

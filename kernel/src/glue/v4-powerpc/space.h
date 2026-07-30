@@ -115,6 +115,9 @@ void      space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
 void      space_free (space_t *self);
 void      space_arch_free (space_t *self);
 bool      space_sync_kernel_space (space_t *self, addr_t addr);
+#ifdef CONFIG_PPC_MMU_SEGMENTS
+bool      space_handle_hash_miss (space_t *self, addr_t vaddr);
+#endif
 void      space_switch_to_kernel_space (cpuid_t cpu);
 void      space_handle_pagefault (space_t *self, addr_t addr, addr_t ip, int access, bool kernel);
 bool      space_is_initialized (space_t *self);
@@ -272,6 +275,17 @@ INLINE word_t space_get_from_user (space_t *self, addr_t addr)
 }
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
+/* Defined ahead of space_get_vsid, which calls it.  Upstream has them the
+   other way round: as class members the order did not matter, but in C the
+   forward use draws an implicit int declaration and then conflicts with the
+   real definition below it. */
+INLINE ppc_segment_t space_get_segment_id (space_t *self)
+{
+    ppc_segment_t seg;
+    seg.raw = ((word_t)self >> POWERPC_PAGE_BITS) << 4;
+    return seg;
+}
+
 INLINE word_t space_get_vsid (space_t *self, addr_t addr)
 {
     // TODO: get_vsid() needs optimisation
@@ -281,13 +295,6 @@ INLINE word_t space_get_vsid (space_t *self, addr_t addr)
     else
 	seg = space_get_segment_id (self);
     return seg.raw | ((word_t)addr >> 28);
-}
-
-INLINE ppc_segment_t space_get_segment_id (space_t *self)
-{
-    ppc_segment_t seg;
-    seg.raw = ((word_t)self >> POWERPC_PAGE_BITS) << 4;
-    return seg;
 }
 #elif defined(CONFIG_PPC_MMU_TLB)
 INLINE asid_manager_t *get_asid_manager (void)
