@@ -7556,3 +7556,80 @@ With this, **every configuration selectable on the 32-bit PowerPC architecture
 compiles and links**: both platforms, both subplatforms. What remains C++ in
 the tree is powerpc64 (21 files, no toolchain here), the three OF platforms
 that belong to it, and the five dead files §143 listed.
+
+
+## §145 — The guards, corrected: what a typo had switched off
+
+§144 found eight `#ifdef CONFIG_PPC_MMU_SEGMENT`, singular, defined by no
+`.cml`, and left the spelling alone: correcting it changes behaviour on a port
+that cannot be run here, so it belonged to whoever brings the port up. That was
+the right default and it has now been overridden deliberately. This is the
+change and what it measures.
+
+### What the misspelling was worth
+
+The seven `#ifdef`s (the eighth site was the comment describing them) are now
+`CONFIG_PPC_MMU_SEGMENTS`. Building the same configuration immediately before
+and after:
+
+    pghash_flush_4k_mapping     0 -> 5 references
+    pghash_insert_4k_mapping    1 -> 2
+    space_handle_hash_miss      3 -> 5
+    space_sync_kernel_space     3 -> 4
+    .text                  0xe0b1 -> 0xe3bd	(+780 bytes, +196 in .kdb)
+
+**Zero to five on the flush is the line that matters.** A page-hash MMU whose
+page hash is never flushed does not fail visibly at boot; it fails the first
+time a mapping is revoked and the stale translation is still live in the hash.
+Nothing in the port removed a translation, and nothing put one in from
+`space_add_mapping` either -- the single reference before the change was
+`space_handle_hash_miss`, filling the hash on a miss, which is the one path
+that never went through a guard.
+
+`pghash_insert_4k_mapping` reads 1 -> 2 rather than 1 -> 2 `bl` sites because
+`space_add_mapping` ends in the call and GCC tail-calls it: the new reference
+is a `b`, not a `bl`. Counting only `bl` said 1 -> 1 and looked like the guard
+had not taken effect. It had.
+
+### Two of the seven change nothing, and it is worth knowing which
+
+`config.h`'s guard selects `KIP_ARCH_PAGEINFO`, and correcting it leaves
+`kernelinterface.o` **byte-identical**. Compiling it both ways and diffing
+`.data` shows no difference at all. The reason is the redefinition §144 noted
+in passing: the `#else` arm defines `HW_VALID_PGSIZES` as
+`((1 << 12) | (1 << 22))`, and `pgent-pghash.h` redefines it to `(1 << 12)`
+before `KIP_ARCH_PAGEINFO` is expanded at `kernelinterface.c:134`, so
+`size_mask` was already 4. One arm was quietly overwriting the other.
+
+What correcting it does fix is the noise that overwriting produced: **41
+"HW_VALID_PGSIZES redefined" warnings, now zero.** A macro redefined between
+its definition and its use is exactly the shape that hides a wrong value, and
+here it hid the fact that the wrong arm was selected at all.
+
+The reference-bit sync in `pgent-pghash_functions.h` is the other one: it is
+now compiled, but `pgent_reference_bits` has no caller in this configuration,
+so nothing reaches it. `ppc_htab_locate_pte` stays at two references for that
+reason.
+
+### Regressions
+
+None. Neither spelling was ever defined on a `CONFIG_PPC_MMU_TLB` build, so
+both arms already took the `#else` there. Rebuilt from scratch, ppc44x still
+differs from the §142 binary in fifteen `li` immediates carrying `__LINE__` and
+nothing else, and ebony is unchanged.
+
+    ofppc   0 errors, 0 implicit, 0 redefinitions, 231,104 bytes
+    ebony   0 errors, 0 implicit, 0 redefinitions, 892,504 bytes
+    bgp     0 errors, 0 implicit, 0 redefinitions, 1,467,032 bytes
+
+### What this does and does not settle
+
+It is still not booted -- there is no ofppc hardware and no emulator here. But
+the caveat §144 closed on has changed shape. It used to be "the port compiles
+and its MMU is switched off"; it is now "the port compiles and its MMU is
+wired up, unverified." The second is a much better position to hand over, and
+the difference between them was seven characters.
+
+The layout change of §144 item 1 remains verified only by the two assertions it
+was made to satisfy, and that is now the last untested thing on this
+architecture.
