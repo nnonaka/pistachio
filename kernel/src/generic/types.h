@@ -117,6 +117,26 @@ INLINE addr_t addr_align_up (addr_t addr, word_t align)
     return addr_mask (addr_offset (addr, align - 1), ~(align - 1));
 }
 
+/*
+ * The same two operations on a paddr_t.  In C++ they were overloads of the
+ * above and the compiler picked between them; in C the caller has to.  Where
+ * paddr_t is addr_t -- x86, powerpc64 -- the two are the same function, and
+ * these forward.  An architecture whose paddr_t is wider than a pointer
+ * (powerpc's is u64_t on ppc44x) defines HAVE_ARCH_PADDR_OPS and supplies its
+ * own, because forwarding here would truncate.  Notes §140.
+ */
+#if !defined(HAVE_ARCH_PADDR_OPS)
+INLINE paddr_t paddr_offset (paddr_t addr, word_t off)
+{
+    return (paddr_t) addr_offset ((addr_t) addr, off);
+}
+
+INLINE paddr_t paddr_mask (paddr_t addr, word_t mask)
+{
+    return (paddr_t) addr_mask ((addr_t) addr, mask);
+}
+#endif
+
 
 
 #ifndef NULL

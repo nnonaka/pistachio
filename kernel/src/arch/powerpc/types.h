@@ -63,8 +63,12 @@ typedef u32_t			paddr_t;
 
 /* These were C++ overloads of addr_offset/addr_mask in generic/types.h, which
    take addr_t.  paddr_t is a distinct type here -- u64_t on ppc44x, for 36-bit
-   addressing -- so in C they need distinct names.  No caller passes a paddr_t
-   today; every site in the powerpc tree uses the addr_t forms. */
+   addressing -- so in C they need distinct names, and every caller holding a
+   paddr_t has to name them: routing one through the addr_t form would truncate
+   it to 32 bits.  generic/types.h supplies the same two for architectures whose
+   paddr_t *is* addr_t; HAVE_ARCH_PADDR_OPS suppresses that.  Notes §140. */
+#define HAVE_ARCH_PADDR_OPS 1
+
 INLINE paddr_t paddr_offset (paddr_t addr, word_t off)
 {
     return (paddr_t)(addr + off);

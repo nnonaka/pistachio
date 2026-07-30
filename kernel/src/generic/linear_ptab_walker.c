@@ -475,10 +475,10 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 	    if (space_is_sigma0 (self) ?
 		(pgent_address (tpg, t_space, t_size) != (paddr_t) f_addr) :
 		(pgent_address (tpg, t_space, t_size) !=
-		 addr_offset (pgent_address (fpg, self, f_size), offset)))
+		 paddr_offset (pgent_address (fpg, self, f_size), offset)))
 	    {
 		paddr_t a UNUSED = space_is_sigma0 (self) ? (paddr_t) f_addr :
-		    addr_offset (pgent_address (fpg, self, f_size), offset);
+		    paddr_offset (pgent_address (fpg, self, f_size), offset);
 		printf ("map_fpage(from=%p  to=%p  base=%p  "
 			"sndfp=%p  rcvfp=%p)  paddr %p != %p\n",
 			self, t_space, base, snd_fp.raw, rcv_fp.raw,
@@ -551,7 +551,7 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 			    "pg=%p addr=%p %d%cB}) paddr=%p\n", map,
 			    fpg, f_addr, dbg_pgsize (page_size(f_size)), dbg_szname (page_size(f_size)),
 			    tpg, t_addr, dbg_pgsize (page_size(t_size)), dbg_szname (page_size(t_size)),
-			    (addr_t) addr_offset (pgent_address (fpg, self, f_size),  offset + f_off));
+			    paddr_offset (pgent_address (fpg, self, f_size),  offset + f_off));
 
 #if defined(CONFIG_NEW_MDB)
 		{
@@ -570,7 +570,7 @@ void space_map_fpage (space_t * self, fpage_t snd_fp, word_t base,
 
 		pgent_set_entry
 		    (tpg, t_space, t_size,
-		     addr_offset (pgent_address (fpg, self, f_size), offset+f_off),
+		     paddr_offset (pgent_address (fpg, self, f_size), offset+f_off),
 		     fpage_get_rwx (&snd_fp), pgent_attributes (fpg, self, f_size),
 		     false);
 		pgent_set_linknode (tpg, t_space, t_size, newmap, t_addr);
@@ -869,8 +869,8 @@ bool space_readmem (space_t * self, addr_t vaddr, word_t * contents)
 	return false;
 
     paddr_t paddr = pgent_address (pg, self, pgsize);
-    paddr = addr_offset (paddr, (word_t) vaddr & page_mask (pgsize));
-    paddr_t paddr1 = addr_mask (paddr, ~(sizeof (word_t) - 1));
+    paddr = paddr_offset (paddr, (word_t) vaddr & page_mask (pgsize));
+    paddr_t paddr1 = paddr_mask (paddr, ~(sizeof (word_t) - 1));
 
     if (paddr1 == paddr)
     {
@@ -881,18 +881,18 @@ bool space_readmem (space_t * self, addr_t vaddr, word_t * contents)
     {
 	// Word access not properly aligned.  Need to perform two
 	// separate accesses.
-	paddr_t paddr2 = addr_offset (paddr1, sizeof (word_t));
+	paddr_t paddr2 = paddr_offset (paddr1, sizeof (word_t));
 	word_t mask = ~page_mask (pgsize);
 
-	if (addr_mask (paddr1, mask) != addr_mask (paddr2, mask))
+	if (paddr_mask (paddr1, mask) != paddr_mask (paddr2, mask))
 	{
 	    // Word access crosses page boundary.
 	    vaddr = addr_offset (vaddr, sizeof (word_t));
 	    if (! space_lookup_mapping_c (self, vaddr, &pg, &pgsize))
 		return false;
 	    paddr2 = pgent_address (pg, self, pgsize);
-	    paddr2 = addr_offset (paddr2, (word_t) vaddr & page_mask (pgsize));
-	    paddr2 = addr_mask (paddr2, ~(sizeof (word_t) - 1));
+	    paddr2 = paddr_offset (paddr2, (word_t) vaddr & page_mask (pgsize));
+	    paddr2 = paddr_mask (paddr2, ~(sizeof (word_t) - 1));
 	}
 
 	word_t idx = ((word_t) vaddr) & (sizeof (word_t) - 1);
