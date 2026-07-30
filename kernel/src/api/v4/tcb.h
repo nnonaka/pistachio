@@ -283,6 +283,9 @@ word_t tcb_ctrlxfer (tcb_t *self, tcb_t *dst, msg_item_t item, word_t src_idx,
 		     word_t dst_idx, bool src_mr, bool dst_mr);
 void   tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t mask);
 ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault);
+/* tcb_append_ctrlxfer_item is declared per-architecture: powerpc defines it
+   INLINE in glue/v4-powerpc/tcb.h, x86 out of line in glue/v4-x86/thread.c
+   (declared in x32/ktcb.h).  A declaration here would clash with the former. */
 #if defined(CONFIG_DEBUG)
 void   tcb_dump_ctrlxfer_state (tcb_t *self, bool extended);
 #endif

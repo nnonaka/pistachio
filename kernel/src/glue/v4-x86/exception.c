@@ -72,7 +72,8 @@ bool send_exception_ipc(x86_exceptionframe_t * frame, word_t exception)
     msg_tag_set (&tag, 0, 2, (word_t) (-5 << 4));
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-    tag.x.typed += current->append_ctrlxfer_item(tag, 3);
+    /* & 0x3f: typed is a 6-bit field, as at the untyped assignment below. */
+    tag.x.typed = (tag.x.typed + tcb_append_ctrlxfer_item (current, tag, 3)) & 0x3f;
     bool ctrlxfer = (tag.x.typed != 0);
 #else
     bool ctrlxfer = false;

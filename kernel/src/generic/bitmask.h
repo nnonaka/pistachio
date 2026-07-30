@@ -47,6 +47,24 @@ typedef struct bitmask_u32_t bitmask_u32_t;
 struct bitmask_u16_t  { u16_t  maskvalue; };
 typedef struct bitmask_u16_t bitmask_u16_t;
 
+#if defined(CONFIG_DEBUG)
+/*
+ * Was bitmask_t<T>::string(): a bracketed picture of the mask, masksize wide,
+ * least significant bit rightmost, each set bit shown as its index modulo 16 in
+ * hex and each clear one as '~'.  masksize is a parameter here rather than a
+ * static member of the instantiation; the buffer is sized for the widest.
+ */
+INLINE char * bitmask_string (word_t maskvalue, word_t masksize)
+{
+    static const char *d = "0123456789abcdef";
+    static char s[3 + sizeof (word_t) * 8];
+    s[0] = '['; s[1+masksize] = ']'; s[2+masksize] = 0;
+    for (word_t i = 0; i < masksize; i++)
+	s[masksize-i] = (maskvalue & (1UL << i)) ? d[i%16] : '~';
+    return s;
+}
+#endif
+
 
 
 #endif /* !__BITMASK_H__ */

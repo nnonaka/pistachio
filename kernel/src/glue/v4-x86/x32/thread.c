@@ -34,102 +34,118 @@
 #include INC_API(schedule.h)
 #include INC_ARCH_SA(tss.h)
 
-/*
- * NOT CONVERTED -- see x32/ktcb.h, which #errors under the same gate.  No
- * configuration in contrib/configs sets CONFIG_X_CTRLXFER_MSG, so nothing here
- * is compiled, and nothing here has been compiled at any point in this
- * migration.  The file is C so that the build issues no C++; its contents are
- * still the C++ they were.
- */
-#if defined(CONFIG_X_CTRLXFER_MSG)
+#if defined(CONFIG_X_CTRLXFER_MSG) || defined(CONFIG_X_X86_HVM)
+#include INC_GLUE(ipc.h)
 
-word_t arch_ktcb_t::get_x86_gpregs(word_t id, word_t mask, tcb_t *dst, word_t &dst_mr)
+/*
+ * The user exception frame lives at the top of the thread's kernel stack; see
+ * the comment on the declaration in glue/v4-x86/ipc.h.  Not an INLINE there
+ * because tcb_get_stack_top is declared after api/v4/tcb.h includes the glue
+ * headers.  Gated because no other configuration has a caller.
+ */
+x86_exceptionframe_t *get_user_frame (tcb_t *tcb)
+{
+    return (x86_exceptionframe_t *) tcb_get_stack_top (tcb) - 1;
+}
+#endif
+
+#if defined(CONFIG_X_CTRLXFER_MSG)
+EXTERN_TRACEPOINT(IPC_CTRLXFER_ITEM_DETAILS);
+
+word_t arch_ktcb_get_x86_gpregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
 {
     /* transfer from frame to dst */
-    const word_t *hwreg = ctrlxfer_item_t::hwregs[id];
-    word_t *frame = (word_t *) get_user_frame(addr_to_tcb(this));
+    const word_t *hwreg = ctrlxfer_hwregs[id];
+    word_t *frame = (word_t *) get_user_frame (addr_to_tcb (self));
     word_t num = 0;
     
-    for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
+    for (word_t reg=(word_t)lsb(mask); mask!=0; mask>>=(word_t)lsb(mask)+1,reg+=(word_t)lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (f%06d/%06d/%8s->m%06d): %08x", 
-                                reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg), 
-                                dst_mr, frame[hwreg[reg]]);
-        dst->set_mr(dst_mr++, frame[hwreg[reg]]);
+                                reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg), 
+                                *dst_mr, frame[hwreg[reg]]);
+        tcb_set_mr (dst, (*dst_mr)++, frame[hwreg[reg]]);
 	
     }
     return num;
 }
 
-word_t arch_ktcb_t::set_x86_gpregs(word_t id, word_t mask, tcb_t *src, word_t &src_mr)
+word_t arch_ktcb_set_x86_gpregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
 {
     /* transfer from src to frame */
-    const word_t *hwreg = ctrlxfer_item_t::hwregs[id];
-    word_t *frame = (word_t *) get_user_frame(addr_to_tcb(this));
+    const word_t *hwreg = ctrlxfer_hwregs[id];
+    word_t *frame = (word_t *) get_user_frame (addr_to_tcb (self));
     word_t eflmask = X86_CTRLXFER_FLAGMASK;
 
     word_t num = 0;
     
-    for (word_t reg=lsb(mask); mask!=0; mask>>=lsb(mask)+1,reg+=lsb(mask)+1,num++)
+    for (word_t reg=(word_t)lsb(mask); mask!=0; mask>>=(word_t)lsb(mask)+1,reg+=(word_t)lsb(mask)+1,num++)
     {
         TRACE_CTRLXFER_DETAILS( "\t (m%06d->f%06d/%06d/%8s): %08x", 
-                                src_mr, reg, hwreg[reg], ctrlxfer_item_t::get_hwregname(id, reg),
-                                src->get_mr(src_mr));
+                                *src_mr, reg, hwreg[reg], ctrlxfer_get_hwregname(id, reg),
+                                tcb_get_mr (src, *src_mr));
         
-	if ((reg == ctrlxfer_item_t::gpreg_eflags))
-	    frame[hwreg[reg]] = (frame[hwreg[reg]] & ~eflmask) | (src->get_mr(src_mr++) & eflmask);
+	if ((reg == gpreg_eflags))
+	    frame[hwreg[reg]] = (frame[hwreg[reg]] & ~eflmask) | (tcb_get_mr (src, (*src_mr)++) & eflmask);
 	else
-	    frame[hwreg[reg]] = src->get_mr(src_mr++);
+	    frame[hwreg[reg]] = tcb_get_mr (src, (*src_mr)++);
     }
     return num;
 }
 
+/* Were UNIMPLEMENTED() one-liners in the class body. */
+word_t arch_ktcb_get_x86_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr)
+{ (void) self; (void) id; (void) mask; (void) dst; (void) dst_mr; UNIMPLEMENTED(); return 0; }
 
-get_ctrlxfer_regs_t arch_ktcb_t::get_ctrlxfer_regs[ctrlxfer_item_t::id_max] = 
+word_t arch_ktcb_set_x86_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr)
+{ (void) self; (void) id; (void) mask; (void) src; (void) src_mr; UNIMPLEMENTED(); return 0; }
+
+
+get_ctrlxfer_regs_t get_ctrlxfer_regs[id_max] = 
 { 
-	&arch_ktcb_t::get_x86_gpregs,
- 	&arch_ktcb_t::get_x86_fpuregs,
+	&arch_ktcb_get_x86_gpregs,
+ 	&arch_ktcb_get_x86_fpuregs,
 #if defined(CONFIG_X_X86_HVM)
- 	&arch_ktcb_t::get_x86_hvm_cregs,
- 	&arch_ktcb_t::get_x86_hvm_dregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
- 	&arch_ktcb_t::get_x86_hvm_segregs,
-	&arch_ktcb_t::get_x86_hvm_nonregexc,
-	&arch_ktcb_t::get_x86_hvm_execctrl,
-	&arch_ktcb_t::get_x86_hvm_otherregs,
+ 	&arch_ktcb_get_x86_hvm_cregs,
+ 	&arch_ktcb_get_x86_hvm_dregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+ 	&arch_ktcb_get_x86_hvm_segregs,
+	&arch_ktcb_get_x86_hvm_nonregexc,
+	&arch_ktcb_get_x86_hvm_execctrl,
+	&arch_ktcb_get_x86_hvm_otherregs,
 #endif
 
 };
 
 
-set_ctrlxfer_regs_t arch_ktcb_t::set_ctrlxfer_regs[ctrlxfer_item_t::id_max] = 
+set_ctrlxfer_regs_t set_ctrlxfer_regs[id_max] = 
 { 
-	&arch_ktcb_t::set_x86_gpregs,
- 	&arch_ktcb_t::set_x86_fpuregs,
+	&arch_ktcb_set_x86_gpregs,
+ 	&arch_ktcb_set_x86_fpuregs,
 #if defined(CONFIG_X_X86_HVM)
- 	&arch_ktcb_t::set_x86_hvm_cregs,
- 	&arch_ktcb_t::set_x86_hvm_dregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
- 	&arch_ktcb_t::set_x86_hvm_segregs,
-	&arch_ktcb_t::set_x86_hvm_nonregexc,
-	&arch_ktcb_t::set_x86_hvm_execctrl,
-	&arch_ktcb_t::set_x86_hvm_otherregs,
+ 	&arch_ktcb_set_x86_hvm_cregs,
+ 	&arch_ktcb_set_x86_hvm_dregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+ 	&arch_ktcb_set_x86_hvm_segregs,
+	&arch_ktcb_set_x86_hvm_nonregexc,
+	&arch_ktcb_set_x86_hvm_execctrl,
+	&arch_ktcb_set_x86_hvm_otherregs,
 #endif
 
 };

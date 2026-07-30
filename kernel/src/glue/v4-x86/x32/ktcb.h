@@ -45,11 +45,16 @@
 #if defined(CONFIG_X_X86_HVM)
 #include INC_GLUE(hvm.h)
 #define X86_CTRLXFER_FLAGMASK		(hvm_enabled ? (word_t) X86_HVM_EFLAGS_MASK : (word_t)  X86_USER_FLAGMASK)
-#define X86_CTRLXFER_FAULT_MAX          vmcs_ei_reason_t::be_max
+#define X86_CTRLXFER_FAULT_MAX          VMCS_EI_REASON_BE_MAX
 #else
 #define X86_CTRLXFER_FLAGMASK		(word_t) (X86_USER_FLAGMASK)
 #define X86_CTRLXFER_FAULT_MAX          0
 #endif
+
+/* api/v4/tcb.h sizes tcb_t::fault_ctrlxfer by this name; it was
+   arch_ktcb_t::fault_max, a static const member the glue code read through the
+   class.  Same spelling as glue/v4-powerpc/ktcb.h. */
+#define ARCH_KTCB_FAULT_MAX		X86_CTRLXFER_FAULT_MAX
 
 
 struct arch_ktcb_t {
@@ -64,16 +69,32 @@ struct arch_ktcb_t {
 typedef struct arch_ktcb_t arch_ktcb_t;
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
-typedef bitmask_t<u32_t> ctrlxfer_mask_t;
+typedef bitmask_u32_t ctrlxfer_mask_t;
+
 /*
- * NOT CONVERTED.  These were arch_ktcb_t methods and static tables; their
- * definitions are in x32/thread.c, likewise unconverted.  No configuration in
- * contrib/configs sets CONFIG_X_CTRLXFER_MSG, so none of this is compiled and
- * none of it has been compiled at any point in this migration -- converting it
- * blind is how the gate-blind deletions of §95, §116 and §123 happened.  It
- * needs a configuration that turns the option on to convert against.
+ * Were arch_ktcb_t methods and two static member tables.  The methods take the
+ * receiver first; the word_t& out-parameters become pointers, which is what the
+ * get_ctrlxfer_regs_t / set_ctrlxfer_regs_t typedefs in api/v4/tcb.h already
+ * describe.  The tables are plain file-scope arrays, as on powerpc, and are
+ * indexed directly by api/v4/thread.c rather than through the class.
  */
-#error CONFIG_X_CTRLXFER_MSG: x32 ctrlxfer is not converted (see x32/ktcb.h)
+word_t arch_ktcb_get_x86_gpregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_x86_gpregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+word_t arch_ktcb_get_x86_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *dst, word_t *dst_mr);
+word_t arch_ktcb_set_x86_fpuregs (arch_ktcb_t *self, word_t id, word_t mask, tcb_t *src, word_t *src_mr);
+
+#if defined(CONFIG_DEBUG)
+word_t arch_ktcb_get_ctrlxfer_reg (arch_ktcb_t *self, word_t id, word_t reg);
+#endif
+
+extern get_ctrlxfer_regs_t get_ctrlxfer_regs[id_max];
+extern set_ctrlxfer_regs_t set_ctrlxfer_regs[id_max];
+
+/* Was tcb_t::append_ctrlxfer_item, an INLINE in x32/tcb.h.  It is out of line
+   in glue/v4-x86/thread.c beside tcb_set_fault_ctrlxfer_items and
+   tcb_get_fault_ctrlxfer_items, which api/v4/tcb.h declares extern.  Declared
+   here rather than there because powerpc keeps its own copy INLINE. */
+word_t tcb_append_ctrlxfer_item (tcb_t *self, msg_tag_t tag, word_t offset);
 #endif /* defined(CONFIG_X_CTRLXFER_MSG) */
 
 #endif /* !__GLUE_V4_X86__X32__KTCB_H__ */

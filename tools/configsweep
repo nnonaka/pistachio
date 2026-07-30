@@ -23,15 +23,18 @@ OUT=$TOP/build/sweep
 REF=$TOP/build/x86-x64-p4-smp/kernel	# donor for Makefile / Makeconf.local
 JOBS=${JOBS:-8}
 rc=0
+n=0
 
 if [ ! -f "$REF/Makeconf.local" ]; then
     echo "configsweep: no reference build dir at $REF" >&2; exit 2
 fi
 
 rm -rf "$OUT"; mkdir -p "$OUT"
-for tar in "$TOP"/contrib/configs/$PATTERN.kernel.tar; do
-    [ -e "$tar" ] || { echo "configsweep: no configs match '$PATTERN'" >&2; exit 2; }
-    name=$(basename "$tar" .kernel.tar)
+# Two shipped spellings of the suffix: x86-x32-cxfer-kernel.tar uses a dash
+# where every other config uses a dot, so glob both or that one is never swept.
+for tar in "$TOP"/contrib/configs/$PATTERN.kernel.tar "$TOP"/contrib/configs/$PATTERN-kernel.tar; do
+    [ -e "$tar" ] || continue
+    name=$(basename "$tar" .kernel.tar); name=${name%-kernel.tar}
     d="$OUT/$name/kernel"
     mkdir -p "$d"; (cd "$d" && tar xf "$tar")
 
@@ -68,5 +71,7 @@ for tar in "$TOP"/contrib/configs/$PATTERN.kernel.tar; do
 	       "$(grep -c ' error:' "$d/build.log")" "$d/build.log"
 	rc=1
     fi
+    n=$((n+1))
 done
+[ "$n" -gt 0 ] || { echo "configsweep: no configs match '$PATTERN'" >&2; exit 2; }
 exit $rc

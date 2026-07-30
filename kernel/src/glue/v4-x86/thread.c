@@ -234,6 +234,71 @@ void tcb_lock_state_init (tcb_t *self)
 }
 
 
+#if defined(CONFIG_X_CTRLXFER_MSG)
+/*
+ * ctrlxfer tcb functions.  Were INLINE tcb_t methods in x32/tcb.h; api/v4/tcb.h
+ * declares the first two extern (powerpc keeps its copies inline), so they
+ * cannot be static-inline anywhere and live here with the other out-of-line
+ * tcb_t bodies.  The fault-to-slot mapping is unchanged: faults 2..5 are the
+ * four standard ones and land at fault-2; the HVM faults start at 9 and land at
+ * fault-5, immediately after them.
+ */
+EXTERN_TRACEPOINT(IPC_CTRLXFER_ITEM_DETAILS);
+
+void tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t mask)
+{
+    // Fault n corresponds to message label -n; faults 0,1,5,6,7 are not defined
+    if (fault >= 2 && fault <= 5)
+	// Pagefault, Preemption, Exception, Archexception
+	self->fault_ctrlxfer[fault - 2] = mask;
+    else if (fault >= 9 && fault < 9 + ARCH_KTCB_FAULT_MAX)
+	// HVM Faults
+	self->fault_ctrlxfer[fault - 5] = mask;
+    else
+    {
+	printf("Strange set fault id mask %d\n", fault);
+	enter_kdebug("BUG?");
+    }
+}
+
+ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault)
+{
+    // Fault n corresponds to message label -n; faults 0,1,5,6,7 are not defined
+    if (fault >= 2 && fault <= 5)
+	// Pagefault, Preemption, Exception, Archexception
+	return self->fault_ctrlxfer[fault - 2];
+    else if (fault >= 9 && fault < 9 + ARCH_KTCB_FAULT_MAX)
+	// HVM Faults
+	return self->fault_ctrlxfer[fault - 5];
+    else
+    {
+	printf("Strange get fault id mask %d\n", fault);
+	enter_kdebug("BUG?");
+    }
+
+    return (ctrlxfer_mask_t) { .maskvalue = 0 };
+}
+
+word_t tcb_append_ctrlxfer_item (tcb_t *self, msg_tag_t tag, word_t offset)
+{
+    word_t fault = 0x1000 - (msg_tag_get_label (&tag) >> 4);
+    ASSERT ((fault >= 2 && fault <= 5) ||
+	    (fault >= 9 && fault < 9 + ARCH_KTCB_FAULT_MAX));
+
+    if (tcb_get_fault_ctrlxfer_items (self, fault).maskvalue)
+    {
+	msg_item_t item;
+	TRACE_CTRLXFER_DETAILS( "append ctrlxfer item %d", fault);
+	tcb_flags_add (self, TCB_FLAG_KERNEL_CTRLXFER_MSG);
+	item = ctrlxfer_kernel_fault_item (fault);
+	tcb_set_mr (self, offset++, item.raw);
+	return 1;
+    }
+    return 0;
+}
+#endif /* defined(CONFIG_X_CTRLXFER_MSG) */
+
+
 /* IPC / thread-switch / notify -- the arch bodies translated from the
    subarchitectures' tcb.h.  These are register-level code; the two
    subarchitectures share their shape and nothing else. */

@@ -6066,3 +6066,79 @@ walks the list finds an empty list and carries on.
 Sixteen of nineteen x32 configurations reach userland. The remaining three are
 `p4-fullkdb`, which is §124's `rdpmc` under QEMU and not a kernel fault, and
 the two HVM configurations, which do not compile.
+
+
+## §133 — x32 ctrlxfer: the twentieth configuration, and `get_user_frame`
+
+`tools/configsweep` globs `contrib/configs/$PATTERN.kernel.tar`.
+`x86-x32-cxfer-kernel.tar` spells the suffix with a dash, so nineteen of the
+twenty shipped x32 configurations were being swept and the twentieth -- the
+only one that sets `CONFIG_X_CTRLXFER_MSG` -- was invisible. That is what
+§128's comment in `x32/ktcb.h` was wrong about: it said no configuration in
+`contrib/configs` turns the option on, and refused to convert the control-transfer
+path for want of something to compile it against. There was something.
+
+The gate now covers both spellings, and the sweep reports twenty.
+
+The conversion itself is the powerpc shape, which was already done:
+`arch_ctrlxfer_item_t` in `glue/v4-x86/ipc.h` was a class wrapping nothing but
+enums, so the wrapper goes and `id_gpregs`, `gpreg_eflags` and the rest keep
+their names at file scope; `arch_ktcb_t::get_x86_gpregs` and its three siblings
+take the receiver first and turn their `word_t&` out-parameters into pointers;
+the two static member tables become the file-scope `get_ctrlxfer_regs[id_max]` /
+`set_ctrlxfer_regs[id_max]` that `api/v4/thread.c` already indexed;
+`ctrlxfer_item_t::num_hwregs` and `::hwregs` become `ctrlxfer_num_hwregs` and
+`ctrlxfer_hwregs`, which `api/v4/ipc.h` had already been declaring.
+`bitmask_t<u32_t>` is `bitmask_u32_t`, and its `string()` -- the bracketed
+picture kdb prints for a fault mask -- is a `bitmask_string (maskvalue, width)`
+in `generic/bitmask.h`.
+
+`glue/v4-x86/ipc.cc` and `kdb/glue/v4-x86/ipc.cc` are the last two x86 `.cc`
+files outside HVM, and both are now `.c`.
+
+Two things were not mechanical.
+
+**Four dropped `#if` blocks.** `api/v4/thread.cc` had seven
+`CONFIG_X_CTRLXFER_MSG` sites; `api/v4/thread.c` had two. The five missing ones
+are `fake_wait_for_startup` (set the ctrlxfer acceptor bit and a
+complete-memory receive window), `tcb_activate` (zero `fault_ctrlxfer[]`),
+`send_pagefault_ipc` and `send_preemption_ipc` (both set the acceptor bit and
+append the kernel fault item). `x32/tcb.h` lost two more: the three
+`tcb_t` ctrlxfer methods. Same class of fault as §95, §116 and §123 -- a
+conditional block deleted because nothing compiled it -- and the same reason it
+went unnoticed: with the option unreachable, nothing linked against the result.
+The three `tcb_t` methods are out-of-line in `glue/v4-x86/thread.c` rather than
+`INLINE` in a header, because `api/v4/tcb.h` declares two of them `extern` and
+C rejects a `static inline` definition of a name already declared without it.
+`tcb_append_ctrlxfer_item` is declared in `x32/ktcb.h` instead, because powerpc
+keeps its own copy `INLINE` and a declaration in `api/v4/tcb.h` would clash
+with it.
+
+**`get_user_frame` has no definition anywhere upstream.** `glue/v4-x86/ipc.h`
+declared `x86_exceptionframe_t *get_user_frame(tcb_t *)` and no translation
+unit in the tree defines it -- `git grep` over `c881a86`, the import commit,
+finds the declaration and eight calls and nothing else. So the x86
+control-transfer path has never linked, in this tree or the one it came from,
+and neither has HVM, which calls it four times. What upstream's own `x32/tcb.h`
+had, before §116 collapsed the `__cplusplus` guards over it, was
+
+    INLINE x86_exceptionframe_t *get_user_frame(tcb_t *tcb)
+    { return ((x86_exceptionframe_t*) (tcb->get_stack_top()) - 1); }
+
+inside the `CONFIG_X_CTRLXFER_MSG` block -- an `INLINE`, so no symbol, which is
+why nothing ever complained. It is restored as an out-of-line function in
+`x32/thread.c` (it cannot be `INLINE` in `ipc.h`: that header is reached from
+`api/v4/tcb.h` well before `tcb_get_stack_top` is declared), and the arithmetic
+checks out against `x32/config.h`: the frame is 17 words, the trapgate wrapper
+pushes it at the top of the kernel stack, and `KSTACK_UIP`, `KSTACK_UFLAGS` and
+`KSTACK_USP` are -5, -3 and -2 against `regs[]` indices 12, 14 and 15 of 17.
+
+`x86-x32-cxfer` compiles, links and boots to the `l4test` menu. Eighteen of
+twenty x32 configurations compile; the two that do not are the HVM pair, whose
+error count went from 285 to 347 because the `ktcb.h` `#error` is no longer
+short-circuiting the rest of the HVM headers.
+
+Nothing else moves: `x86-x32-p4-smp` and `x86-x64-p4-smp` are 635 and 706
+symbols against `0e13138` with 634 and 706 identical bodies, the one being
+`kernel_version_string`, which is the build date. All eleven x64
+configurations still compile.

@@ -15,5 +15,5 @@ SOURCES+=	kdb/glue/v4-x86/thread.c kdb/glue/v4-x86/prepost.c \
 	   	kdb/glue/v4-x86/addrtranslation.c
 
 ifeq ("$(CONFIG_X_CTRLXFER_MSG)","y")
-SOURCES+=	kdb/glue/v4-x86/ipc.cc
+SOURCES+=	kdb/glue/v4-x86/ipc.c
 endif

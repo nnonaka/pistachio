@@ -178,6 +178,13 @@ static void fake_wait_for_startup (tcb_t * tcb, threadid_t pager)
 
     acceptor_t acceptor;
     acceptor.raw = 0;
+#if defined(CONFIG_X_CTRLXFER_MSG)
+    acceptor.x.ctrlxfer = 1;
+    {
+	fpage_t cm = fpage_complete_mem ();
+	acceptor_set_rcv_window (&acceptor, cm);
+    }
+#endif
     tcb_set_br (tcb, 0, acceptor.raw);
 
     // Make sure that unwind will work on waiting thread.
@@ -266,6 +273,12 @@ bool tcb_activate (tcb_t *self, void (*startup_func)(void), threadid_t pager)
     tcb_set_pager (self, pager);
     tcb_set_cpu (self, get_current_cpu());
     tcb_set_exception_handler (self, NILTHREAD);
+
+#if defined(CONFIG_X_CTRLXFER_MSG)
+    /* set default ctrlxfer items for faults */
+    for (word_t fault = 0; fault < 4 + ARCH_KTCB_FAULT_MAX; fault++)
+	self->fault_ctrlxfer[fault].maskvalue = 0;
+#endif
 
     /* initialize the startup stack */
     tcb_create_startup_stack (self, startup_func);
@@ -994,6 +1007,11 @@ void tcb_send_pagefault_ipc (tcb_t *self, addr_t addr, addr_t ip, int access)
 	acceptor_set_rcv_window (&acceptor, cm);
     }
 
+#if defined(CONFIG_X_CTRLXFER_MSG)
+    acceptor.x.ctrlxfer = 1;
+    tag.x.typed = (tag.x.typed + tcb_append_ctrlxfer_item (self, tag, 3)) & 0x3f;
+#endif
+
     tcb_set_tag (self, tag);
     tcb_set_mr (self, 1, (word_t)addr);
     tcb_set_mr (self, 2, (word_t)ip);
@@ -1031,6 +1049,14 @@ bool tcb_send_preemption_ipc (tcb_t *self)
     tcb_set_mr (self, 2, (word_t)((time >> (BITS_WORD-1)) >> 1)); // Avoid gcc warn
 
     acceptor.raw = tcb_get_br (self, 0);
+#if defined(CONFIG_X_CTRLXFER_MSG)
+    acceptor.x.ctrlxfer = 1;
+    {
+	fpage_t cm = fpage_complete_mem ();
+	acceptor_set_rcv_window (&acceptor, cm);
+    }
+    tag.x.typed = (tag.x.typed + tcb_append_ctrlxfer_item (self, tag, 3)) & 0x3f;
+#endif
 
     tcb_set_tag (self, tag);
     tcb_set_br (self, 0, acceptor.raw);
@@ -1047,6 +1073,7 @@ bool tcb_send_preemption_ipc (tcb_t *self)
 
 
 #if defined(CONFIG_X_CTRLXFER_MSG)
+EXTERN_TRACEPOINT(IPC_CTRLXFER_ITEM_DETAILS);
 
 /* C form of tcb_t::ctrlxfer.  The bitmask operators it used are gone with the
    C++ template: `mask += n' set bit n and `mask -= n' cleared it (see the

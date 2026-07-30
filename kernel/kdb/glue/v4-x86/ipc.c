@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2008-2010,  Karlsruhe University
  *                
- * File path:     kdb/glue/v4-x86/ipc.cc
+ * File path:     kdb/glue/v4-x86/ipc.c
  * Description:   
  *                
  * @LICENSE@
@@ -25,7 +25,13 @@
 #include INC_GLUE(hvm.h)
 #endif
 
-const char* ctrlxfer_item_idname[ctrlxfer_item_t::id_max] = 
+/*
+ * Were the static members ctrlxfer_item_t::get_idname / ::get_hwregname and
+ * arch_ktcb_t::get_ctrlxfer_reg / tcb_t::dump_ctrlxfer_state.  api/v4/ipc.h
+ * declares the first two as the free functions ctrlxfer_get_idname and
+ * ctrlxfer_get_hwregname; the tables they read stay file-scope here.
+ */
+const char* ctrlxfer_item_idname[id_max] = 
 {
     "gpregs", "fpuregs", 
 #if defined(CONFIG_X_X86_HVM)
@@ -37,7 +43,7 @@ const char* ctrlxfer_item_idname[ctrlxfer_item_t::id_max] =
 #endif
 };
 
-const char* ctrlxfer_item_hwregname[ctrlxfer_item_t::id_max][16] = 
+const char* ctrlxfer_item_hwregname[id_max][16] = 
 {
     {  "eip", "efl", "edi", "esi", "ebp", "esp", "ebx", "edx", "ecx", "eax" },
     {  NULL },
@@ -60,35 +66,36 @@ const char* ctrlxfer_item_hwregname[ctrlxfer_item_t::id_max][16] =
 #endif
 };
 
-const char* ctrlxfer_item_t::get_idname(const word_t id)
+const char* ctrlxfer_get_idname(const word_t id)
 { 
     return ctrlxfer_item_idname[id]; 
 }
     
-const char* ctrlxfer_item_t::get_hwregname(const word_t id, const word_t reg)
+const char* ctrlxfer_get_hwregname(const word_t id, const word_t reg)
 { 
     return ctrlxfer_item_hwregname[id][reg]; 
 }
 
-word_t arch_ktcb_t::get_ctrlxfer_reg(word_t id, word_t reg)
+word_t arch_ktcb_get_ctrlxfer_reg (arch_ktcb_t *self, word_t id, word_t reg)
 {	    
     word_t value;
     
-    tcb_t *tcb = (tcb_t *) ((word_t) this & KTCB_MASK); 
+    tcb_t *tcb = addr_to_tcb (self);
     x86_exceptionframe_t* frame = get_user_frame(tcb);	    
     
     switch (id)
     {
-    case ctrlxfer_item_t::id_gpregs:
+    case id_gpregs:
         // GP regs
-        value = frame->regs[ctrlxfer_item_t::hwregs[ctrlxfer_item_t::id_gpregs][reg]];
+        value = frame->__base.regs[ctrlxfer_hwregs[id_gpregs][reg]];
         break;
-    case ctrlxfer_item_t::id_fpuregs:
+    case id_fpuregs:
+        value = 0;
         UNIMPLEMENTED();
         break;
 #if defined(CONFIG_X_X86_HVM)
-    case ctrlxfer_item_t::id_cregs ... ctrlxfer_item_t::id_otherregs:
-        return get_x86_hvm_ctrlxfer_reg(id, reg);
+    case id_cregs ... id_otherregs:
+        return arch_hvm_ktcb_get_x86_hvm_ctrlxfer_reg (self, id, reg);
 #endif /* defined(CONFIG_X_X86_HVM) */
     default:
         value = 0;
@@ -101,21 +108,21 @@ word_t arch_ktcb_t::get_ctrlxfer_reg(word_t id, word_t reg)
 
 
 
-void tcb_t::dump_ctrlxfer_state(bool extended)
+void tcb_dump_ctrlxfer_state (tcb_t *self, bool extended)
 {
     if (extended)
     {
 	word_t max = 4;
 #if defined(CONFIG_X_X86_HVM)
-	if (get_arch()->is_hvm_enabled())
-	    max += arch_ktcb_t::fault_max;
+	if (arch_hvm_ktcb_is_hvm_enabled (&self->arch))
+	    max += ARCH_KTCB_FAULT_MAX;
 #endif
 	
 	printf("\nfault masks:\n");
 	for (word_t fault=0; fault < max; fault++)
 	{
 	    if (fault % 2 == 0) printf("\t");
-	    printf("%s ", fault_ctrlxfer[fault+0].string());
+	    printf("%s ", bitmask_string (self->fault_ctrlxfer[fault+0].maskvalue, 32));
 	    if (fault % 2 == 1) printf("\n");
 	}
 	printf("\n");
@@ -125,57 +132,56 @@ void tcb_t::dump_ctrlxfer_state(bool extended)
     
     for (word_t id = 0; id < 2; id++)
     {
-	printf("\n\t%9s:", ctrlxfer_item_t::get_idname(id));
-	for (word_t reg = 0; reg < ctrlxfer_item_t::num_hwregs[id]; reg++)
+	printf("\n\t%9s:", ctrlxfer_get_idname(id));
+	for (word_t reg = 0; reg < ctrlxfer_num_hwregs[id]; reg++)
 	{
 	    if (reg && reg % 3 == 0) printf("\n\t\t  ");
-	    printf("%10s: %wx  ", ctrlxfer_item_t::get_hwregname(id, reg), arch.get_ctrlxfer_reg(id, reg));
+	    printf("%10s: %wx  ", ctrlxfer_get_hwregname(id, reg), arch_ktcb_get_ctrlxfer_reg (&self->arch, id, reg));
 	}
     }
 #if defined(CONFIG_X_X86_HVM)
-    if (get_arch()->is_hvm_enabled())
+    if (arch_hvm_ktcb_is_hvm_enabled (&self->arch))
     {
-        for (word_t id = 3; id < ctrlxfer_item_t::id_max; id++)
+        for (word_t id = 3; id < id_max; id++)
 	{
-	    printf("\n\t%9s:", ctrlxfer_item_t::get_idname(id));
-	    for (word_t reg = 0,num = 0; reg < ctrlxfer_item_t::num_hwregs[id]; reg++,num++)
+	    printf("\n\t%9s:", ctrlxfer_get_idname(id));
+	    for (word_t reg = 0,num = 0; reg < ctrlxfer_num_hwregs[id]; reg++,num++)
 	    {
-		const char *regname = ctrlxfer_item_t::get_hwregname(id, reg);
+		const char *regname = ctrlxfer_get_hwregname(id, reg);
 		if (regname)
 		{
 		    if (num && num % 3 == 0) printf("\n\t\t  ");
-		    printf("%10s: %0wx  ", regname, arch.get_ctrlxfer_reg(id, reg));
+		    printf("%10s: %0wx  ", regname, arch_ktcb_get_ctrlxfer_reg (&self->arch, id, reg));
 		}
 	    }
 	}
 	if (extended)
-	    get_arch()->dump_hvm();
+	    arch_hvm_ktcb_dump_hvm (&self->arch);
     }
 #endif
     printf("\n");
 }
 
 #if defined(CONFIG_X_X86_HVM)
-void arch_hvm_ktcb_t::dump_hvm ()
+void arch_hvm_ktcb_dump_hvm (arch_hvm_ktcb_t *self)
 {
-    printf("\nvcpu state: %x\n\t", this);
-    tcb_t *tcb = addr_to_tcb(this);
+    printf("\nvcpu state: %x\n\t", self);
+    tcb_t *tcb = addr_to_tcb(self);
     
     // Check if this really is a VCPU.
-    if (!load_vmcs())
+    if (!arch_hvm_ktcb_load_vmcs (self))
 	return;
     
     
-    space_t *space = tcb->get_space();
+    space_t *space = tcb_get_space (tcb);
     u64_t r;
    
     x86_segdesc_t *vgdt = (x86_segdesc_t *) 
-	tcb->arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_gdtrregs, 
-				   ctrlxfer_item_t::gdtrreg_base);
+	arch_ktcb_get_ctrlxfer_reg (&tcb->arch, id_gdtrregs, gdtrreg_base);
 
     
     printf("\n\tvGDT-dump: gdt at gva %x ", vgdt);
-    if (! space->get_hvm_space()->lookup_gphys_addr ((addr_t) vgdt, (addr_t *) &vgdt))
+    if (! x86_hvm_space_lookup_gphys_addr (space_get_hvm_space (space), (addr_t) vgdt, (addr_t *) &vgdt))
 	printf("gpa [###]\n");
     else
     {
@@ -220,11 +226,10 @@ void arch_hvm_ktcb_t::dump_hvm ()
     }
     
     x86_idtdesc_t *vidt = (x86_idtdesc_t *) 
-	tcb->arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_idtrregs, 
-				   ctrlxfer_item_t::idtrreg_base);
+	arch_ktcb_get_ctrlxfer_reg (&tcb->arch, id_idtrregs, idtrreg_base);
 
     printf("\n\tvIDT-dump: idt at gva %x ", vidt);
-    if (! space->get_hvm_space()->lookup_gphys_addr ((addr_t) vidt, (addr_t *) &vidt))
+    if (! x86_hvm_space_lookup_gphys_addr (space_get_hvm_space (space), (addr_t) vidt, (addr_t *) &vidt))
 	printf("gpa [###]\n");
     else
     {
