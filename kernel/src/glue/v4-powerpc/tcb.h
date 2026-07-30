@@ -101,7 +101,12 @@ INLINE except_regs_t *get_user_except_regs( tcb_t *tcb )
 
 
 #ifdef CONFIG_DYNAMIC_TCBS
-INLINE void tcb_allocate (tcb_t *self)
+/* was tcb_t::allocate(), a non-static member overloading the static factory
+   tcb_t::allocate(threadid_t).  C has no overloading and both flattened to
+   tcb_allocate, so this one is suffixed.  It is dead either way -- nothing in
+   this tree or in master calls it, and the factory (api/v4/tcb.h) does the
+   touch itself via kernel_stack[0].  See §142. */
+INLINE void tcb_allocate_arch (tcb_t *self)
 {
     // Write to the tcb, to ensure that the kernel maps this tcb
     // with write access.  Write to the bottom of the stack.
@@ -181,9 +186,21 @@ __attribute__ ((const)) INLINE tcb_t * get_current_tcb()
 }
 
 #if defined(CONFIG_SMP)
+/* NOTE: this collides with the unguarded get_current_cpu() in api/v4/cpu.h,
+   which lands in the same translation unit -- upstream C++ fails here too, so
+   CONFIG_SMP has never built on this port.  Which definition was meant is not
+   recoverable: x86 has no override and relies on the cpu.h one, which is fed by
+   `current_cpu = cpu' in space.c exactly as space-swtlb.c does here, so this
+   copy looks vestigial -- but that is inference about code that cannot be run,
+   so it is translated and left in place rather than deleted.  See §142.
+
+   was: return get_idle_tcb()->get_cpu();
+   This header is included from api/v4/tcb.h before tcb_get_cpu() and
+   get_idle_tcb_c() are declared, so the idle tcb is reached directly. */
 INLINE cpuid_t get_current_cpu()
 {
-    return get_idle_tcb()->get_cpu();
+    extern tcb_t *__idle_tcb;
+    return __idle_tcb->cpu;
 }
 #endif
 

@@ -32,10 +32,11 @@
  ********************************************************************/
 #include INC_API(tcb.h)
 #include INC_ARCH(ppc_registers.h)
-INLINE u16_t dbg_get_current_cpu()
-{
-    return ppc_get_spr(SPR_PIR);
-}
 
-/* dbg_get_current_tcb is defined in kdb/api/v4/tcb.c. */
+/* dbg_get_current_cpu and dbg_get_current_tcb are defined in
+   kdb/api/v4/tcb.c.  This file used to carry an `INLINE' copy of each, reading
+   SPR_PIR rather than the cpulocal current_cpu; nothing here ever called them,
+   so TP_CPU has always bound to the shared definitions.  In C `INLINE' is
+   `static inline', which collides with the `extern' declaration in
+   src/kdb/tracepoints.h -- an error the C++ build never raised.  See §142. */
 

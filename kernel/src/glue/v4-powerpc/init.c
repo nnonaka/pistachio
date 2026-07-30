@@ -443,7 +443,7 @@ SECTION(SEC_INIT) static void finish_cpu_init( void )
     TRACE_INIT("CPU %d initialized--enter wait loop\n", get_current_cpu());
 
     // Release the boot stack.
-    cpu_start_lock.unlock();
+    spinlock_unlock (&cpu_start_lock);
 
     // Enable recoverable exceptions (for this cpu).
     ppc_set_msr( MSR_KERNEL );
@@ -519,13 +519,13 @@ SECTION(SEC_INIT) static void start_all_cpus( void )
 {
     for( cpuid_t cpu = 1; cpu < cpu_count; cpu++ )
     {
-	cpu_start_lock.lock();	// Unlocked by the target cpu in startup_cpu
+	spinlock_lock (&cpu_start_lock);	// Unlocked by the target cpu in startup_cpu
 	printf("CPU0: starting CPU %d\n", cpu);
 	cpu_start_id = cpu;	// cpu_start_id must be protected by the lock.
 	intctrl_start_new_cpu ( cpu );
         cpu_add_cpu(cpu);
     }
-    cpu_start_lock.lock();	// Wait for last cpu to init.
+    spinlock_lock (&cpu_start_lock);	// Wait for last cpu to init.
 }
 #endif
 

@@ -221,7 +221,7 @@ struct bgp_mailbox_t
 };
 typedef struct bgp_mailbox_t bgp_mailbox_t;
 
-typedef struct jtag_console_t 
+struct jtag_console_t
 {
     u64_t mb_phys;
     bgp_mailbox_t *mb;
@@ -229,70 +229,73 @@ typedef struct jtag_console_t
     word_t dcr_set;
     word_t dcr_clear;
     word_t dcr_mask;
-
-    void send_command(int command)
-	{ 
-	    mb->command = command;
-	    asm volatile("sync");
-	    ppc_set_dcr(dcr_set, dcr_mask);
-	    
-	    do {
-		ppc_cache_invalidate_block((word_t)&mb->command);
-	    } while(!(mb->command & 0x8000));
-	}
-
-    void putc(char c)
-	{
-	    if (!mb) return;
-
-	    mb->data[mb->len++] = c;
-	
-	    if (mb->len >= size || c == '\n')
-	    {
-		send_command(cmd_print);
-		mb->len = 0;
-	    }
-	}
-
-    bool init(fdt_t *fdt)
-	{
-	    /* initialize only once */
-	    if (mb)
-		return true;
-	    
-	    fdt_property_t *prop;
-	    fdt_node_t *node = fdt_find_subtree (fdt, "/jtag/console0");
-
-	    if (! (prop = fdt_find_property_node_in (fdt, node, "reg")) )
-		return false;
-
-	    size = fdt_property_get_word (prop, 2);
-	    mb_phys = fdt_property_get_u64 (prop, 0);
-#warning fix uboot
-	    mb_phys |= 0x700000000ULL;
-
-	    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-reg")) )
-		return false;
-
-	    dcr_set = fdt_property_get_word (prop, 0);
-	    dcr_clear = fdt_property_get_word (prop, 1);
-	    
-	    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-mask")) )
-		return false;
-	    
-	    dcr_mask = fdt_property_get_word (prop, 0);
-
-	    mb = (bgp_mailbox_t*)setup_console_mapping(mb_phys, 14);
-	    return true;
-	}
 };
+typedef struct jtag_console_t jtag_console_t;
+
+static void jtag_console_send_command (jtag_console_t *self, int command)
+{
+    self->mb->command = command;
+    asm volatile("sync");
+    ppc_set_dcr(self->dcr_set, self->dcr_mask);
+
+    do {
+	ppc_cache_invalidate_block((word_t)&self->mb->command);
+    } while(!(self->mb->command & 0x8000));
+}
+
+static void jtag_console_putc (jtag_console_t *self, char c)
+{
+    if (!self->mb) return;
+
+    self->mb->data[self->mb->len++] = c;
+
+    if (self->mb->len >= self->size || c == '\n')
+    {
+	jtag_console_send_command (self, cmd_print);
+	self->mb->len = 0;
+    }
+}
+
+static bool jtag_console_init (jtag_console_t *self, fdt_t *fdt)
+{
+    fdt_property_t *prop;
+    fdt_node_t *node;
+
+    /* initialize only once */
+    if (self->mb)
+	return true;
+
+    node = fdt_find_subtree (fdt, "/jtag/console0");
+
+    if (! (prop = fdt_find_property_node_in (fdt, node, "reg")) )
+	return false;
+
+    self->size = fdt_property_get_word (prop, 2);
+    self->mb_phys = fdt_property_get_u64 (prop, 0);
+#warning fix uboot
+    self->mb_phys |= 0x700000000ULL;
+
+    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-reg")) )
+	return false;
+
+    self->dcr_set = fdt_property_get_word (prop, 0);
+    self->dcr_clear = fdt_property_get_word (prop, 1);
+
+    if (! (prop = fdt_find_property_node_in (fdt, node, "dcr-mask")) )
+	return false;
+
+    self->dcr_mask = fdt_property_get_word (prop, 0);
+
+    self->mb = (bgp_mailbox_t*)setup_console_mapping(self->mb_phys, 14);
+    return true;
+}
 
 void init_bgtree();
 static jtag_console_t cons;
 
 static void init_jtag()
 {
-    cons.init(get_dtree());
+    jtag_console_init (&cons, get_dtree());
     init_bgtree();
 }
 
@@ -315,7 +318,7 @@ static char getc_jtag(bool block)
 
 static void putc_jtag(char c) 
 {
-    cons.putc(c);
+    jtag_console_putc (&cons, c);
 }
 #endif
 

@@ -32,23 +32,27 @@
 #include INC_ARCH(ppc_registers.h)
 
 #define TRACEBUFFER_SIZE        ( 1024 * 1024)
-INLINE void tracerecord_t::store_arch(const traceconfig_t config)
+INLINE void tracerecord_store_arch (tracerecord_t *self, const traceconfig_t config)
 {
-    tsc = ppc_get_timebase();
-   
+    /* This port records only the timebase; config is unused, as it was in the
+       C++ original. */
+    (void) config;
+    self->tsc = ppc_get_timebase();
 }
-   
-INLINE void tracebuffer_t::initialize()
+
+INLINE void tracebuffer_initialize (tracebuffer_t *self)
 {
-    magic = TRACEBUFFER_MAGIC;
-    current = 0;
-    mask = TBUF_DEFAULT_MASK;
-    max = (TRACEBUFFER_SIZE/sizeof(tracerecord_t))-1;
-    config.raw = 0;
+    self->magic = TRACEBUFFER_MAGIC;
+    /* was `current = 0' -- current is an atomic_t, so this went through
+       atomic_t::operator=; x86's C form spells it the same way. */
+    atomic_set (&self->current, 0);
+    self->mask = TBUF_DEFAULT_MASK;
+    self->max = (TRACEBUFFER_SIZE/sizeof(tracerecord_t))-1;
+    self->config.raw = 0;
 #if defined(CONFIG_SMP)
-    config.smp = 1;
+    self->config.smp = 1;
 #endif
 #if defined(CONFIG_TBUF_PERFMON)
-    config.pmon = 1;
+    self->config.pmon = 1;
 #endif
 }

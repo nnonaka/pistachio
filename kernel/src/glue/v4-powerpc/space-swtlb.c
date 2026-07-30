@@ -187,9 +187,9 @@ void SECTION(".init.memory") space_init_cpu_mappings (space_t *self, cpuid_t cpu
     {
 	for (unsigned idx = swtlb_high_water + 1; idx < PPC_MAX_TLB_ENTRIES; idx++)
 	{
-	    init_swtlb[idx].tlb0.read(idx);
-	    init_swtlb[idx].tlb1.read(idx);
-	    init_swtlb[idx].tlb2.read(idx);
+	    ppc_tlb0_read (&init_swtlb[idx].tlb0, idx);
+	    ppc_tlb1_read (&init_swtlb[idx].tlb1, idx);
+	    ppc_tlb2_read (&init_swtlb[idx].tlb2, idx);
 	    TRACEF("\tTLB%d: %lx, %lx, %lx\n", idx, init_swtlb[idx].tlb0.raw,
 		   init_swtlb[idx].tlb1.raw, init_swtlb[idx].tlb2.raw);
 	}
@@ -486,9 +486,9 @@ EXTERN_C SECTION(".einit") void init_paging( int cpu )
 #ifdef CONFIG_SMP
 	for (unsigned idx = swtlb_high_water + 1; idx < PPC_MAX_TLB_ENTRIES; idx++)
 	{
-	    init_swtlb[idx].tlb0.write(idx);
-	    init_swtlb[idx].tlb1.write(idx);
-	    init_swtlb[idx].tlb2.write(idx);
+	    ppc_tlb0_write (&init_swtlb[idx].tlb0, idx);
+	    ppc_tlb1_write (&init_swtlb[idx].tlb1, idx);
+	    ppc_tlb2_write (&init_swtlb[idx].tlb2, idx);
 	}
 	isync();
 #endif
@@ -505,12 +505,15 @@ void setup_tracebuffer (void)
     if (!tracebuffer)
         return;
     
-    addr_t vaddr = get_kernel_space()->map_device_pinned(virt_to_phys((paddr_t)tracebuffer), 
-                                                         TRACEBUFFER_SIZE, false, cache_standard );
-    get_kip()->memory_info.insert(memdesc_t::reserved, true, vaddr,
-                                  addr_offset(vaddr, TRACEBUFFER_SIZE -1));
+    addr_t vaddr = space_map_device_pinned (get_kernel_space_c (),
+					    virt_to_phys((paddr_t)tracebuffer),
+					    TRACEBUFFER_SIZE, false, cache_standard);
+    /* The four-argument memory_info_t::insert forwarded to the five-argument
+       one with subtype 0; only the latter has a C form. */
+    memory_info_insert (&get_kip()->memory_info, MEMDESC_RESERVED, 0, true, vaddr,
+			addr_offset(vaddr, TRACEBUFFER_SIZE -1));
 
-    tracebuffer->initialize ();
+    tracebuffer_initialize (tracebuffer);
 }
 #endif /* CONFIG_TRACEBUFFER */
 

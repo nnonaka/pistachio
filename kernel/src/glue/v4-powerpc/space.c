@@ -52,6 +52,8 @@ DECLARE_TRACEPOINT(ptab_4k_map_cnt);
 DECLARE_KMEM_GROUP(kmem_utcb);
 EXTERN_KMEM_GROUP(kmem_pgtab);
 EXTERN_KMEM_GROUP(kmem_space);
+/* Only space_allocate_tcb below uses it, and only when tcbs are dynamic. */
+EXTERN_KMEM_GROUP(kmem_tcb);
 
 #define TRACE_SPACE(x...)
 //#define TRACE_SPACE(x...)	TRACEF(x)
@@ -77,16 +79,19 @@ void space_allocate_tcb (space_t *self, addr_t addr)
 
     TRACE_SPACE( "new tcb, kmem virt %p, phys %p, tcb virt %p\n", page, 
 	         virt_to_phys(page), addr);
-    space_add_mapping (kernel_space,  addr, virt_to_phys(page), size_4k, true, true);
+    space_add_mapping (kernel_space,  addr, virt_to_phys((paddr_t) page), size_4k,
+		       true, true, cache_standard);
 
-    sync_kernel_space( addr );
+    /* was the implicit-this sync_kernel_space(addr). */
+    space_sync_kernel_space (self, addr);
 #endif
 }
 
 void space_map_dummy_tcb (space_t *self, addr_t addr)
 {
 #if !defined(CONFIG_STATIC_TCBS)
-    add_mapping( addr, (addr_t)virt_to_phys(get_dummy_tcb()), size_4k, false, true );
+    space_add_mapping (self, addr, virt_to_phys((paddr_t) get_dummy_tcb_c ()),
+		       size_4k, false, true, cache_standard);
 #endif
 }
 
