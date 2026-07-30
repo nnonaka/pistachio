@@ -66,6 +66,12 @@ extern struct transtable_t {
 struct utcb_t; typedef struct utcb_t utcb_t;
 struct tcb_t;  typedef struct tcb_t tcb_t;
 
+/* space-swtlb.c assigns current_cpu under CONFIG_SMP, exactly as x86's
+   space.c does, but nothing on this port ever declared it at file scope --
+   api/v4/cpu.h only has the extern inside get_current_cpu()'s body.  Upstream
+   C++ fails here identically; see notes §142. */
+extern cpuid_t current_cpu;
+
 /* space_t's access_e becomes the SPACE_ACCESS_* constants the shared
    api/v4/space.c already uses; it passes them as a plain int. */
 #define SPACE_ACCESS_READ	0
