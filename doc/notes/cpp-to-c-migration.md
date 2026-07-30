@@ -7257,3 +7257,150 @@ The two structural findings, neither of them the migration's: PowerPC SMP is
 unimplemented upstream -- three entry points have no definition anywhere -- and
 the JTAG console cannot be selected without the tree console. Both belong to
 whoever revives the port.
+
+
+## §143 — Ebony: the subplatform §142 did not look at
+
+§142 closed with *"every PowerPC configuration that can be selected on this
+platform now compiles and links"*, and listed four options it had not tested,
+none of which it thought was a build fix. The list was drawn from the option
+symbols under the one subplatform it had been building. It did not look one
+level up, at the subplatform choice itself.
+
+`powerpc.cml:163` is a two-way `choices` block:
+
+    choices powerpc_subplatform
+	    SUBPLAT_440_BGP
+	    SUBPLAT_440_EBONY
+	    default SUBPLAT_440_BGP
+
+`SUBPLAT_440_EBONY` is the AMCC Ebony evaluation board, and it is selectable
+here -- same architecture, same CPU, same platform, same toolchain. Configured
+and built, it produces **45 errors**, every one of them from compiling
+`platform/ppc44x/uic.cc` as C++ against a tree that is no longer C++:
+
+    src/generic/types.h:47:9: error: '_Bool' does not name a type
+    src/platform/ppc44x/uic.h:142:1: error: expected class-name before '{' token
+    uic.cc:51: 'fdt_t' has no member named 'find_subtree'
+    uic.cc:249: 'spinlock_t' has no member named 'lock'
+
+So the closing claim was one subplatform too broad. `Makeconf` selects `bic.c`
+under BGP and `uic.cc` under Ebony; the conversion swept everything the BGP
+branch reaches and stopped at the `ifeq` it did not take.
+
+### What was converted
+
+Two files, plus the `Makeconf` line naming the first.
+
+**`uic.h`.** `class intctrl_t : public generic_intctrl_t` becomes a plain
+`struct`, and the members become the same free `intctrl_*` entry points `bic.h`
+already exposes -- deliberately name-for-name, since `platform/ppc44x/intctrl.h`
+picks between the two headers by subplatform and everything upstream of that
+choice calls one contract. The two upstream oddities are preserved rather than
+tidied: `is_enabled` returns `is_masked` and not its negation (`bic.h` has the
+same inversion, and nothing in the tree calls either), and `get_number_irqs`
+returns the `INT_LEVEL_MAX + 1` constant rather than the `num_irqs` member,
+which on this controller is never written.
+
+**`ebony.h`**, which the build reached second, from `glue/v4-powerpc/init.c` by
+way of `platform.h`. It needed no thought: its body is byte-identical to
+`bluegene.h`'s before conversion -- same three functions, differing only in
+copyright block and include guard -- so the conversion `bluegene.h` already
+received was extracted and applied verbatim.
+
+The result is 0 errors and 0 implicit declarations from a scratch build, and it
+links: 132,704 text, 7,936 data, 892,456 bytes of kernel. The 38 warnings from
+the two files are all `-Wconversion` and `-Wsign-conversion` on `1 << (31 - irq)`
+feeding a `word_t` -- the §141 class, upstream, left alone.
+
+### The C++ baseline §141 said did not exist
+
+§141 reconstructed its baseline by reading source, because *"there is no
+`powerpc-linux-gnu-g++` on this machine, so that differential does not exist
+here."* That is wrong -- it is at `/usr/bin/powerpc-linux-gnu-g++`, and §142
+itself used it two sections later to reproduce the SMP collision on `master`
+without noting the contradiction. §141's conclusions do not depend on it, but
+the differential is available, and this section is the first to use it on a
+whole object.
+
+`master`'s C++ `uic.o` builds. Against the converted one, per function:
+
+    init_cpu  map  start_new_cpu  is_masked  is_pending  dump
+	instruction-for-instruction identical
+
+    handle_irq  mask  unmask
+	differ only in how the receiver arrives -- C++ takes `intctrl' in r3
+	(one `mr'), C loads its address (`lis'/`addi')
+
+    send_ipi        C++ 41 insns (send_ipi + raise_irq), C 39: C++ less the
+		    tail-call `b' and the receiver `mr'.  `raise_irq' is
+		    `static' here and inlines into its only caller.
+    init_arch       C++ 365 (init_arch + init_controllers), C 358, same reason
+
+The hardware contract is the DCR traffic, and it is exact: **62 accesses in
+both, identical opcodes, identical DCR numbers, identical order.** Three
+instructions differ in register allocation and nothing else.
+
+Two differences are real and worth recording:
+
+  - Fourteen DCR writes move from `.text` to `.init`. Upstream marks
+    `init_arch` and `init_cpu` `SECTION(".init")` but not `init_controllers`,
+    so the whole controller-reset sequence sat in resident text; making it
+    `static` inlines it into its only caller, which is in `.init`.
+  - `.bss` shrinks 136 -> 132. `spinlock_t` is an empty struct without
+    `CONFIG_SMP`; C sizes it 0 where C++ sized it 1, padded to 4. This is
+    tree-wide, not local to `uic` -- every struct holding a lock is four bytes
+    smaller on a uniprocessor build.
+
+The second of those turned up an incorrect comment, added by e365a84, claiming
+`generic/sync.h`'s uniprocessor `spinlock_t` *"declared none at all"* of the
+lock operations upstream. `master` declares all four (`lock`, `unlock`, `init`,
+`is_locked`) as empty class members; only `init` gained an argument in
+conversion. The comment is corrected in place.
+
+Rebuilding BGP from scratch confirms it is untouched: `.text`, `.data`,
+`.rodata` and every other section byte-identical to the §142 binary, with four
+bytes differing in `.kip` -- the build timestamp string.
+
+### The arm that cannot be built at all
+
+`uic.c` carries `#if defined(PPC440EPx)` blocks for a third interrupt
+controller. Nothing in the tree defines `PPC440EPx`, and defining it does not
+help: `UIC2_DCR_BASE`, from which `uic.h` derives all nine UIC2 registers, is
+defined nowhere -- `uic.h:53` carries a `FIXME` saying exactly that. The arm is
+unbuildable by construction, in either language.
+
+It is converted anyway, for consistency, and it carries four upstream defects
+that had never been diagnosed because nothing ever parsed them:
+
+    uic.cc:139  printf(...)  -- no semicolon
+    uic.cc:148  panic(...)   -- no semicolon
+    uic.cc:301  uic2_dchain_Mask -- no such member; the field is _mask
+    uic.cc:399, 604, 632  `} else if (...)' with no opening brace, so the
+			  closing brace three lines down closes nothing
+
+All four are corrected, marked where they occur, and both halves of the claim
+are checked by supplying a stand-in base address on the command line:
+`master`'s C++ file produces 11 errors at exactly those four sites; the
+converted C file compiles clean. Without the stand-in, the only error from
+either is `UIC2_DCR_BASE undeclared`.
+
+### What is left, stated more carefully than §142 stated it
+
+Both ppc44x subplatforms now build. What remains unconverted is one
+configuration, not four options: **`CONFIG_PLAT_OFPPC` with the segment MMU.**
+§142 listed `PPC_MMU_SEGMENTS` and `PLAT_OFPPC` as separate items and described
+the latter as "a different platform entirely", which reads as though neither
+were reachable. They are the same item and it configures:
+
+    make batchconfig CMLBATCH_PARAMS="ARCH_POWERPC=y CPU_POWERPC_IBM750=y PLAT_OFPPC=y"
+	CONFIG_PLAT_OFPPC=y
+	CONFIG_PPC_MMU_SEGMENTS=y
+
+`powerpc.cml:179` derives `PPC_MMU_SEGMENTS` from the 750 or the 604, and
+`:169` suppresses `PLAT_OFPPC` unless it is set -- so choosing the CPU is what
+opens the platform, and the segment MMU comes with it. Behind it sit
+`glue/v4-powerpc/pghash.cc` and `space-pghash.cc`, the twenty-odd `pgent_t::`
+member definitions in `pgent-pghash_functions.h`, and eight more `.cc` files
+under `platform/ofppc` and `kdb/platform/ofppc`. That is a section's worth of
+work, not a loose end, and it is the last of it on this architecture.
