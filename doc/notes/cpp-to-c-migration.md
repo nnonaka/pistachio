@@ -6332,8 +6332,9 @@ configurations boot, where six did before, and the four that do not are
 unchanged by this:
 
   - `p4-iofp` and `p4-newmdb` take the same early kernel fault at
-    `ffffffffc0602a68`, the one §131 left undiagnosed.
+    `ffffffffc0602a68`, the one §131 left undiagnosed. (§136 diagnoses it.)
   - `p4-fullkdb` now prints the virtual-memory layout and stops there.
+    (§137 diagnoses it.)
   - `p4-statictcbs` cannot be boot-tested at all. Its shipped tar has a
     `config.h` and no `.config`, and that `config.h` enables
     `CONFIG_KDB_CONS_OF1275`, `_PSIM_COM` and `_KBD` -- PowerPC consoles -- with
@@ -6342,6 +6343,15 @@ unchanged by this:
     link fails on `printf` and `init_console`. The configuration compiles under
     `tools/configsweep`, which derives its own `.config`; it just has no console
     a serial harness can read.
+
+**WRONG -- see §138.** That last bullet is not a property of the configuration.
+The link failure came from the scratch helper this section was built with, which
+did not derive a `.config`; no `Makeconf` selects console sources from
+`CONFIG_KDB_CONS_*` at all, and `boottest`'s edit to `config.h` is sufficient
+for this configuration as for every other. `p4-statictcbs` boots, and it booted
+at this commit too -- it sets neither `CONFIG_NEW_MDB` nor `CONFIG_TBUF_PERFMON`,
+so nothing in §136 or §137 changed its behaviour, while the link-base move in
+this section did. The count here should read **eight** of eleven, not seven.
 
 
 ## §136 — The fault at `ffffffffc0602a68`: a 63-bit bit-field shifted left
@@ -6426,6 +6436,9 @@ stops, and `p4-statictcbs`, which §135 explains cannot be given a serial
 console at all. All twenty x32 configurations still compile and the four that
 were spot-checked still boot.
 
+**Corrected by §138.** `p4-statictcbs` was already booting; the counts here are
+one low. Ten of eleven boot at this commit, not nine.
+
 Against `f201f44`: `x86-x64-p4-smp`, which has neither `CONFIG_NEW_MDB` nor IO
 flexpages, is 706 symbols with 704 identical bodies -- `extended_transfer` and
 the constructor table that shifted when it shrank. `x86-x64-p4-newmdb` is 559
@@ -6484,6 +6497,11 @@ configurations boot; the one that does not is `p4-statictcbs`, which §135
 explains cannot be given a serial console at all. On x32, nineteen of twenty
 boot -- `p4-statictcbs` there is the same story.
 
+**Corrected by §138.** `p4-statictcbs` boots on both subarchitectures and always
+did; §135's account of it was wrong and this paragraph inherited it. The tally
+after this section is eleven of eleven on x64 and twenty of twenty on x32 --
+every shipped x86 configuration -- which §138 measured rather than inferred.
+
 One aside worth recording, since it cost a wrong answer first time round:
 `cp -r` of a configured build directory does not give you a forkable copy. The
 `.depend` it copies names the *original* directory's `config.h` by absolute
@@ -6540,3 +6558,16 @@ carried over when the file was saved in 2010. No `Makeconf` gates on any
 compiles, links and boots to the `l4test` menu -- twenty on x32 and eleven on
 x64, thirty-one of thirty-one.** §131 recorded six of eleven on x64 and §133
 sixteen of nineteen on x32.
+
+§135, §136 and §137 all counted one x64 configuration low as a result, and each
+now carries a pointer here. Restated, the x64 progression is: six of eleven at
+§131, eight after §135's link-base move, ten after §136's bit-field fix, eleven
+after §137's `rdpmc`.
+
+The wrong conclusion survived two commit messages and two sections of these
+notes, and was only caught because someone asked for a diagnosis of the thing it
+had declared undiagnosable. The shape to distrust: a property of the *tree*
+inferred from a failure produced by a helper that is not part of it. Both
+tools in the tree were right the whole time -- `configsweep` derived the
+`.config`, `boottest` would have accepted one -- and the scratch script between
+them was not.
