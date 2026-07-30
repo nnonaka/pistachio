@@ -35,22 +35,22 @@
 
 INLINE fdt_header_t *find_cpu( fdt_t *fdt, word_t cpu )
 {
-    fdt_header_t *fdtcpu = fdt->find_subtree("/cpus");
+    fdt_header_t *fdtcpu = fdt_find_subtree (fdt, "/cpus");
     if (!fdtcpu)
 	return false;
 
-    fdt_header_t *curr = fdt->find_first_subtree_node(fdtcpu);
+    fdt_header_t *curr = fdt_find_first_subtree_node (fdt, fdt_header_node (fdtcpu));
     while(curr) 
     {
-	fdt_property_t *prop = fdt->find_property_node(curr, "device_type");
-	if (prop && strcmp(prop->get_string(), "cpu") == 0)
+	fdt_property_t *prop = fdt_find_property_node_in (fdt, fdt_header_node (curr), "device_type");
+	if (prop && strcmp(fdt_property_get_string (prop), "cpu") == 0)
 	{
-	    prop = fdt->find_property_node(curr, "reg");
-	    if (prop && prop->get_word(0) == cpu)
+	    prop = fdt_find_property_node_in (fdt, fdt_header_node (curr), "reg");
+	    if (prop && fdt_property_get_word (prop, 0) == cpu)
 		return curr;
 	}
 	printf("FDT prop: %s\n", curr->name);
-	curr = fdt->find_next_subtree_node(curr);
+	curr = fdt_find_next_subtree_node (fdt, curr);
     }
     return NULL;
 }
@@ -63,15 +63,15 @@ INLINE bool get_cpu_speed( word_t cpu, word_t *cpu_hz, word_t *bus_hz )
     fdt_header_t *fdtcpu = find_cpu(fdt, cpu);
     if (fdtcpu)
     {
-	prop = fdt->find_property_node(fdtcpu, "clock-frequency");
+	prop = fdt_find_property_node_in (fdt, fdt_header_node (fdtcpu), "clock-frequency");
 	if (!prop)
 	    return false;
-	*cpu_hz = prop->get_word(0);
+	*cpu_hz = fdt_property_get_word (prop, 0);
 
-	prop = fdt->find_property_node(fdtcpu, "timebase-frequency");
+	prop = fdt_find_property_node_in (fdt, fdt_header_node (fdtcpu), "timebase-frequency");
 	if (!prop)
 	    return false;
-	*bus_hz = prop->get_word(0);
+	*bus_hz = fdt_property_get_word (prop, 0);
 	return true;
     }
     return false;
@@ -81,17 +81,17 @@ INLINE int get_cpu_count()
 {
     int count = 0;
     fdt_t *fdt = get_dtree();
-    fdt_header_t *fdtcpu = fdt->find_subtree("/cpus");
+    fdt_header_t *fdtcpu = fdt_find_subtree (fdt, "/cpus");
     if (!fdtcpu)
 	return 1;
 
-    fdt_header_t *curr = fdt->find_first_subtree_node(fdtcpu);
+    fdt_header_t *curr = fdt_find_first_subtree_node (fdt, fdt_header_node (fdtcpu));
     while(curr)
     {
-	fdt_property_t *prop = fdt->find_property_node(curr, "device_type");
-	if (prop && strcmp(prop->get_string(), "cpu") == 0)
+	fdt_property_t *prop = fdt_find_property_node_in (fdt, fdt_header_node (curr), "device_type");
+	if (prop && strcmp(fdt_property_get_string (prop), "cpu") == 0)
 	    count++;
-	curr = fdt->find_next_subtree_node(curr);
+	curr = fdt_find_next_subtree_node (fdt, curr);
     }
     return count > 0 ? count : 1;
 }

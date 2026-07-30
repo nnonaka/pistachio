@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2010,  Karlsruhe Institute of Technology
  *                
- * Filename:      uic.cc
+ * Filename:      uic.c
  * Author:        Jan Stoess <stoess@kit.edu>
  * Description:   
  *                
@@ -34,87 +34,101 @@
 #include <lib.h>
 #include INC_ARCH(string.h)
 
+#include INC_GLUE(intctrl.h)
 #include INC_PLAT(uic.h)
 #include INC_PLAT(fdt.h)
 #include INC_API(kernelinterface.h)
 
+/* The `#if defined(PPC440EPx)' arms below have never been compiled, in any
+   language: nothing in the tree defines PPC440EPx, and they would not build if
+   it did -- UIC2_DCR_BASE, which uic.h uses to derive every UIC2 register, is
+   defined nowhere (uic.h carries a FIXME saying so).  They are converted here
+   for consistency and their four upstream defects are corrected in place --
+   two missing semicolons, one misspelt member, three missing braces -- but the
+   corrections are unverifiable by building, and are marked where they occur.
+   Notes §143. */
+
 intctrl_t intctrl;
 
-void SECTION (".init") intctrl_t::init_arch()
+static word_t init_controllers (void);
+
+void SECTION (".init") intctrl_init_arch (void)
 {
+    intctrl_t *self = get_interrupt_ctrl();
+
     fdt_t *fdt = get_dtree();
     fdt_header_t *hdr;
     fdt_property_t *prop;
 
     //Controller 0
     printf("Looking for interrupt controller 0... ");
-    hdr = fdt->find_subtree("/interrupt-controller0");
+    hdr = fdt_find_subtree (fdt, "/interrupt-controller0");
     if (!hdr)
 	panic("Couldn't find interrupt controller 0 in FDT\n");
     else
     	printf("found!\n");
 
     printf("Checking whether UIC0 is compatible... ");
-    prop = fdt->find_property_node(hdr, "compatible");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "compatible");
 
-    if ((!prop) || ((strcmp(prop->get_string(), "ibm,uic") != 0) && (strcmp(prop->get_string(), "ibm,uic-440gp") != 0)))
-    	panic("UIC0: Couldn't find compatible node in FDT\ncompatibility string was %s",prop->get_string());
+    if ((!prop) || ((strcmp(fdt_property_get_string (prop), "ibm,uic") != 0) && (strcmp(fdt_property_get_string (prop), "ibm,uic-440gp") != 0)))
+    	panic("UIC0: Couldn't find compatible node in FDT\ncompatibility string was %s",fdt_property_get_string (prop));
     else
     	printf("it is!\n");
 
     printf("Looking for UIC0's DCR base address... ");
-    prop = fdt->find_property_node(hdr, "dcr-reg");
-    if (!prop) // || prop->get_len() != 2 * sizeof(u32_t))
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "dcr-reg");
+    if (!prop) // || fdt_property_get_len (prop) != 2 * sizeof(u32_t))
 	panic("UIC0: Couldn't find 'dcr-reg' node in FDT (%p, %d)\n",
-	      prop, prop->get_len());
+	      prop, fdt_property_get_len (prop));
 
-    if (UIC0_DCR_BASE == prop->get_word(0))
+    if (UIC0_DCR_BASE == fdt_property_get_word (prop, 0))
     	printf("Found at 0x%x\n",UIC0_DCR_BASE);
     else
     	panic("UIC0 is not at its expected DCR base address!");
 
-    if (prop->get_word(1) != 9)
-    	panic("Invalid number of control registers found (%d)",prop->get_word(1));
+    if (fdt_property_get_word (prop, 1) != 9)
+    	panic("Invalid number of control registers found (%d)",fdt_property_get_word (prop, 1));
 
     TRACE_INIT("UIC0: DCR base 0x%x, %d interrupts\n",
 	       UIC0_DCR_BASE, UIC0_NUM_IRQS);
 
     //Controller 1
     printf("Looking for interrupt controller 1... ");
-    hdr = fdt->find_subtree("/interrupt-controller1");
+    hdr = fdt_find_subtree (fdt, "/interrupt-controller1");
     if (!hdr)
     	panic("Couldn't find interrupt controller 1 in FDT\n");
     else
     	printf("found!\n");
 
     printf("Checking whether UIC1 is compatible... ");
-    prop = fdt->find_property_node(hdr, "compatible");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "compatible");
 
-    if ((!prop) || ((strcmp(prop->get_string(), "ibm,uic") != 0) && (strcmp(prop->get_string(), "ibm,uic-440gp") != 0)))
-    	panic("UIC1: Couldn't find compatible node in FDT\ncompatibility string was %s",prop->get_string());
+    if ((!prop) || ((strcmp(fdt_property_get_string (prop), "ibm,uic") != 0) && (strcmp(fdt_property_get_string (prop), "ibm,uic-440gp") != 0)))
+    	panic("UIC1: Couldn't find compatible node in FDT\ncompatibility string was %s",fdt_property_get_string (prop));
     else
     	printf("it is!\n");
 
     printf("Looking for UIC1's DCR base address... ");
-    prop = fdt->find_property_node(hdr, "dcr-reg");
-    if (!prop) // || prop->get_len() != 2 * sizeof(u32_t))
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "dcr-reg");
+    if (!prop) // || fdt_property_get_len (prop) != 2 * sizeof(u32_t))
 	panic("UIC1: Couldn't find 'dcr-reg' node in FDT (%p, %d)\n",
-	      prop, prop->get_len());
+	      prop, fdt_property_get_len (prop));
 
-    if (UIC1_DCR_BASE == prop->get_word(0))
+    if (UIC1_DCR_BASE == fdt_property_get_word (prop, 0))
     	printf("Found at 0x%x\n",UIC1_DCR_BASE);
     else
     	panic("UIC1 is not at its expected DCR base address!");
 
-    if (prop->get_word(1) != 9)
-    	panic("UIC1: Invalid number of control registers found (%d)",prop->get_word(1));
+    if (fdt_property_get_word (prop, 1) != 9)
+    	panic("UIC1: Invalid number of control registers found (%d)",fdt_property_get_word (prop, 1));
 
-    prop = fdt->find_property_node(hdr, "interrupts");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "interrupts");
     if (!prop)
 		panic("UIC1: Couldn't determine daisychain interrupts");
 
-    uic1_dchain_mask = 1 << (31 - prop->get_word(0));
-    uic1_dchain_mask |= 1 << (31 - prop->get_word(2));
+    self->uic1_dchain_mask = 1 << (31 - fdt_property_get_word (prop, 0));
+    self->uic1_dchain_mask |= 1 << (31 - fdt_property_get_word (prop, 2));
 
     TRACE_INIT("UIC1: DCR base 0x%x, %d interrupts\n",
 	       UIC1_DCR_BASE, UIC1_NUM_IRQS);
@@ -122,40 +136,43 @@ void SECTION (".init") intctrl_t::init_arch()
     //Controller 2
 #if defined(PPC440EPx)
     printf("Looking for interrupt controller 2... ");
-    hdr = fdt->find_subtree("/interrupt-controller2");
+    hdr = fdt_find_subtree (fdt, "/interrupt-controller2");
     if (!hdr)
     	panic("Couldn't find interrupt controller 2 in FDT\n");
     else
     	printf("found!\n");
 
     printf("Checking whether UIC2 is compatible... ");
-    prop = fdt->find_property_node(hdr, "compatible");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "compatible");
 
-    if ((!prop) || ((strcmp(prop->get_string(), "ibm,uic") != 0) && (strcmp(prop->get_string(), "ibm,uic-440gp") != 0)))
-    	panic("UIC2: Couldn't find compatible node in FDT\ncompatibility string was %s",prop->get_string());
+    if ((!prop) || ((strcmp(fdt_property_get_string (prop), "ibm,uic") != 0) && (strcmp(fdt_property_get_string (prop), "ibm,uic-440gp") != 0)))
+    	panic("UIC2: Couldn't find compatible node in FDT\ncompatibility string was %s",fdt_property_get_string (prop));
     else
     	printf("it is!\n");
 
-    printf("Looking for UIC2's DCR base address... ")
-    prop = fdt->find_property_node(hdr, "dcr-reg");
-    if (!prop) // || prop->get_len() != 2 * sizeof(u32_t))
+    /* Semicolon added; upstream has none here or after the panic below.  See
+       the note at the head of this file: the PPC440EPx arm has never been
+       compiled in any language. */
+    printf("Looking for UIC2's DCR base address... ");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "dcr-reg");
+    if (!prop) // || fdt_property_get_len (prop) != 2 * sizeof(u32_t))
 	panic("UIC2: Couldn't find 'dcr-reg' node in FDT (%p, %d)\n",
-	      prop, prop->get_len());
+	      prop, fdt_property_get_len (prop));
 
-    if (UIC2_DCR_BASE == prop->get_word(0))
+    if (UIC2_DCR_BASE == fdt_property_get_word (prop, 0))
     	printf("Found at 0x%x\n",UIC2_DCR_BASE);
     else
-    	panic("UIC2 is not at its expected DCR base address!")
+    	panic("UIC2 is not at its expected DCR base address!");
 
-    if (prop->get_word(1) != 9)
-    	panic("UIC2: Invalid number of control registers found (%d)",prop->get_word(1));
+    if (fdt_property_get_word (prop, 1) != 9)
+    	panic("UIC2: Invalid number of control registers found (%d)",fdt_property_get_word (prop, 1));
 
-    prop = fdt->find_property_node(hdr, "interrupts");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "interrupts");
     if (!prop)
 		panic("UIC2: Couldn't determine daisychain interrupts");
 
-    uic2_dchain_mask = 1 << (31 - prop->get_word(0));
-    uic2_dchain_mask |= 1 << (31 - prop->get_word(2));
+    self->uic2_dchain_mask = 1 << (31 - fdt_property_get_word (prop, 0));
+    self->uic2_dchain_mask |= 1 << (31 - fdt_property_get_word (prop, 2));
 
     TRACE_INIT("UIC2: DCR base 0x%x, %d interrupts\n",
 	       UIC2_DCR_BASE, UIC2_NUM_IRQS);
@@ -164,21 +181,23 @@ void SECTION (".init") intctrl_t::init_arch()
 
     init_controllers();
     // route all IRQs to CPU0
-    memset(routing, 0, sizeof(routing));
+    memset(self->routing, 0, sizeof(self->routing));
 }
 
-void SECTION(".init") intctrl_t::init_cpu(int cpu)
+void SECTION(".init") intctrl_init_cpu (int cpu)
 {
 #ifdef CONFIG_SMP
+    intctrl_t *self = get_interrupt_ctrl();
+
     ASSERT(cpu < 4);
 
     /* map IPIs */
-    set_irq_routing(get_ipi_irq(cpu, 0), cpu);
-    enable(get_ipi_irq(cpu, 0));
+    intctrl_set_irq_routing (self, intctrl_get_ipi_irq (cpu, 0), cpu);
+    intctrl_enable (intctrl_get_ipi_irq (cpu, 0));
 #endif
 }
 
-word_t intctrl_t::init_controllers() {
+static word_t init_controllers (void) {
 	/*
 	 * Initial Interrupt controller setup
 	 */
@@ -238,15 +257,16 @@ word_t intctrl_t::init_controllers() {
  * Some time in the future, we might want to use the interrupt threads'
  * priorities here.
  */
-void intctrl_t::handle_irq(word_t cpu)
+void intctrl_handle_irq (word_t cpu)
 {
+    intctrl_t *self = get_interrupt_ctrl();
     int   vector;
     word_t  uicmsr;     /* contents of Masked Status Register */
     word_t  uicer = 0;  /* contents of enable register */
 
     //Lock all interrupts while the handler is running.
     //TODO: Is this really necessary?
-    lock.lock();
+    spinlock_lock (&self->lock);
     /*
      * Get contents of UIC0_MSR.  This register is read-only
      * and relects the value of UIC0_SR ANDed with UIC0_ER.
@@ -298,7 +318,9 @@ void intctrl_t::handle_irq(word_t cpu)
             /* Clear the Status registers */
 
             mtdcr(UIC2_SR, (1 << (31 - (vector - INT_LEVEL_UIC2_MIN)))) ;
-            mtdcr(UIC0_SR, uic2_dchain_Mask);    /* clear daisychain */
+            /* Upstream spells this `uic2_dchain_Mask', which no declaration
+               matches; corrected to the member's actual name. */
+            mtdcr(UIC0_SR, self->uic2_dchain_mask);    /* clear daisychain */
 
             }
         else if (vector > INT_LEVEL_UIC0_MAX)
@@ -317,7 +339,7 @@ void intctrl_t::handle_irq(word_t cpu)
             /* Clear the Status registers */
 
             mtdcr(UIC1_SR, (1 << (31 - (vector - INT_LEVEL_UIC1_MIN)))) ;
-            mtdcr(UIC0_SR, uic1_dchain_mask);    /* clear daisychain */
+            mtdcr(UIC0_SR, self->uic1_dchain_mask);    /* clear daisychain */
             }
         else
             {
@@ -344,23 +366,23 @@ void intctrl_t::handle_irq(word_t cpu)
      * The current interrupt is now masked, so we can allow other
      * interrupts from this point on.
      */
-    lock.unlock();
+    spinlock_unlock (&self->lock);
 
     /*
      * Call the appropriate handler with the appropriate argument
      */
 
-    ::handle_interrupt(vector);
+    handle_interrupt(vector);
 
 }
 
-void intctrl_t::map()
+void intctrl_map (void)
 {
     return; //UICs cannot be memory mapped
     //TODO: Should we panic here?
 }
 
-void intctrl_t::start_new_cpu(word_t cpu)
+void intctrl_start_new_cpu (word_t cpu)
 {
     ASSERT(cpu < 4);
 
@@ -368,15 +390,20 @@ void intctrl_t::start_new_cpu(word_t cpu)
     secondary_release_reloc = cpu;
 }
 
-void intctrl_t::send_ipi(word_t cpu)
+/* common interrupt handler, should not be called directly -- private to this
+   file, as the class member it came from was private to the class. */
+static void raise_irq (word_t irq);
+
+void intctrl_send_ipi (word_t cpu)
 {
     //FIXME: nonexistant tracepoint?
-	//TRACEPOINT(SMP_IPI, "irq %d cpu %d\n", get_ipi_irq(cpu, 0), cpu);
-    raise_irq(get_ipi_irq(cpu, 0));
+	//TRACEPOINT(SMP_IPI, "irq %d cpu %d\n", intctrl_get_ipi_irq (cpu, 0), cpu);
+    raise_irq(intctrl_get_ipi_irq (cpu, 0));
 }
 
-void intctrl_t::raise_irq(word_t irq)
+static void raise_irq (word_t irq)
 {
+    intctrl_t *self = get_interrupt_ctrl();
     ASSERT(irq < INT_LEVEL_MAX);
 	word_t intMask;
 
@@ -384,29 +411,33 @@ void intctrl_t::raise_irq(word_t irq)
 	if (irq > INT_LEVEL_UIC1_MAX) {       /* For UIC2 */
 		irq-=INT_LEVEL_UIC2_MIN ;
 		intMask = 1 << (31 - irq) ;
-		lock.lock();
+		spinlock_lock (&self->lock);
 		mtdcr(UIC2_SRS,mfdcr(UIC2_SR) | intMask);
-		lock.unlock();
-	} else if (irq > INT_LEVEL_UIC0_MAX)        /* For UIC1 */
+		spinlock_unlock (&self->lock);
+	/* Brace added: upstream leaves this `else if' without one, so the `}'
+	   below closes nothing and the arm does not parse.  Same in
+	   intctrl_is_masked and intctrl_is_pending. */
+	} else if (irq > INT_LEVEL_UIC0_MAX) {      /* For UIC1 */
 #else
 	if (irq > INT_LEVEL_UIC0_MAX) {       /* For UIC1 */
 #endif
 		irq-=INT_LEVEL_UIC1_MIN ;
 		intMask = 1 << (31 - irq) ;
-		lock.lock();
+		spinlock_lock (&self->lock);
 		mtdcr(UIC1_SRS,mfdcr(UIC1_SR) | intMask);
-		lock.unlock();
+		spinlock_unlock (&self->lock);
 	} else {							/* For UIC0 */
 		intMask = 1 << (31 - irq);
-		lock.lock();
+		spinlock_lock (&self->lock);
 		mtdcr(UIC0_SRS,mfdcr(UIC0_SR) | intMask);
-		lock.unlock();
+		spinlock_unlock (&self->lock);
 	}
 }
 
 
-void intctrl_t::mask(word_t irq)
+void intctrl_mask (word_t irq)
 {
+	intctrl_t *self = get_interrupt_ctrl();
 	word_t intMask;
 
 	if (irq > INT_LEVEL_MAX || irq < INT_LEVEL_MIN)
@@ -426,15 +457,15 @@ void intctrl_t::mask(word_t irq)
 		 * as the handler may crush what we just did in UIC_ER.
 		 */
 
-		lock.lock();                        /* lock interrupts */
+		spinlock_lock (&self->lock);                        /* lock interrupts */
 
 		/* really disable interrupt */
 		mtdcr(UIC2_ER, (~intMask) & mfdcr(UIC2_ER));
 
 		mtdcr(UIC2_SR, intMask);       /* clear pending interrupts */
-		mtdcr(UIC0_SR, uic2_dchain_mask);      /* clear dchained UIC1 ints */
+		mtdcr(UIC0_SR, self->uic2_dchain_mask);      /* clear dchained UIC1 ints */
 
-		lock.unlock();                         /* re-enable interrupts */
+		spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 		}
 	else if (irq > INT_LEVEL_UIC0_MAX)        /* For UIC1 */
 #else
@@ -450,15 +481,15 @@ void intctrl_t::mask(word_t irq)
 		 * as the handler may crush what we just did in UIC_ER.
 		 */
 
-		lock.lock();                        /* lock interrupts */
+		spinlock_lock (&self->lock);                        /* lock interrupts */
 
 		/* really disable interrupt */
 		mtdcr(UIC1_ER, (~intMask) & mfdcr(UIC1_ER));
 
 		mtdcr(UIC1_SR, intMask);       /* clear pending interrupts */
-		mtdcr(UIC0_SR, uic1_dchain_mask);      /* clear dchained UIC1 ints */
+		mtdcr(UIC0_SR, self->uic1_dchain_mask);      /* clear dchained UIC1 ints */
 
-		lock.unlock();                         /* re-enable interrupts */
+		spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 
 		}
 	else
@@ -471,21 +502,22 @@ void intctrl_t::mask(word_t irq)
 		 * as the handler may crush what we just did in UIC_ER.
 		 */
 
-		lock.lock();                        /* lock interrupts */
+		spinlock_lock (&self->lock);                        /* lock interrupts */
 
 		/* really disable interrupt */
 		mtdcr(UIC0_ER, (~intMask) & mfdcr(UIC0_ER));
 
 		mtdcr(UIC0_SR, intMask);   /* clear pending interrupts */
 
-		lock.unlock();                         /* re-enable interrupts */
+		spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 		}
 
 	return;
 }
 
-bool intctrl_t::unmask(word_t irq)
+bool intctrl_unmask (word_t irq)
 {
+    intctrl_t *self = get_interrupt_ctrl();
     word_t intMask;
 
     if (irq > INT_LEVEL_MAX || irq < INT_LEVEL_MIN)
@@ -501,7 +533,7 @@ bool intctrl_t::unmask(word_t irq)
         //Check if interrupt was already pending
         if ((mfdcr(UIC2_SR) & intMask) > 0) {
             mtdcr(UIC2_SR, intMask);        /* clear pending interrupts */
-            mtdcr(UIC0_SR, uic2_dchain_mask);     /* clear pending dchain     */
+            mtdcr(UIC0_SR, self->uic2_dchain_mask);     /* clear pending dchain     */
             return true;
         } else {
 
@@ -511,14 +543,14 @@ bool intctrl_t::unmask(word_t irq)
 			 * as the handler may crush what we just did in UIC_ER.
 			 */
 
-			lock.lock();                        /* lock interrupts */
+			spinlock_lock (&self->lock);                        /* lock interrupts */
 
 			mtdcr(UIC2_ER, intMask | mfdcr(UIC2_ER));
 
 			/* Enable dchain*/
-			mtdcr(UIC0_ER, uic2_dchain_mask | mfdcr(UIC0_ER));
+			mtdcr(UIC0_ER, self->uic2_dchain_mask | mfdcr(UIC0_ER));
 
-			lock.unlock();                         /* re-enable interrupts */
+			spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 			return false;
         }
         }
@@ -533,7 +565,7 @@ bool intctrl_t::unmask(word_t irq)
         //Check if interrupt was already pending
         if ((mfdcr(UIC1_SR) & intMask) > 0) {
         	mtdcr(UIC1_SR, intMask);        /* clear pending interrupts */
-        	mtdcr(UIC0_SR, uic1_dchain_mask);     /* clear pending dchain     */
+        	mtdcr(UIC0_SR, self->uic1_dchain_mask);     /* clear pending dchain     */
         	return true;
         } else {
 
@@ -543,14 +575,14 @@ bool intctrl_t::unmask(word_t irq)
 			 * as the handler may crush what we just did in UIC_ER.
 			 */
 
-			lock.lock();                        /* lock interrupts */
+			spinlock_lock (&self->lock);                        /* lock interrupts */
 
 			mtdcr(UIC1_ER, intMask | mfdcr(UIC1_ER));
 
 			/* Enable dchain*/
-			mtdcr(UIC0_ER, uic1_dchain_mask | mfdcr(UIC0_ER));
+			mtdcr(UIC0_ER, self->uic1_dchain_mask | mfdcr(UIC0_ER));
 
-			lock.unlock();                         /* re-enable interrupts */
+			spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 			return false;
         }
         }
@@ -570,18 +602,18 @@ bool intctrl_t::unmask(word_t irq)
 			 * as the handler may crush what we just did in UIC_ER.
 			 */
 
-			lock.lock();                        /* lock interrupts */
+			spinlock_lock (&self->lock);                        /* lock interrupts */
 
 			mtdcr(UIC0_ER, intMask | mfdcr(UIC0_ER));
 
-			lock.unlock();                         /* re-enable interrupts */
+			spinlock_unlock (&self->lock);                         /* re-enable interrupts */
 			return false;
         }
         }
 
 }
 
-bool intctrl_t::is_masked(word_t irq) {
+bool intctrl_is_masked (word_t irq) {
 	word_t intMask;
 	word_t actualMask;
 
@@ -594,7 +626,8 @@ bool intctrl_t::is_masked(word_t irq) {
 		irq-=INT_LEVEL_UIC2_MIN ;
 		intMask = 1 << (31 - irq) ;
 		actualMask = mfdcr(UIC2_ER);
-	} else if (irq > INT_LEVEL_UIC0_MAX)        /* For UIC1 */
+	/* Brace added; see raise_irq. */
+	} else if (irq > INT_LEVEL_UIC0_MAX) {      /* For UIC1 */
 #else
 	if (irq > INT_LEVEL_UIC0_MAX) {       /* For UIC1 */
 #endif
@@ -609,7 +642,7 @@ bool intctrl_t::is_masked(word_t irq) {
 
 }
 
-bool intctrl_t::is_pending(word_t irq) {
+bool intctrl_is_pending (word_t irq) {
 	word_t intMask;
 	word_t actualMask;
 
@@ -622,7 +655,8 @@ bool intctrl_t::is_pending(word_t irq) {
 		irq-=INT_LEVEL_UIC2_MIN ;
 		intMask = 1 << (31 - irq) ;
 		actualMask = mfdcr(UIC2_SR);
-	} else if (irq > INT_LEVEL_UIC0_MAX)        /* For UIC1 */
+	/* Brace added; see raise_irq. */
+	} else if (irq > INT_LEVEL_UIC0_MAX) {      /* For UIC1 */
 #else
 	if (irq > INT_LEVEL_UIC0_MAX) {       /* For UIC1 */
 #endif
@@ -637,8 +671,9 @@ bool intctrl_t::is_pending(word_t irq) {
 
 }
 
-void intctrl_t::dump() {
-	lock.lock();
+void intctrl_dump (void) {
+	intctrl_t *self = get_interrupt_ctrl();
+	spinlock_lock (&self->lock);
 	printf("UIC0:\nSR: %08x\nER: %08x\nCR: %08x\nPR: %08x\nTR: %08x\nMSR: %08x\nVCR: %08x\nVR: %08x\n",
 			mfdcr(UIC0_SR),mfdcr(UIC0_ER),mfdcr(UIC0_CR),mfdcr(UIC0_PR),
 			mfdcr(UIC0_TR),mfdcr(UIC0_MSR),mfdcr(UIC0_VCR),mfdcr(UIC0_VR));
@@ -650,5 +685,5 @@ void intctrl_t::dump() {
 			mfdcr(UIC2_SR),mfdcr(UIC2_ER),mfdcr(UIC2_CR),mfdcr(UIC2_PR),
 			mfdcr(UIC2_TR),mfdcr(UIC2_MSR),mfdcr(UIC2_VCR),mfdcr(UIC2_VR));
 #endif
-	lock.unlock();
+	spinlock_unlock (&self->lock);
 }

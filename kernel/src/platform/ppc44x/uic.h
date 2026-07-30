@@ -138,64 +138,15 @@
 #define UIC2_INTR_TRIGGER 0x00000000
 #endif
 
-class intctrl_t : public generic_intctrl_t
+/* generic_intctrl_t was an interface-description base with no members; it is
+   gone, so the struct stands alone, exactly as bic.h's does.  The two headers
+   are alternative definitions of the same object and the same intctrl_* entry
+   points -- platform/ppc44x/intctrl.h picks one by subplatform -- so the
+   surface here is kept name-for-name with bic.h's. */
+struct intctrl_t
 {
-public:
-    void init_arch();
-    void init_cpu(int cpu);
-
-    word_t get_number_irqs() 
-	{ return INT_LEVEL_MAX + 1; }
-
-    bool is_irq_available(word_t irq)
-	{ return (irq >= INT_LEVEL_MIN && irq <= INT_LEVEL_MAX); }
-
-    void mask(word_t irq);
-
-    bool unmask(word_t irq);
-
-    bool is_masked(word_t irq);
-
-    bool is_pending(word_t irq);
-
-    void enable(word_t irq) {
-    	if (unmask(irq))
-    		::handle_interrupt(irq);
-    }
-
-    void disable(word_t irq)
-	{ mask(irq); }
-
-    bool is_enabled(word_t irq)
-	{ return is_masked(irq); }
-
-    void set_cpu(word_t irq, word_t cpu)
-	{
-	    set_irq_routing(irq, cpu);
-	    if (!is_masked(irq))
-		unmask(irq);
-	}
-
-
-    /* handler invoked on interrupt (left for compatibility)
-     * TODO: Remove it?
-     */
-    void handle_irq(word_t cpu);
-
-    /* map routine provided by glue */
-    void map();
-
-    /* SMP support functions */
-    void start_new_cpu(word_t cpu);
-
-    void send_ipi(word_t cpu);
-
-    /* debug */
-    void dump();
-
-private:
-    // we can route to 4 CPUs, and thus can encode 16 targets in a word
-    u8_t routing[BGP_MAX_IRQS / 4]; // 4 IRQs per byte
+    /* we can route to 4 CPUs, and thus can encode 16 targets in a word */
+    u8_t routing[BGP_MAX_IRQS / 4];	/* 4 IRQs per byte */
     spinlock_t lock;
     word_t num_irqs;
     word_t mem_size;
@@ -203,25 +154,74 @@ private:
 #if defined(PPC440EPx)
     word_t uic2_dchain_mask;
 #endif
-    word_t init_controllers();
-    word_t get_irq_routing(word_t irq)
-	{
-	    word_t shift = (irq % 4) * 2;
-	    return (routing[irq / 4] >> shift) & 3;
-	}
-
-    void set_irq_routing(word_t irq, word_t cpu)
-	{
-	    word_t shift = (irq % 4) * 2;
-	    routing[irq / 4] = (routing[irq / 4] & ~(3 << shift)) | (cpu << shift);
-	}
-
-    word_t get_ipi_irq(word_t cpu, word_t ipi)
-	{
-	    return cpu * 8 + ipi;
-	}
-    //common interrupt handler, should not be called directly.
-    void raise_irq(word_t irq);
 };
+typedef struct intctrl_t intctrl_t;
+
+/* Defined here rather than in glue/v4-powerpc/intctrl.h, which includes this
+   header before it would get to the definition -- the inline entry points
+   below need it. */
+INLINE intctrl_t * get_interrupt_ctrl (void)
+{
+    extern intctrl_t intctrl;
+    return &intctrl;
+}
+
+INLINE word_t intctrl_get_irq_routing (intctrl_t *self, word_t irq)
+{
+    word_t shift = (irq % 4) * 2;
+    return (self->routing[irq / 4] >> shift) & 3;
+}
+
+INLINE void intctrl_set_irq_routing (intctrl_t *self, word_t irq, word_t cpu)
+{
+    word_t shift = (irq % 4) * 2;
+    self->routing[irq / 4] = (self->routing[irq / 4] & ~(3 << shift)) | (cpu << shift);
+}
+
+INLINE word_t intctrl_get_ipi_irq (word_t cpu, word_t ipi)
+{ return cpu * 8 + ipi; }
+
+INLINE word_t intctrl_get_number_irqs (void)
+{ return INT_LEVEL_MAX + 1; }
+
+INLINE bool intctrl_is_irq_available (word_t irq)
+{ return irq >= INT_LEVEL_MIN && irq <= INT_LEVEL_MAX; }
+
+/* Out of line in uic.c: each one needs mtdcr/mfdcr on a register selected at
+   run time, so none of them collapses to a constant. */
+void intctrl_mask (word_t irq);
+bool intctrl_unmask (word_t irq);
+bool intctrl_is_masked (word_t irq);
+bool intctrl_is_pending (word_t irq);
+
+INLINE void intctrl_enable (word_t irq)
+{
+    if (intctrl_unmask (irq))
+	handle_interrupt (irq);
+}
+
+INLINE void intctrl_disable (word_t irq)
+{ intctrl_mask (irq); }
+
+/* Upstream returns is_masked, not its negation; bic.h has the same inversion.
+   Preserved rather than fixed -- nothing in the tree calls it. */
+INLINE bool intctrl_is_enabled (word_t irq)
+{ return intctrl_is_masked (irq); }
+
+INLINE void intctrl_set_cpu (word_t irq, word_t cpu)
+{
+    intctrl_set_irq_routing (get_interrupt_ctrl(), irq, cpu);
+    if (!intctrl_is_masked (irq))
+	intctrl_unmask (irq);
+}
+
+/* Defined in platform/ppc44x. */
+void intctrl_init_arch (void);
+void intctrl_init_cpu (int cpu);
+void intctrl_handle_irq (word_t cpu);	/* handler invoked on interrupt */
+void intctrl_map (void);		/* map routine provided by glue */
+void intctrl_start_new_cpu (word_t cpu);	/* SMP support */
+void intctrl_send_ipi (word_t cpu);
+void intctrl_dump (void);		/* debug */
 
 #endif /* !__PLATFORM__PPC44X__UIC_H__ */

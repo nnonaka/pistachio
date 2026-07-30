@@ -37,5 +37,5 @@ SOURCES += $(addprefix src/platform/ppc44x/,bic.c)
 endif
 
 ifeq ("$(CONFIG_SUBPLAT_440_EBONY)","y")
-SOURCES += $(addprefix src/platform/ppc44x/,uic.cc)
+SOURCES += $(addprefix src/platform/ppc44x/,uic.c)
 endif
