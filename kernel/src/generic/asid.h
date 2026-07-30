@@ -102,7 +102,10 @@ INLINE void asid_manager_init (asid_manager_t *self, word_t start, word_t end)
     self->free_list = NULL;
     self->timestamp = 0;
 
-    for (asid = 0; asid <= ASID_MANAGER_SIZE; asid++)
+    /* `<=' here would clear one past the end of asid_user[] -- upstream had it
+       too (see notes §140); GCC's -Waggressive-loop-optimizations flags the
+       last iteration as undefined behaviour. */
+    for (asid = 0; asid < ASID_MANAGER_SIZE; asid++)
 	self->asid_user[asid] = NULL;
 
     for (asid = start; asid <= end; asid++)
