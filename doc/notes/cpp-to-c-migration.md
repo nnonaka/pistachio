@@ -6490,3 +6490,53 @@ One aside worth recording, since it cost a wrong answer first time round:
 path, so editing the copy's `config.h` rebuilds nothing and the stale objects
 link into a kernel that appears to contradict the diagnosis. Extract the config
 tar afresh instead.
+
+
+## §138 — `p4-statictcbs` boots; §135 and §137 were wrong about it
+
+`x86-x64-p4-statictcbs` boots to the `l4test` menu, and so does the x32 one.
+§135 concluded it "cannot be boot-tested at all", §137 repeated it, and both
+were wrong. The link failure they rested on
+
+    ld: exception.c:(.text+0x3ea): undefined reference to `printf'
+    ld: init.c:(.init.init64+0x54): undefined reference to `init_console'
+
+was not a property of the configuration or of `tools/boottest`. It was the
+scratch helper being used to build one configuration at a time. That helper
+extracted the config tar and wrote a `Makeconf.local`, but did not derive a
+`.config` -- and `x86-x64-p4-statictcbs.kernel.tar` is the one shipped config
+that has `config.h` and no `.config`.
+
+The two files are not interchangeable. `config.h` reaches the compiler through
+`-imacros`, so the kernel's `printf()` and `init_console()` calls compile
+whenever `CONFIG_KDB` is defined there. `.config` supplies the make-level
+`CONFIG_*` variables, and `Mk/Makeconf` gates the entire kdb subtree on one of
+them:
+
+    ifeq "$(CONFIG_DEBUG)" "y"
+    SRCSRC+= kdb/generic kdb/platform/$(PLATFORM) ...
+    endif
+
+With `.config` absent, `CONFIG_DEBUG` is empty, `kdb/generic` never contributes
+`print.c` or `console.c`, and the link fails on the calls `config.h` had just
+enabled. `tools/configsweep` derives a `.config` from `config.h` for exactly
+this case, which is why the configuration always compiled under the sweep;
+nothing else in the tree did, and the error it produces names neither cause.
+
+`tools/boottest` now refuses to run without `config/.config` and says what to
+do about it, so the next occurrence reads as a diagnosis rather than as a
+missing `printf`.
+
+Two things about that configuration are genuinely odd but harmless. Its
+`config.out` sets `CONFIG_KDB_CONS_OF1275` and `CONFIG_KDB_CONS_PSIM_COM` --
+PowerPC consoles -- on an `ARCH_X86` config, evidently values the configurator
+carried over when the file was saved in 2010. No `Makeconf` gates on any
+`CONFIG_KDB_CONS_*`, so they select nothing; the x86 console driver in
+`kdb/platform/pc99/io.c` is unconditional, and `CONFIG_KDB_CONS_COM` in
+`config.h` alone decides whether the serial line is used. Which is why
+`boottest`'s existing edit is sufficient here, as it is everywhere else.
+
+**The tally, measured rather than inferred: every shipped x86 configuration
+compiles, links and boots to the `l4test` menu -- twenty on x32 and eleven on
+x64, thirty-one of thirty-one.** §131 recorded six of eleven on x64 and §133
+sixteen of nineteen on x32.

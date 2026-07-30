@@ -63,6 +63,17 @@ die() { echo "boottest: $*" >&2; exit 2; }
 command -v qemu-system-x86_64 >/dev/null || die "qemu-system-x86_64 not found"
 [ -f "$CONFIG_H" ] || die "no configured kernel build at $BUILDDIR (run tools/autobuild first)"
 
+# A build directory with config.h but no .config links, confusingly, with
+# `undefined reference to printf'.  config.h drives the C preprocessor and
+# .config drives the make-level CONFIG_* variables, and Mk/Makeconf gates the
+# whole kdb tree -- print.c, console.c -- on CONFIG_DEBUG from the latter.  With
+# .config absent every such variable is empty, so the kernel compiles its
+# printf() and init_console() calls and nothing defines them.
+# x86-x64-p4-statictcbs.kernel.tar is the one shipped config that has no
+# .config; tools/configsweep derives one.  See notes §138.
+[ -f "$BUILDDIR/config/.config" ] || \
+    die "no config/.config in $BUILDDIR -- derive one from config.h (see tools/configsweep)"
+
 # --- 1. ensure a serial console (idempotent) -------------------------------
 if grep -q '^#undef  *CONFIG_KDB_CONS_COM' "$CONFIG_H"; then
     echo "boottest: enabling CONFIG_KDB_CONS_COM (serial console) in $CONFIG_H"
