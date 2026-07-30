@@ -37,9 +37,18 @@
 
 DECLARE_KMEM_GROUP (kmem_vmcs);
 
+/*
+ * The vmcs_t and per-area methods this file defines are declared in
+ * arch/x86/vmx.h; see the comment there on how a VMCS field became a pair of
+ * accessors over an explicit vmcs_t *.  Every `field = x' below is now
+ * vmcs_<area>_set_<field> (self, x) and every read the matching get, so the
+ * VMREADs and VMWRITEs happen in the same order, and the same number of times,
+ * as they did through the template's operator= / operator T.
+ */
 
 INLINE bool is_canonical_address (word_t addr)
 {
+    (void) addr;
     return true;
 }
 
@@ -60,25 +69,25 @@ typedef union {
     };
 } basic_msr_t;
 
-INLINE u16_t get_vmcs_sz ()
+INLINE u16_t get_vmcs_sz (void)
 {
     basic_msr_t msr;
     msr.raw = x86_rdmsr (X86_MSR_VMX_BASIC);
-    return msr.vmcs_sz;
+    return (u16_t) msr.vmcs_sz;
 }
 
-INLINE x86_x32_vmcs_access_e get_vmcs_access_mode ()
+INLINE enum x86_x32_vmcs_access_e get_vmcs_access_mode (void)
 {
     basic_msr_t msr;
     msr.raw = x86_rdmsr (X86_MSR_VMX_BASIC);
-    return (x86_x32_vmcs_access_e)msr.vmcs_memtype;
+    return (enum x86_x32_vmcs_access_e) msr.vmcs_memtype;
 }
 
-INLINE u32_t get_vmcs_rev_id ()
+INLINE u32_t get_vmcs_rev_id (void)
 {
     basic_msr_t msr;
     msr.raw = x86_rdmsr (X86_MSR_VMX_BASIC);
-    return msr.vmcs_rev_id;
+    return (u32_t) msr.vmcs_rev_id;
 }
 
 
@@ -91,20 +100,24 @@ INLINE u32_t get_vmcs_rev_id ()
 vmcs_t *current_vmcs UNIT("cpulocal");
 
 
-vmcs_t *vmcs_t::alloc_vmcs ()
+vmcs_t *vmcs_alloc_vmcs (void)
 {
+    word_t sz;
+    addr_t vmcs;
+    u32_t *ptr;
+
     // Kernel Memory Allocator gives WB memory.
     if (get_vmcs_access_mode() != wb)
 	return NULL;
 
     // Allocate VMCS Region, must be aligned to page boundary
-    word_t sz = X86_PAGE_SIZE;
-    addr_t vmcs = kmem_alloc(&kmem, kmem_vmcs, sz);
+    sz = X86_PAGE_SIZE;
+    vmcs = kmem_alloc(&kmem, kmem_vmcs, sz);
     if (!vmcs)
 	return NULL;
 
     // Set Revision.
-    u32_t *ptr = (u32_t *) vmcs;
+    ptr = (u32_t *) vmcs;
     *ptr = get_vmcs_rev_id();
 
     //TRACEF ("New VMCS created: va: %p  pa: %p  sz: %x rev: %lx\n",
@@ -114,18 +127,18 @@ vmcs_t *vmcs_t::alloc_vmcs ()
 }
 
 
-void vmcs_t::free_vmcs (vmcs_t *vmcs)
+void vmcs_free_vmcs (vmcs_t *vmcs)
 {
     kmem_free(&kmem, kmem_vmcs, phys_to_virt(vmcs), get_vmcs_sz());
 }
 
 
-void vmcs_t::init ()
+void vmcs_init (vmcs_t *self)
 {
-    gs.init ();
-    exec_ctr.init ();
-    exit_ctr.init ();
-    entry_ctr.init ();
+    vmcs_gsarea_init (self);
+    vmcs_exectrarea_init (self);
+    vmcs_exitctrarea_init (self);
+    vmcs_entryctrarea_init (self);
 }
 
 
@@ -135,20 +148,18 @@ void vmcs_t::init ()
  *
  *******************************************************************************/
 
-void vmcs_entryctrarea_t::init ()
+void vmcs_entryctrarea_init (vmcs_t *self)
 {
-    vmcs_entryctr_t i_entryctr;
-    entryctr		= i_entryctr;
+    vmcs_entry_ctr_set_entryctr (self, vmcs_entryctr_new ());
 
-    vmcs_int_t i_iif;
-    iif			= i_iif;
+    vmcs_entry_ctr_set_iif (self, vmcs_int_new ());
 
-    msr_ld_cnt		= 0;
-    msr_ld_addr		= 0;
+    vmcs_entry_ctr_set_msr_ld_cnt (self, 0);
+    vmcs_entry_ctr_set_msr_ld_addr (self, 0);
 
-    instr_len		= 0;
+    vmcs_entry_ctr_set_instr_len (self, 0);
 
-    eec			= 0;
+    vmcs_entry_ctr_set_eec (self, 0);
 }
 
 
@@ -158,43 +169,39 @@ void vmcs_entryctrarea_t::init ()
  *
  *******************************************************************************/
 
-void vmcs_exectrarea_t::init ()
+void vmcs_exectrarea_init (vmcs_t *self)
 {
-    vmcs_exectr_pinbased_t i_pinbased;
-    pinbased	= i_pinbased;
+    vmcs_exec_ctr_set_pinbased (self, vmcs_exectr_pinbased_new ());
 
-    vmcs_exectr_cpubased_t i_cpubased;
-    cpubased	= i_cpubased;
+    vmcs_exec_ctr_set_cpubased (self, vmcs_exectr_cpubased_new ());
 
-    vmcs_exectr_excbmp_t i_except_bmp;
-    except_bmp	= i_except_bmp;
+    vmcs_exec_ctr_set_except_bmp (self, vmcs_exectr_excbmp_new ());
 
-    pferrmask	= 0;
-    pferrmatch	= 0;
+    vmcs_exec_ctr_set_pferrmask (self, 0);
+    vmcs_exec_ctr_set_pferrmatch (self, 0);
 
-    vmcs_exectr_tprth_t i_tprth;
-    tprthr	= i_tprth;
+    vmcs_exec_ctr_set_tprthr (self, vmcs_exectr_tprth_new ());
 
-    iobmpa	= 0;
-    iobmpb	= 0;
+    vmcs_exec_ctr_set_iobmpa (self, 0);
+    vmcs_exec_ctr_set_iobmpb (self, 0);
 
-    tscoff	= 0;
-    vapicaddr	= 0;
+    vmcs_exec_ctr_set_tscoff (self, 0);
+    vmcs_exec_ctr_set_vapicaddr (self, 0);
 
     // Masks: Owned by the host.
-    cr0mask	= ~0UL;
-    cr4mask	= ~0UL;
+    vmcs_exec_ctr_set_cr0mask (self, ~0UL);
+    vmcs_exec_ctr_set_cr4mask (self, ~0UL);
 
     // Shadow: The values seen by the guest, if all bits in the masks are set.
-    cr0shadow	= X86_CR0_ET | X86_CR0_NW | X86_CR0_CD;
-    cr4shadow	= 0;
+    vmcs_exec_ctr_set_cr0shadow (self, X86_CR0_ET | X86_CR0_NW | X86_CR0_CD);
+    vmcs_exec_ctr_set_cr4shadow (self, 0);
 
     // cr3
-    cr3targetcnt = 0;
-    cr3val0	= 0;
-    cr3val1	= 0;
-    cr3val2	= 0;
-    cr3val3	= 0;
+    vmcs_exec_ctr_set_cr3targetcnt (self, 0);
+    vmcs_exec_ctr_set_cr3val0 (self, 0);
+    vmcs_exec_ctr_set_cr3val1 (self, 0);
+    vmcs_exec_ctr_set_cr3val2 (self, 0);
+    vmcs_exec_ctr_set_cr3val3 (self, 0);
 }
 
 
@@ -204,15 +211,14 @@ void vmcs_exectrarea_t::init ()
  *
  *******************************************************************************/
 
-void vmcs_exitctrarea_t::init ()
+void vmcs_exitctrarea_init (vmcs_t *self)
 {
-    vmcs_exitctr_t i_exitctr;
-    exitctr	= i_exitctr;
+    vmcs_exit_ctr_set_exitctr (self, vmcs_exitctr_new ());
 
-    msr_st_cnt	= 0;
-    msr_ld_cnt	= 0;
-    msr_st_addr	= 0;
-    msr_ld_addr	= 0;
+    vmcs_exit_ctr_set_msr_st_cnt (self, 0);
+    vmcs_exit_ctr_set_msr_ld_cnt (self, 0);
+    vmcs_exit_ctr_set_msr_st_addr (self, 0);
+    vmcs_exit_ctr_set_msr_ld_addr (self, 0);
 }
 
 
@@ -222,51 +228,77 @@ void vmcs_exitctrarea_t::init ()
  *
  *******************************************************************************/
 
-void vmcs_gsarea_t::init ()
+void vmcs_gsarea_init (vmcs_t *self)
 {
-    vmcs_segattr_t i_attr;
+    /* The chained assignments the C++ body used -- cs_sel = ds_sel = ... = 0 --
+       each issued one VMWRITE per field through operator=; they are spelled out
+       one call per field here. */
+    vmcs_segattr_t i_attr = vmcs_segattr_new ();
+    vmcs_gs_as_t i_as;
 
-    rflags		= X86_FLAGS_VM | X86_FLAGS_IOPL(3) | 0x2;
-    rip			= 0;
-    rsp			= 0;
+    vmcs_gs_set_rflags (self, X86_FLAGS_VM | X86_FLAGS_IOPL(3) | 0x2);
+    vmcs_gs_set_rip (self, 0);
+    vmcs_gs_set_rsp (self, 0);
 
-    cs_sel = ds_sel = es_sel = fs_sel = gs_sel = ss_sel
-	   = tr_sel = ldtr_sel = 0;
-    cs_base = ds_base = es_base = fs_base = gs_base = ss_base
-	    = tr_base = ldtr_base = gdtr_base = idtr_base = 0;
-    cs_lim = ds_lim = es_lim = fs_lim = gs_lim = ss_lim
-	   = tr_lim = ldtr_lim = gdtr_lim = idtr_lim = 0xffff;
-    
+    vmcs_gs_set_cs_sel (self, 0);
+    vmcs_gs_set_ds_sel (self, 0);
+    vmcs_gs_set_es_sel (self, 0);
+    vmcs_gs_set_fs_sel (self, 0);
+    vmcs_gs_set_gs_sel (self, 0);
+    vmcs_gs_set_ss_sel (self, 0);
+    vmcs_gs_set_tr_sel (self, 0);
+    vmcs_gs_set_ldtr_sel (self, 0);
+
+    vmcs_gs_set_cs_base (self, 0);
+    vmcs_gs_set_ds_base (self, 0);
+    vmcs_gs_set_es_base (self, 0);
+    vmcs_gs_set_fs_base (self, 0);
+    vmcs_gs_set_gs_base (self, 0);
+    vmcs_gs_set_ss_base (self, 0);
+    vmcs_gs_set_tr_base (self, 0);
+    vmcs_gs_set_ldtr_base (self, 0);
+    vmcs_gs_set_gdtr_base (self, 0);
+    vmcs_gs_set_idtr_base (self, 0);
+
+    vmcs_gs_set_cs_lim (self, 0xffff);
+    vmcs_gs_set_ds_lim (self, 0xffff);
+    vmcs_gs_set_es_lim (self, 0xffff);
+    vmcs_gs_set_fs_lim (self, 0xffff);
+    vmcs_gs_set_gs_lim (self, 0xffff);
+    vmcs_gs_set_ss_lim (self, 0xffff);
+    vmcs_gs_set_tr_lim (self, 0xffff);
+    vmcs_gs_set_ldtr_lim (self, 0xffff);
+    vmcs_gs_set_gdtr_lim (self, 0xffff);
+    vmcs_gs_set_idtr_lim (self, 0xffff);
+
     i_attr.raw		= 0xf3;
-    cs_attr		= i_attr;
-    ds_attr		= i_attr;
-    es_attr		= i_attr;
-    fs_attr		= i_attr;
-    gs_attr		= i_attr;
-    ss_attr		= i_attr;
+    vmcs_gs_set_cs_attr (self, i_attr);
+    vmcs_gs_set_ds_attr (self, i_attr);
+    vmcs_gs_set_es_attr (self, i_attr);
+    vmcs_gs_set_fs_attr (self, i_attr);
+    vmcs_gs_set_gs_attr (self, i_attr);
+    vmcs_gs_set_ss_attr (self, i_attr);
 
     i_attr.raw		= 0x0808b;
-    tr_attr		= i_attr;
+    vmcs_gs_set_tr_attr (self, i_attr);
 
     i_attr.raw		= 0x10082;
-    ldtr_attr		= i_attr;
-	
-    vmcs_gs_ias_t i_ias;
-    ias			= i_ias;
+    vmcs_gs_set_ldtr_attr (self, i_attr);
 
-    vmcs_gs_as_t	i_as;
-    i_as.state		= vmcs_gs_as_t::active;
-    as			= i_as;
+    vmcs_gs_set_ias (self, vmcs_gs_ias_new ());
 
-    vmcs_gs_pend_dbg_except_t i_dbge;
-    pend_dbg_except	= i_dbge;
+    i_as		= vmcs_gs_as_new ();
+    i_as.state		= VMCS_AS_ACTIVE;
+    vmcs_gs_set_as (self, i_as);
 
-    linkptr		= ~0ULL;
+    vmcs_gs_set_pend_dbg_except (self, vmcs_gs_pend_dbg_except_new ());
 
-    dbg_ctl		= 0;
+    vmcs_gs_set_linkptr (self, ~0ULL);
 
-    sysenter_esp	= 0;
-    sysenter_eip	= 0;
+    vmcs_gs_set_dbg_ctl (self, 0);
+
+    vmcs_gs_set_sysenter_esp (self, 0);
+    vmcs_gs_set_sysenter_eip (self, 0);
 }
 
 
@@ -294,65 +326,72 @@ static const u64_t BITS_63_32 = ((1ULL<<33) - 1) << 32;
 static const u64_t BITS_63_22 = ((1ULL<<43) - 1) << 22;
 
 
-class vmcs_segsel_t {
-public:
-    vmcs_segsel_t ()
-	{ raw = 0; }
+/* Table Indicator; was vmcs_segsel_t::ti_e. */
+enum vmcs_segsel_ti_e {
+   VMCS_SEGSEL_GDT = 0, VMCS_SEGSEL_LDT = 1
+};
 
-public:
-    // Table Indicator
-    enum ti_e {
-       gdt = 0, ldt = 1
-    };
-
-public:
+struct vmcs_segsel_t {
     union {
 	u16_t raw;
 	struct {
 	    u16_t rpl   : 2;
-	    u16_t ti    : 1; // ti_e
+	    u16_t ti    : 1; // vmcs_segsel_ti_e
 	    u16_t idx   :13;
 	};
     };
 };
+typedef struct vmcs_segsel_t vmcs_segsel_t;
+
+INLINE vmcs_segsel_t vmcs_segsel_new (void)
+{ vmcs_segsel_t v; v.raw = 0; return v; }
 
 
-void vmcs_t::do_vmentry_checks ()
+void vmcs_do_vmentry_checks (vmcs_t *self)
 {
+    vmcs_entryctr_t i_entryctr;
+    vmcs_int_t i_iif;
+    vmcs_exitctr_t i_exitctr;
+
     // VT-Specification Chapter 4.1
 
     // 1. Virtual-8068 or Compatibility Mode (-> invalid-opcode)
     // 2. CPL is != 0.
     // 3. No Current VMCS.
-    ASSERT(is_loaded());
+    ASSERT(vmcs_is_loaded (self));
     // 4a. MOV-SS blocking.
-    //vmcs_gs_ias_t interruptililty = gs.ias;
+    //vmcs_gs_ias_t interruptililty = vmcs_gs_get_ias (self);
     //ASSERT(interruptililty.bl_movss == 0);
     // 4b. VMLAUNCH on non-clear VMCS.
     // 4c. VMRESUME on non-launched VMCS.
-    
-    vmcs_entryctr_t i_entryctr = entry_ctr.entryctr;
-    vmcs_int_t i_iif = entry_ctr.iif;
-    vmcs_exitctr_t i_exitctr = exit_ctr.exitctr;
 
-    gs.do_vmentry_checks(i_entryctr, i_iif);
-    hs.do_vmentry_checks(i_entryctr, i_exitctr);
-    exec_ctr.do_vmentry_checks();
-    exit_ctr.do_vmentry_checks();
-    entry_ctr.do_vmentry_checks();
+    i_entryctr = vmcs_entry_ctr_get_entryctr (self);
+    i_iif = vmcs_entry_ctr_get_iif (self);
+    i_exitctr = vmcs_exit_ctr_get_exitctr (self);
+
+    vmcs_gsarea_do_vmentry_checks (self, i_entryctr, i_iif);
+    vmcs_hsarea_do_vmentry_checks (self, i_entryctr, i_exitctr);
+    vmcs_exectrarea_do_vmentry_checks (self);
+    vmcs_exitctrarea_do_vmentry_checks (self);
+    vmcs_entryctrarea_do_vmentry_checks (self);
 }
 
 
-void vmcs_entryctrarea_t::do_vmentry_checks ()
+void vmcs_entryctrarea_do_vmentry_checks (vmcs_t *self)
 {
     // Entry Control.		(22.2.1.3)
     vmcs_entryctr_t i_entryctr;
-    i_entryctr	      = entryctr;
-    u64_t i_entrydefs = x86_rdmsr (X86_MSR_VMX_ENTRY_CTLS);
-    u32_t ALLOWED0 = (u32_t)i_entrydefs;
-    u32_t ALLOWED1 = i_entrydefs >> 32;
-
+    u64_t i_entrydefs;
+    u32_t ALLOWED0, ALLOWED1;
     vmcs_entryctr_t i_entryctr_check;
+    vmcs_int_t i_iif;
+    u32_t i_msr_ld_cnt;
+
+    i_entryctr	      = vmcs_entry_ctr_get_entryctr (self);
+    i_entrydefs = x86_rdmsr (X86_MSR_VMX_ENTRY_CTLS);
+    ALLOWED0 = (u32_t)i_entrydefs;
+    ALLOWED1 = (u32_t) (i_entrydefs >> 32);
+
     i_entryctr_check.raw = i_entryctr.raw | ALLOWED0;
     i_entryctr_check.raw = i_entryctr_check.raw & ALLOWED1;
     if (i_entryctr_check.raw != i_entryctr.raw)
@@ -365,22 +404,23 @@ void vmcs_entryctrarea_t::do_vmentry_checks ()
     }
 
     // Event Injection.		(22.2.1.3)
-    vmcs_int_t i_iif;
-    i_iif	= iif;
+    i_iif	= vmcs_entry_ctr_get_iif (self);
     if (i_iif.valid) {
+	u32_t i_eec;
+	u32_t i_instr_len;
+
 	ASSERT((i_iif.type != 1) &&
 	       (i_iif.type != 7));
 
-	u32_t i_eec;
-	i_eec	= eec;
+	i_eec	= vmcs_entry_ctr_get_eec (self);
 	//	printf("iif: %x, eec: %x\n", i_iif.raw, i_eec);
-	if (i_iif.type == vmcs_int_t::hw_nmi)
+	if (i_iif.type == VMCS_INT_HW_NMI)
 	    ASSERT(i_iif.vector == 2);
-	if (i_iif.type == vmcs_int_t::hw_except)
+	if (i_iif.type == VMCS_INT_HW_EXCEPT)
 	    ASSERT(i_iif.vector <= 31);
 
 	if (i_iif.err_code_valid == 1) {
-	    ASSERT(i_iif.type == vmcs_int_t::hw_except);
+	    ASSERT(i_iif.type == VMCS_INT_HW_EXCEPT);
 	}
 
 	if (i_iif.raw & (BITS_30_12))
@@ -390,17 +430,15 @@ void vmcs_entryctrarea_t::do_vmentry_checks ()
 	    ASSERT((i_eec & (BITS_31_15)) == 0);
 	}
 
-	u32_t i_instr_len;
-	i_instr_len	= instr_len;
-	if (i_iif.type >= vmcs_int_t::sw_int) 
+	i_instr_len	= vmcs_entry_ctr_get_instr_len (self);
+	if (i_iif.type >= VMCS_INT_SW_INT)
 	{
 	    ASSERT((i_instr_len >= 1) && (i_instr_len <= 15));
 	}
     }
 
     // MSRs.
-    u32_t i_msr_ld_cnt;
-    i_msr_ld_cnt	= msr_ld_cnt;
+    i_msr_ld_cnt	= vmcs_entry_ctr_get_msr_ld_cnt (self);
     if(i_msr_ld_cnt != 0) {
 	UNIMPLEMENTED();
     }
@@ -411,16 +449,22 @@ void vmcs_entryctrarea_t::do_vmentry_checks ()
 }
 
 
-void vmcs_exectrarea_t::do_vmentry_checks ()
+void vmcs_exectrarea_do_vmentry_checks (vmcs_t *self)
 {
     // Pin Based.		(22..2.1.1)
     vmcs_exectr_pinbased_t i_pb;
-    i_pb	= pinbased;
-    u64_t i_pbctls = x86_rdmsr (X86_MSR_VMX_PINBASED_CTLS);
-    u32_t ALLOWED0 = (u32_t)i_pbctls;
-    u32_t ALLOWED1 = i_pbctls >> 32;
-
+    u64_t i_pbctls;
+    u32_t ALLOWED0, ALLOWED1;
     vmcs_exectr_pinbased_t i_pb_check;
+    vmcs_exectr_cpubased_t i_cb, i_cb_check;
+    u64_t i_cbctls;
+    u32_t i_cr3_count;
+
+    i_pb	= vmcs_exec_ctr_get_pinbased (self);
+    i_pbctls = x86_rdmsr (X86_MSR_VMX_PINBASED_CTLS);
+    ALLOWED0 = (u32_t)i_pbctls;
+    ALLOWED1 = (u32_t) (i_pbctls >> 32);
+
     i_pb_check.raw = i_pb.raw | ALLOWED0;
     i_pb_check.raw = i_pb_check.raw & ALLOWED1;
     if (i_pb_check.raw != i_pb.raw)
@@ -433,12 +477,10 @@ void vmcs_exectrarea_t::do_vmentry_checks ()
     }
 
     // CPU Based.
-    vmcs_exectr_cpubased_t i_cb;
-    i_cb		= cpubased;
-    u64_t i_cbctls	= x86_rdmsr (X86_MSR_VMX_CPUBASED_CTLS);
+    i_cb		= vmcs_exec_ctr_get_cpubased (self);
+    i_cbctls	= x86_rdmsr (X86_MSR_VMX_CPUBASED_CTLS);
     ALLOWED0 = (u32_t)i_cbctls;
-    ALLOWED1 = i_cbctls >> 32;
-    vmcs_exectr_cpubased_t i_cb_check;
+    ALLOWED1 = (u32_t) (i_cbctls >> 32);
     i_cb_check.raw = i_cb.raw | ALLOWED0;
     i_cb_check.raw = i_cb_check.raw & ALLOWED1;
     if (i_cb_check.raw != i_cb.raw)
@@ -451,14 +493,13 @@ void vmcs_exectrarea_t::do_vmentry_checks ()
     }
 
     // Cr3.
-    u32_t i_cr3_count = 0;
-    i_cr3_count	= cr3targetcnt;
+    i_cr3_count	= vmcs_exec_ctr_get_cr3targetcnt (self);
     ASSERT(i_cr3_count <= 4);
 
     // IO-Bitmap.
     if (i_cb.iobitm)
     {
-	u64_t i_iobmpa = iobmpa;
+	u64_t i_iobmpa = vmcs_exec_ctr_get_iobmpa (self);
 	ASSERT((i_iobmpa & ~X86_PAGE_MASK) == 0);
     }
 
@@ -472,16 +513,19 @@ void vmcs_exectrarea_t::do_vmentry_checks ()
 }
 
 
-void vmcs_exitctrarea_t::do_vmentry_checks ()
+void vmcs_exitctrarea_do_vmentry_checks (vmcs_t *self)
 {
     // Exit Control.		(22.2.1.2)
     vmcs_exitctr_t i_exitctr;
-    i_exitctr		= exitctr;
-    u64_t i_exitdefs	= x86_rdmsr (X86_MSR_VMX_EXIT_CTLS);
-    u32_t ALLOWED0	= (u32_t)i_exitdefs;
-    u32_t ALLOWED1	= i_exitdefs >> 32;
-
+    u64_t i_exitdefs;
+    u32_t ALLOWED0, ALLOWED1;
     vmcs_exitctr_t i_exitctr_check;
+
+    i_exitctr		= vmcs_exit_ctr_get_exitctr (self);
+    i_exitdefs	= x86_rdmsr (X86_MSR_VMX_EXIT_CTLS);
+    ALLOWED0	= (u32_t)i_exitdefs;
+    ALLOWED1	= (u32_t) (i_exitdefs >> 32);
+
     i_exitctr_check.raw = i_exitctr.raw | ALLOWED0;
     i_exitctr_check.raw = i_exitctr_check.raw & ALLOWED1;
     if (i_exitctr_check.raw != i_exitctr.raw)
@@ -494,45 +538,58 @@ void vmcs_exitctrarea_t::do_vmentry_checks ()
     }
 
     // MSRs.
-    if (msr_st_cnt != 0)
+    if (vmcs_exit_ctr_get_msr_st_cnt (self) != 0)
 	UNIMPLEMENTED();
-    if (msr_ld_cnt != 0)
+    if (vmcs_exit_ctr_get_msr_ld_cnt (self) != 0)
 	UNIMPLEMENTED();
 }
 
 
-void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_iif)
+void vmcs_gsarea_do_vmentry_checks (vmcs_t *self, vmcs_entryctr_t i_entryctr, vmcs_int_t i_iif)
 {
     vmcs_gs_ias_t i_ias;
-    i_ias	= ias;
-
     vmcs_gs_as_t  i_as;
-    i_as	= as;
+    word_t i_rip, i_cr0, i_cr3, i_dr7, i_sysenter_esp, i_sysenter_eip;
+    u32_t i_gdtr_limit, i_idtr_limit;
+    word_t i_rfl, i_cr4;
+    bool virt8086, ia32e;
+    vmcs_segattr_t i_cs_attr, i_ss_attr, i_ds_attr, i_es_attr;
+    vmcs_segattr_t i_fs_attr, i_gs_attr, i_tr_attr, i_ldtr_attr;
+    vmcs_segsel_t i_cs_sel, i_ss_sel, i_ds_sel, i_es_sel;
+    vmcs_segsel_t i_fs_sel, i_gs_sel, i_tr_sel, i_ldtr_sel;
+    u32_t i_cs_lim, i_ss_lim, i_ds_lim, i_es_lim, i_fs_lim, i_gs_lim;
+    u32_t i_tr_lim, i_ldtr_lim;
+    u64_t i_cs_base, i_ss_base, i_ds_base, i_es_base, i_fs_base, i_gs_base;
+    vmcs_gs_pend_dbg_except_t i_pend_dbg_except;
 
-    word_t i_rip	= rip;
-    word_t i_cr0	= cr0;
-    word_t i_cr3	= cr3;
-    word_t i_dr7	= dr7;
-    word_t i_sysenter_esp = sysenter_esp;
-    word_t i_sysenter_eip = sysenter_eip;;
-    u32_t i_gdtr_limit	= gdtr_lim;
-    u32_t i_idtr_limit	= idtr_lim;
+    i_ias	= vmcs_gs_get_ias (self);
 
-    word_t i_rfl	= rflags;
-    word_t i_cr4	= cr4;
+    i_as	= vmcs_gs_get_as (self);
 
-    bool virt8086 = (i_rfl & X86_FLAGS_VM);
-    bool ia32e = (i_entryctr.ia32e_mode);
+    i_rip	= vmcs_gs_get_rip (self);
+    i_cr0	= vmcs_gs_get_cr0 (self);
+    i_cr3	= vmcs_gs_get_cr3 (self);
+    i_dr7	= vmcs_gs_get_dr7 (self);
+    i_sysenter_esp = vmcs_gs_get_sysenter_esp (self);
+    i_sysenter_eip = vmcs_gs_get_sysenter_eip (self);
+    i_gdtr_limit	= vmcs_gs_get_gdtr_lim (self);
+    i_idtr_limit	= vmcs_gs_get_idtr_lim (self);
+
+    i_rfl	= vmcs_gs_get_rflags (self);
+    i_cr4	= vmcs_gs_get_cr4 (self);
+
+    virt8086 = (i_rfl & X86_FLAGS_VM);
+    ia32e = (i_entryctr.ia32e_mode);
     ASSERT(ia32e == false);
 
     // CR0		(22.3.1.1)
-    ASSERT(x86_x32_vmx_t::check_fixed_bits_cr0 (i_cr0));
+    ASSERT(x86_x32_vmx_check_fixed_bits_cr0 (i_cr0));
 
     // CR3
     ASSERT(is_canonical_address (i_cr3));
 
     // CR4
-    ASSERT(x86_x32_vmx_t::check_fixed_bits_cr4 (i_cr4));
+    ASSERT(x86_x32_vmx_check_fixed_bits_cr4 (i_cr4));
     if (i_entryctr.ia32e_mode)
 	ASSERT((i_cr4 & X86_CR4_PAE) != 0);
 
@@ -544,91 +601,67 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
     ASSERT(is_canonical_address (i_sysenter_eip));
 
     // Segments		(22.3.1.2)
-    vmcs_segattr_t i_cs_attr;
-    vmcs_segattr_t i_ss_attr;
-    vmcs_segattr_t i_ds_attr;
-    vmcs_segattr_t i_es_attr;
-    vmcs_segattr_t i_fs_attr;
-    vmcs_segattr_t i_gs_attr;
-    vmcs_segattr_t i_tr_attr;
-    vmcs_segattr_t i_ldtr_attr;
-    i_cs_attr	= cs_attr;
-    i_ss_attr	= ss_attr;
-    i_ds_attr	= ds_attr;
-    i_es_attr	= es_attr;
-    i_fs_attr	= fs_attr;
-    i_gs_attr	= gs_attr;
-    i_tr_attr	= tr_attr;
-    i_ldtr_attr	= ldtr_attr;
+    i_cs_attr	= vmcs_gs_get_cs_attr (self);
+    i_ss_attr	= vmcs_gs_get_ss_attr (self);
+    i_ds_attr	= vmcs_gs_get_ds_attr (self);
+    i_es_attr	= vmcs_gs_get_es_attr (self);
+    i_fs_attr	= vmcs_gs_get_fs_attr (self);
+    i_gs_attr	= vmcs_gs_get_gs_attr (self);
+    i_tr_attr	= vmcs_gs_get_tr_attr (self);
+    i_ldtr_attr	= vmcs_gs_get_ldtr_attr (self);
 
-    vmcs_segsel_t i_cs_sel;
-    vmcs_segsel_t i_ss_sel;
-    vmcs_segsel_t i_ds_sel;
-    vmcs_segsel_t i_es_sel;
-    vmcs_segsel_t i_fs_sel;
-    vmcs_segsel_t i_gs_sel;
-    vmcs_segsel_t i_tr_sel;
-    vmcs_segsel_t i_ldtr_sel;
-    i_cs_sel.raw	= cs_sel;
-    i_ss_sel.raw	= ss_sel;
-    i_ds_sel.raw	= ds_sel;
-    i_es_sel.raw	= es_sel;
-    i_fs_sel.raw	= fs_sel;
-    i_gs_sel.raw	= gs_sel;
-    i_tr_sel.raw	= tr_sel;
-    i_ldtr_sel.raw	= ldtr_sel;
+    i_cs_sel.raw	= vmcs_gs_get_cs_sel (self);
+    i_ss_sel.raw	= vmcs_gs_get_ss_sel (self);
+    i_ds_sel.raw	= vmcs_gs_get_ds_sel (self);
+    i_es_sel.raw	= vmcs_gs_get_es_sel (self);
+    i_fs_sel.raw	= vmcs_gs_get_fs_sel (self);
+    i_gs_sel.raw	= vmcs_gs_get_gs_sel (self);
+    i_tr_sel.raw	= vmcs_gs_get_tr_sel (self);
+    i_ldtr_sel.raw	= vmcs_gs_get_ldtr_sel (self);
 
-    u32_t i_cs_lim;
-    u32_t i_ss_lim;
-    u32_t i_ds_lim;
-    u32_t i_es_lim;
-    u32_t i_fs_lim;
-    u32_t i_gs_lim;
-    u32_t i_tr_lim;
-    u32_t i_ldtr_lim;
-    i_cs_lim		= cs_lim;
-    i_ss_lim		= ss_lim;
-    i_ds_lim		= ds_lim;
-    i_es_lim		= es_lim;
-    i_fs_lim		= fs_lim;
-    i_gs_lim		= gs_lim;
-    i_tr_lim		= tr_lim;
-    i_ldtr_lim		= ldtr_lim;
-    
-    u64_t i_cs_base	= cs_base;
-    u64_t i_ss_base	= ss_base;
-    u64_t i_ds_base	= ds_base;
-    u64_t i_es_base	= es_base;
-    u64_t i_fs_base	= fs_base;
-    u64_t i_gs_base	= gs_base;
+    i_cs_lim		= vmcs_gs_get_cs_lim (self);
+    i_ss_lim		= vmcs_gs_get_ss_lim (self);
+    i_ds_lim		= vmcs_gs_get_ds_lim (self);
+    i_es_lim		= vmcs_gs_get_es_lim (self);
+    i_fs_lim		= vmcs_gs_get_fs_lim (self);
+    i_gs_lim		= vmcs_gs_get_gs_lim (self);
+    i_tr_lim		= vmcs_gs_get_tr_lim (self);
+    i_ldtr_lim		= vmcs_gs_get_ldtr_lim (self);
+
+    i_cs_base	= vmcs_gs_get_cs_base (self);
+    i_ss_base	= vmcs_gs_get_ss_base (self);
+    i_ds_base	= vmcs_gs_get_ds_base (self);
+    i_es_base	= vmcs_gs_get_es_base (self);
+    i_fs_base	= vmcs_gs_get_fs_base (self);
+    i_gs_base	= vmcs_gs_get_gs_base (self);
     // 22.3.1.2 Chapter 22-8
     ASSERT (i_tr_sel.ti == 0);
     if (i_ldtr_attr.uu == 0)
 	ASSERT (i_ldtr_sel.ti == 0);
     if (!virt8086)
 	//ASSERT(i_ss_sel.rpl == i_cs_sel.rpl);
-      	if(i_ss_sel.rpl != i_cs_sel.rpl) 
+      	if(i_ss_sel.rpl != i_cs_sel.rpl)
 	{
 	    i_cs_sel.rpl = i_ss_sel.rpl = 0;
-	    cs_sel = i_cs_sel.raw;
-	    ss_sel = i_ss_sel.raw;
+	    vmcs_gs_set_cs_sel (self, i_cs_sel.raw);
+	    vmcs_gs_set_ss_sel (self, i_ss_sel.raw);
 	    i_cs_attr.dpl = 0;
 	    i_ss_attr.dpl = 0;
-	    cs_attr = i_cs_attr;
-	    ss_attr = i_ss_attr;
+	    vmcs_gs_set_cs_attr (self, i_cs_attr);
+	    vmcs_gs_set_ss_attr (self, i_ss_attr);
 	}
-    
+
     ASSERT ((i_cs_base & (BITS_63_32)) == 0);
 
     if (i_ss_attr.uu == 0)
-	ASSERT ((ss_base & (BITS_63_32)) == 0);
+	ASSERT ((vmcs_gs_get_ss_base (self) & (BITS_63_32)) == 0);
     if (i_ds_attr.uu == 0)
-	ASSERT ((ds_base & (BITS_63_32)) == 0);
+	ASSERT ((vmcs_gs_get_ds_base (self) & (BITS_63_32)) == 0);
     if (i_es_attr.uu == 0)
-	ASSERT ((es_base & (BITS_63_32)) == 0);
+	ASSERT ((vmcs_gs_get_es_base (self) & (BITS_63_32)) == 0);
 
     // Limit fields, access rights.
-    if (virt8086) 
+    if (virt8086)
     {
 	if  (i_cs_base != ((u32_t) i_cs_sel.raw) << 4)
 	    printf("%x vs %x\n", i_cs_base, i_cs_sel.raw);
@@ -651,9 +684,9 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
 	ASSERT(i_ds_attr.raw == 0x000000F3);
 	ASSERT(i_es_attr.raw == 0x000000F3);
 	ASSERT(i_fs_attr.raw == 0x000000F3);
-	ASSERT(i_gs_attr.raw == 0x000000F3);	 
+	ASSERT(i_gs_attr.raw == 0x000000F3);
     }
-    else 
+    else
     {
 	// CS.
 	ASSERT ((i_cs_attr.type & (1<<0)) != 0);
@@ -793,7 +826,7 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
     } // Access Rights (!virt8086)
 
     // TR.
-    if (!virt8086) 
+    if (!virt8086)
     {
 	ASSERT ((i_tr_attr.type == 3) ||
 		(i_tr_attr.type == 11));
@@ -841,22 +874,22 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
     if (i_entryctr.ia32e_mode == 1)
 	ASSERT ((i_rfl & X86_FLAGS_VM) == 0);
     if ((i_iif.valid == 1) &&
-	(i_iif.type == vmcs_int_t::ext_int))
+	(i_iif.type == VMCS_INT_EXT_INT))
 	ASSERT((i_rfl & (X86_FLAGS_IF)) != 0);
 
     // Activity State	(22.3.1.5)
     ASSERT(i_as.raw <= 3);
-    if (i_as.state == vmcs_gs_as_t::hlt)
+    if (i_as.state == VMCS_AS_HLT)
 	ASSERT(i_ss_attr.dpl == 0);
     if ((i_ias.bl_movss == 1) || (i_ias.bl_sti == 1))
-	ASSERT(i_as.state == vmcs_gs_as_t::active);
+	ASSERT(i_as.state == VMCS_AS_ACTIVE);
     if (i_iif.valid == 1)
     {
-	if (i_as.state == vmcs_gs_as_t::hlt)
+	if (i_as.state == VMCS_AS_HLT)
 	    enter_kdebug("checks missing hlt");
-	if (i_as.state == vmcs_gs_as_t::shutdown)
+	if (i_as.state == VMCS_AS_SHUTDOWN)
 	    enter_kdebug("checks missing shutdown");
-	if (i_as.state == vmcs_gs_as_t::wf_ipi)
+	if (i_as.state == VMCS_AS_WF_IPI)
 	    enter_kdebug("checks missing wait-for-ipi");
     }
 
@@ -865,7 +898,7 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
     ASSERT( !((i_ias.bl_sti == 1) && (i_ias.bl_movss == 1)));
     if ((i_rfl & X86_FLAGS_IF) == 0)
 	ASSERT(i_ias.bl_sti == 0);
-    if ((i_iif.valid == 1) & (i_iif.type == vmcs_int_t::ext_int))
+    if ((i_iif.valid == 1) & (i_iif.type == VMCS_INT_EXT_INT))
     {
 	ASSERT(i_ias.bl_sti == 0);
 	ASSERT(i_ias.bl_movss == 0);
@@ -879,14 +912,14 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
 	ASSERT(i_ias.bl_sti == 0);
 
     // Pending debug exceptions.
-    vmcs_gs_pend_dbg_except_t i_pend_dbg_except = pend_dbg_except;
+    i_pend_dbg_except = vmcs_gs_get_pend_dbg_except (self);
     ASSERT((i_pend_dbg_except.raw & (BITS_11_04 | (1UL<<13) | BITS_63_15)) == 0);
     if ((i_ias.bl_sti == 1) ||
 	(i_ias.bl_movss == 1) ||
-	(i_as.state == vmcs_gs_as_t::hlt))
+	(i_as.state == VMCS_AS_HLT))
     {
 	// To tight checks.
-	u64_t debugctl = dbg_ctl;
+	u64_t debugctl = vmcs_gs_get_dbg_ctl (self);
 
 	if (((i_rfl & X86_FLAGS_TF) != 0) && ((debugctl & 1) == 0))
 	    ASSERT(i_pend_dbg_except.bs == 1);
@@ -896,19 +929,19 @@ void vmcs_gsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_int_t i_
     }
 
     // VMCS Link Pointer.		(22.3.1.5)
-    ASSERT((u64_t)linkptr == (-1ULL));
+    ASSERT(vmcs_gs_get_linkptr (self) == (-1ULL));
 }
 
 
-void vmcs_hsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_exitctr_t i_exitctr)
+void vmcs_hsarea_do_vmentry_checks (vmcs_t *self, vmcs_entryctr_t i_entryctr, vmcs_exitctr_t i_exitctr)
 {
     // CRs		(22.2.2)
     word_t i_cr0, i_cr4;
-    i_cr0 = cr0;
-    i_cr4 = cr4;
+    i_cr0 = vmcs_hs_get_cr0 (self);
+    i_cr4 = vmcs_hs_get_cr4 (self);
 
-    ASSERT(x86_x32_vmx_t::check_fixed_bits_cr0 (i_cr0));
-    ASSERT(x86_x32_vmx_t::check_fixed_bits_cr4 (i_cr4));
+    ASSERT(x86_x32_vmx_check_fixed_bits_cr0 (i_cr0));
+    ASSERT(x86_x32_vmx_check_fixed_bits_cr4 (i_cr4));
 
     if (i_exitctr.host_as_sz == 1)
 	ASSERT((i_cr4 & X86_CR4_PAE) == 1);
@@ -916,10 +949,11 @@ void vmcs_hsarea_t::do_vmentry_checks (vmcs_entryctr_t i_entryctr, vmcs_exitctr_
     // Checks Related to Address Space Size.
     if (i_exitctr.host_as_sz == 0)
     {
+	u64_t i_rip;
+
 	ASSERT(i_entryctr.ia32e_mode == 0);
 
-	u64_t i_rip;
-	i_rip = rip;
+	i_rip = vmcs_hs_get_rip (self);
 	ASSERT((i_rip & (BITS_63_32)) == 0);
     }
 }

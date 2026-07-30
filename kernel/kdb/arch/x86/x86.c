@@ -66,8 +66,8 @@ CMD(cmd_reset, cg)
 #endif
 #if defined(CONFIG_X_X86_HVM)
     // Have to disable VMX Root Mode to reboot CPU.
-    if (x86_x32_vmx_t::is_enabled ())
-	x86_x32_vmx_t::disable ();
+    if (x86_x32_vmx_is_enabled ())
+	x86_x32_vmx_disable ();
 #endif
     x86_reboot_scheduled = true;
     x86_reset();
@@ -270,10 +270,8 @@ CMD(cmd_show_lvt, cg)
 #endif
 
 
-/* CONFIG_X_X86_HVM is off in this config, so this block is preprocessed away
-   and cannot be compiled or exercised; translated to C by inspection only.
-   space_is_hvm_space / space_get_hvm_space / hvm_lookup_gphys_addr do not
-   exist yet -- an HVM port must supply them. */
+/* space_is_hvm_space and space_get_hvm_space are in glue/v4-x86/space.h; the
+   VTLB lookup is x86_hvm_space_lookup_gphys_addr (notes §134). */
 #if defined(CONFIG_X_X86_HVM)
 DECLARE_CMD(cmd_dump_gva, arch, 'd', "d",
 	    "dump HVM virtual address");
@@ -297,7 +295,7 @@ CMD(cmd_dump_gva, cg)
 
     addr_t gpaddr;
     
-    if (! hvm_lookup_gphys_addr (space_get_hvm_space (space), gvaddr, &gpaddr))
+    if (! x86_hvm_space_lookup_gphys_addr (space_get_hvm_space (space), gvaddr, &gpaddr))
 	return CMD_NOQUIT;
     
     memdump_loop (space, gpaddr);

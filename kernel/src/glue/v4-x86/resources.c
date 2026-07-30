@@ -107,7 +107,7 @@ void tcb_resources_purge(thread_resources_t * self, tcb_t * tcb)
 
 #if defined(CONFIG_X_X86_HVM)
     if (resource_bits_have_resource (&tcb->resource_bits, HVM))
-	tcb->get_arch()->disable_hvm ();	/* no C form yet; HVM is off here */
+	arch_hvm_ktcb_disable_hvm (&tcb->arch.hvm);
 #endif
 }
 

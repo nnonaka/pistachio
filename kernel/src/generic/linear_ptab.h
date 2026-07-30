@@ -112,6 +112,24 @@ INLINE bool readmem_word (space_t * space, addr_t vaddr, word_t * v)
     return true;
 }
 
+/* readmem<u64_t>, used only by the HVM GDT/IDT dump.  The template's `case 8'
+   assigned the word_t it read straight through, so on a 32-bit word only the
+   low half of the descriptor comes back from user memory; kept as it was. */
+INLINE bool readmem_u64 (space_t * space, addr_t vaddr, u64_t * v)
+{
+    word_t w;
+
+    if (! space_is_user_area (vaddr))
+    {
+	*v = *(u64_t *) vaddr;
+	return true;
+    }
+    if (! space_readmem (space, vaddr, &w))
+	return false;
+    *v = (u64_t) w;
+    return true;
+}
+
 /* C reimplementations of the page-geometry helpers. The C++ versions above
    take word_t; C passes a word_t holding an X86_PGSIZE_* value. */
 INLINE word_t page_size (word_t pgsize)

@@ -240,11 +240,11 @@ void setup_msrs (void)
 #if defined(CONFIG_X_X86_HVM)
 void SECTION(".init.cpu") setup_vmx (cpuid_t cpuid)
 {
-    if (x86_x32_vmx_t::is_available())
+    if (x86_x32_vmx_is_available())
     {
-	x86_x32_vmx_t::enable();
+	x86_x32_vmx_enable();
 
-	if (!x86_x32_vmx_t::is_enabled())
+	if (!x86_x32_vmx_is_enabled())
 	    printf("Error enabling VMX on (CPU %d)\n", cpuid);
     }
     else

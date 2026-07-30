@@ -6142,3 +6142,127 @@ Nothing else moves: `x86-x32-p4-smp` and `x86-x64-p4-smp` are 635 and 706
 symbols against `0e13138` with 634 and 706 identical bodies, the one being
 `kernel_version_string`, which is the build date. All eleven x64
 configurations still compile.
+
+
+## §134 — HVM: the VMCS field template, and five more dropped `#if` blocks
+
+The two HVM configurations are the last x86 ones that did not compile. Five
+thousand lines across ten files: `arch/x86/vmx.h`, `arch/x86/x32/vmx.h` and
+`vmx.cc`, `glue/v4-x86/hvm.h`, `hvm-vtlb.h`, `hvm-space.h` and `hvm-space.cc`,
+and `glue/v4-x86/x32/hvm-vmx.h`, `hvm-vmx.cc` and `hvm-vtlb.cc`.
+
+The interesting one is `arch/x86/vmx.h`. A VMCS is a hardware-managed page
+whose fields are reachable only through VMREAD and VMWRITE, indexed by an
+encoding; upstream expressed that as
+
+    template<word_t index, typename T> class vmcs_field
+    {
+        T operator= (T val)
+            { ASSERT (x86_vmptrtest ((u64_t) (word_t) this));
+              x86_vmwrite (index, val.raw); return val; }
+        operator T ()
+            { ASSERT (x86_vmptrtest ((u64_t) (word_t) this));
+              T val; val.raw = x86_vmread (index); return val; }
+    };
+
+with specialisations for `word_t`, `u16_t` and `u64_t`, and a hundred and
+eleven typedefs binding an index to a type. A VMCS field then looked like a
+struct member: `vmcs->gs.cr0 = x` issued the VMWRITE. The empty field classes
+sat in unions, and the areas -- guest state, host state, the three control
+areas, exit information -- were themselves a union in `vmcs_t`, so every member
+address equalled the object's own address, which was the VMCS physical address;
+that is what the `x86_vmptrtest (this)` assertion checks.
+
+In C the field name becomes a pair of accessors over an explicit `vmcs_t *`,
+generated one line per field by three macros, and named
+`vmcs_<area>_get_<field>` / `vmcs_<area>_set_<field>`. The area no longer
+nests -- it was a union at offset zero, so the name only ever documented which
+part of the VMCS a field belongs to, and it is kept in the accessor name for
+exactly that. `vmcs->gs.cr0 = x` is `vmcs_gs_set_cr0 (vmcs, x)`. The macros are
+worth reading once: the struct-typed form uses `__typeof__ (val.raw)` so that
+the narrowing stays where upstream had it, rather than needing a cast per raw
+type. All 120 `VMCS_IDX_*` encodings and all 133 bitfield declarations are
+byte-for-byte the ones that were there; that was checked by extraction and diff
+rather than by eye.
+
+The nested enums flatten with prefixes -- `vmcs_ei_reason_t::be_cr` is
+`VMCS_BE_CR` -- and the enum-typed bitfields become `u32_t`, because C enum
+bitfields have implementation-defined signedness and every use site compares
+against the constants anyway. `vmcs_ei_vm_instr_t` and `vmcs_ei_qual_t` declared
+`gpr_e` and `mem_reg_e` identically, so one copy of each serves both.
+
+The inheritance chain `arch_ktcb_t : arch_hvm_ktcb_t : x86_svmx_hvm_t` is two
+levels of pure state, so the two bases merge into one `arch_hvm_ktcb_t` --
+base members first, in order, so the layout is what the chain produced -- and
+`arch_ktcb_t` holds it by value as `hvm`. `addr_to_tcb()` still recovers the TCB
+from a pointer to it, which is how the HVM code finds its own TCB. The one
+subtlety is the ctrlxfer tables: they hold pointers to member *of
+`arch_ktcb_t`*, which is what `get_ctrlxfer_regs_t` describes, so the twelve
+HVM get/set entries keep that signature and open with
+`arch_hvm_ktcb_t *self = &ktcb->hvm;`.
+
+**Five more dropped `#if` blocks**, all `CONFIG_X_X86_HVM`, all the §95/§116/§123
+pattern:
+
+  - `glue/v4-x86/space.c`: `space_add_tcb` and `space_remove_tcb` lost the
+    VCPU enqueue/dequeue, and both the SMP and non-SMP `space_flush_tlb` /
+    `space_flush_tlbent` lost the `handle_gphys_unmap` that invalidates the
+    VTLBs. Four hooks; without them a VTLB would keep stale entries across
+    every TLB flush.
+  - `glue/v4-x86/x32/space.c`: `space_control` lost the `v` bit that activates
+    virtualization for a space -- so `SpaceControl` could never turn HVM on.
+  - `glue/v4-x86/thread.c`: `tcb_return_from_ipc` lost the early return for
+    threads holding the HVM resource.
+  - `glue/v4-x86/space.h`: `get_hvm_space` and `is_hvm_space` went with the
+    `__cplusplus` collapse and are back as `space_get_hvm_space` /
+    `space_is_hvm_space`.
+  - and one that is not HVM at all: `tcb_create_startup_stack` in
+    `glue/v4-x86/thread.c` had both its `#if` blocks replaced by the comment
+    "CONFIG_X_X86_HVM / CONFIG_X86_COMPATIBILITY_MODE are off in this config".
+    The second is not off -- `x86-x64-p4-cm` sets it, and the block is what
+    gives a 32-bit thread `X86_UCS32` instead of `X86_UCS` for its startup
+    frame. That configuration compiled and was reported as "does not get past
+    kickstart" in §131, so nothing ever executed the wrong selector; the reason
+    it does not get that far is a kickstart link-base conflict between the
+    compatibility-mode kernel image and the x64 sigma0, which is a build-layout
+    problem and still open. Restoring the block is the only change in this
+    commit that moves code in a non-HVM configuration: `x86-x64-p4-cm` is 553
+    symbols with 550 identical bodies, the three being
+    `tcb_create_startup_stack` itself, the constructor table that shifted
+    because it grew, and the build date.
+
+Three smaller gaps, of the `get_user_frame` kind from §133 -- declared or
+called and defined nowhere:
+
+  - `min()` was already noted in `generic/lib.h` as defined nowhere upstream;
+    `hvm-vtlb.c` is the first x86 caller and simply needed the include.
+  - `readmem<u64_t>` had no C form; the HVM GDT/IDT dump is its only user. Note
+    that the template's `case 8` assigned the `word_t` it read straight
+    through, so from user memory only the low half of a descriptor ever came
+    back. Kept as it was.
+  - `pgent_t::is_global (space, pgsize)` had no C form either; `hvm-vtlb.c` is
+    its only caller.
+
+`CONFIG_IO_FLEXPAGES`, which gates four blocks in `hvm-vmx.cc` and one in
+`hvm-space.cc`, is spelled `CONFIG_X86_IO_FLEXPAGES` everywhere else in the
+tree. Those blocks are unreachable, and one of them calls a
+`create_io_bitmap` that exists nowhere; they are translated by inspection and
+marked, not fixed.
+
+Both HVM configurations compile, link and boot to the `l4test` menu, and so
+does the pair with `CONFIG_KDB_DISAS` forced on, which is the only way to
+compile the HVM arm of `kdb/arch/x86/x32/disas.c` -- no shipped configuration
+sets both. All twenty x32 and all eleven x64 configurations compile. Nothing
+moves outside HVM except the compatibility-mode block above:
+`x86-x32-p4-smp` is 635 symbols with 634 identical bodies and `x86-x64-p4-smp`
+706 with 706, against `0e13138`, the one difference being the build date.
+
+`kernel/src/arch/x86/x64/init.cc` is in no `SOURCES`; the remaining `.cc` files
+that are, `platform/efi/acpi.cc` and `kdb/generic/acpi.cc`, are gated on
+`CONFIG_ACPI`, which no shipped x86 configuration sets. So no x86
+configuration in `contrib/configs` compiles a C++ translation unit any more.
+
+The new code carries nineteen `-Wconversion` / `-Wsign-conversion` warnings,
+all narrowings that were implicit in the C++ (MSR reads into `word_t`, the
+`s32_t` one-bit flags in `vmcs_exectr_pinbased_t`, the 4-bit `cr_num` field).
+They are faithful and left alone.

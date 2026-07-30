@@ -699,6 +699,9 @@ static void tag_flush_remote (space_t * curspace, bool force)
 
 void space_flush_tlb (space_t *self, space_t *curspace)
 {
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_handle_gphys_unmap (space_get_hvm_space (self), 0, -1UL);
+#endif
     if (self == curspace || IS_SPACE_SMALL (self))
 	x86_mmu_flush_tlb (IS_SPACE_GLOBAL (self));
     tag_flush_remote (self, false);
@@ -707,6 +710,9 @@ void space_flush_tlb (space_t *self, space_t *curspace)
 void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t log2size)
 {
     (void) log2size;
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_handle_gphys_unmap (space_get_hvm_space (self), addr, log2size);
+#endif
     /* js: for kernel addresses, we force an immediate remote flush */
     bool force = !space_is_user_area (addr);
     if (self == curspace || IS_SPACE_SMALL (self))
@@ -788,6 +794,9 @@ void space_free_cpu_top_pdir (space_t *self, cpuid_t cpu)
  */
 void space_flush_tlb (space_t *self, space_t *curspace)
 {
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_handle_gphys_unmap (space_get_hvm_space (self), 0, -1UL);
+#endif
     if (self == curspace || IS_SPACE_SMALL (self))
 	x86_mmu_flush_tlb (IS_SPACE_GLOBAL (self));
 }
@@ -800,6 +809,9 @@ void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr,
 			 word_t log2size)
 {
     (void) log2size;
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_handle_gphys_unmap (space_get_hvm_space (self), addr, log2size);
+#endif
     if (self == curspace || IS_SPACE_SMALL (self))
 	x86_mmu_flush_tlbent ((word_t) addr);
 }
@@ -1119,6 +1131,9 @@ void space_add_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)
 #if defined(CONFIG_SMP)
     atomic_inc (&self->base.data.cpu_ptab[cpu].thread_count);
 #endif
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_enqueue_tcb (space_get_hvm_space (self), tcb, self);
+#endif
 }
 bool space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)
 {
@@ -1128,6 +1143,9 @@ bool space_remove_tcb (space_t *self, tcb_t *tcb, cpuid_t cpu)
 #if defined(CONFIG_SMP)
     ASSERT (atomic_read (&self->base.data.cpu_ptab[cpu].thread_count) != 0);
     atomic_dec (&self->base.data.cpu_ptab[cpu].thread_count);
+#endif
+#if defined(CONFIG_X_X86_HVM)
+    x86_hvm_space_dequeue_tcb (space_get_hvm_space (self), tcb, self);
 #endif
     return (atomic_read (&self->base.data.thread_count) == 0);
 }

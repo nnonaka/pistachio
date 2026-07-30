@@ -216,6 +216,15 @@ word_t space_t_space_control (space_t * self, word_t ctrl, fpage_t kip_area, fpa
     u64_t physaddr;
     int i;
 
+#if defined(CONFIG_X_X86_HVM)
+    // Check if 'v' bit is set.
+    if (ctrl & (1 << 30))
+    {
+    if (x86_hvm_space_activate (space_get_hvm_space (self), self))
+        return (1 << 30);
+    }
+#endif
+
     if ((ctrl & (1 << 29)) && (sizeof(paddr_t) != sizeof(u32_t))) {
 	for (i = 0; i < TRANSLATION_TABLE_ENTRIES; ++i) {
 		if (transTable[i].size > 0)

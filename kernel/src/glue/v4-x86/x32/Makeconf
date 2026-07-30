@@ -57,7 +57,7 @@ SOURCES+=	src/glue/$(API)-$(ARCH)/$(SUBARCH)/smallspaces.c
 endif
 
 ifeq ("$(CONFIG_X_X86_HVM)","y")
-SOURCES += 	$(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, hvm-vmx.cc hvm-vtlb.cc)
+SOURCES += 	$(addprefix src/glue/$(API)-$(ARCH)/$(SUBARCH)/, hvm-vmx.c hvm-vtlb.c)
 endif
 
 ifeq ("$(CONFIG_X_EVT_LOGGING)","y")

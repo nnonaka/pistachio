@@ -40,7 +40,7 @@ SOURCES += src/glue/v4-x86/timer.c
 endif
 
 ifeq ("$(CONFIG_X_X86_HVM)","y")
-SOURCES += 	$(addprefix src/glue/$(API)-$(ARCH)/, hvm-space.cc)
+SOURCES += 	$(addprefix src/glue/$(API)-$(ARCH)/, hvm-space.c)
 endif
 
 ifeq ("$(CONFIG_X86_IO_FLEXPAGES)","y")

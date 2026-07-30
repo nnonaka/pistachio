@@ -43,27 +43,14 @@
 #include INC_ARCH(trapgate.h)
 #include INC_ARCH(vmx.h)
 
+/*
+ * Was class x86_x32_vmx_t, all of whose members were static -- a namespace
+ * rather than an object.  In C the members are free functions carrying the
+ * class name as a prefix, and the private vmxon is file-static in the header
+ * (its only caller, x86_x32_vmx_enable, is here too).
+ */
 
-class x86_x32_vmx_t
-{
-public:
-    static bool is_available ();
-    static bool is_enabled ();
-    static bool enable ();
-    static void disable ();
-
-    NORETURN static void vmlaunch (x86_exceptionframe_t *frame);
-    NORETURN static void vmresume (x86_exceptionframe_t *frame);
-
-    static bool check_fixed_bits_cr0 (u64_t cr0);
-    static bool check_fixed_bits_cr4 (u64_t cr4);
-
-private:
-    static bool vmxon (vmcs_t *vmcs);
-};
-
-
-INLINE bool x86_x32_vmx_t::is_available ()
+INLINE bool x86_x32_vmx_is_available (void)
 {
     if (!x86_x32_has_cpuid())
 	return false;
@@ -75,15 +62,71 @@ INLINE bool x86_x32_vmx_t::is_available ()
 }
 
 
-INLINE bool x86_x32_vmx_t::is_enabled ()
+INLINE bool x86_x32_vmx_is_enabled (void)
 {
     return x86_cr4_read() & X86_CR4_VMXE;
 }
 
 
-INLINE bool x86_x32_vmx_t::enable ()
+INLINE bool x86_x32_vmx_check_fixed_bits_cr0 (u64_t cr0)
+{
+    u64_t ncr0;
+    u64_t FIXED0 = x86_rdmsr (X86_MSR_VMX_CR0_FIXED0);
+    u64_t FIXED1 = x86_rdmsr (X86_MSR_VMX_CR0_FIXED1);
+
+    // Fixed 0s.
+    ncr0 = cr0 | FIXED0;
+    // Fixed 1s.
+    ncr0 = FIXED1 & ncr0;
+
+    return cr0 == ncr0;
+}
+
+INLINE bool x86_x32_vmx_check_fixed_bits_cr4 (u64_t cr4)
+{
+    u64_t ncr4;
+    u64_t FIXED0 = x86_rdmsr (X86_MSR_VMX_CR4_FIXED0);
+    u64_t FIXED1 = x86_rdmsr (X86_MSR_VMX_CR4_FIXED1);
+
+    // Fixed 0s.
+    ncr4 = cr4 | FIXED0;
+    // Fixed 1s.
+    ncr4 = FIXED1 & ncr4;
+
+    return cr4 == ncr4;
+}
+
+
+INLINE bool x86_x32_vmx_vmxon (vmcs_t *vmcs)
+{
+     ASSERT((x86_cr4_read() & X86_CR4_VMXE) != 0);
+     ASSERT((x86_cr0_read() & X86_CR0_PE) != 0);
+
+     x86_cr0_set(X86_CR0_NE);
+
+     ASSERT((x86_cr0_read() & X86_CR0_NE) != 0);
+     ASSERT((x86_rdmsr(X86_MSR_FEATURE_CONTROL) & X86_MSR_FEAT_CTR_LOCK) != 0);
+     ASSERT((x86_rdmsr(X86_MSR_FEATURE_CONTROL) & X86_MSR_FEAT_CTR_ENABLE_VMXON) != 0);
+
+     // Test CR0.
+     if (!x86_x32_vmx_check_fixed_bits_cr0(x86_cr0_read()))
+	 return false;
+
+     // Test CR4.
+     if (!x86_x32_vmx_check_fixed_bits_cr4(x86_cr4_read()))
+	 return false;
+
+     // Enter VMX-Root Mode.
+     x86_vmxon((u64_t) (word_t) vmcs);
+
+     return true;
+}
+
+
+INLINE bool x86_x32_vmx_enable (void)
 {
     u64_t val;
+    vmcs_t *vmcs;
 
     // Check VMXON Instruction.
     val = x86_rdmsr(X86_MSR_FEATURE_CONTROL);
@@ -103,48 +146,22 @@ INLINE bool x86_x32_vmx_t::enable ()
     x86_cr4_set(X86_CR4_VMXE);
 
     // Initialize VMXON Region.
-    vmcs_t *vmcs = vmcs_t::alloc_vmcs();
+    vmcs = vmcs_alloc_vmcs();
 
     // VMXON.
-    x86_x32_vmx_t::vmxon(vmcs);
+    x86_x32_vmx_vmxon(vmcs);
 
     return true;
 }
 
 
-INLINE bool x86_x32_vmx_t::vmxon (vmcs_t *vmcs)
-{
-     ASSERT((x86_cr4_read() & X86_CR4_VMXE) != 0);
-     ASSERT((x86_cr0_read() & X86_CR0_PE) != 0);
-
-     x86_cr0_set(X86_CR0_NE);
-
-     ASSERT((x86_cr0_read() & X86_CR0_NE) != 0);
-     ASSERT((x86_rdmsr(X86_MSR_FEATURE_CONTROL) & X86_MSR_FEAT_CTR_LOCK) != 0);
-     ASSERT((x86_rdmsr(X86_MSR_FEATURE_CONTROL) & X86_MSR_FEAT_CTR_ENABLE_VMXON) != 0);
-
-     // Test CR0.
-     if (!x86_x32_vmx_t::check_fixed_bits_cr0(x86_cr0_read()))
-	 return false;
-
-     // Test CR4.
-     if (!x86_x32_vmx_t::check_fixed_bits_cr4(x86_cr4_read()))
-	 return false;
-
-     // Enter VMX-Root Mode.
-     x86_vmxon((u64_t) (word_t) vmcs);
-
-     return true;
-}
-
-
-INLINE void x86_x32_vmx_t::disable ()
+INLINE void x86_x32_vmx_disable (void)
 {
     x86_vmxoff();
 }
 
 
-INLINE void NORETURN x86_x32_vmx_t::vmlaunch (x86_exceptionframe_t *frame)
+INLINE void NORETURN x86_x32_vmx_vmlaunch (x86_exceptionframe_t *frame)
 {
     asm volatile (
 	// Load VM's GPRs.
@@ -158,7 +175,7 @@ INLINE void NORETURN x86_x32_vmx_t::vmlaunch (x86_exceptionframe_t *frame)
 	// Other fields are read from VMCS.
 	"	vmlaunch                       \n"
 	:
-	: "a" (&frame->reason)
+	: "a" (&frame->__base.reason)
 	: "ebx", "ecx", "edx", "edi", "esi", "ebp", "memory");
 
     // Failure on VM-Entry.
@@ -166,7 +183,7 @@ INLINE void NORETURN x86_x32_vmx_t::vmlaunch (x86_exceptionframe_t *frame)
 }
 
 
-INLINE NORETURN void x86_x32_vmx_t::vmresume (x86_exceptionframe_t *frame)
+INLINE NORETURN void x86_x32_vmx_vmresume (x86_exceptionframe_t *frame)
 {
     asm volatile (
 	// Load VM's GPRs.
@@ -180,40 +197,11 @@ INLINE NORETURN void x86_x32_vmx_t::vmresume (x86_exceptionframe_t *frame)
 	// Other fields are read from VMCS.
 	"	vmresume                       \n"
 	:
-	: "a" (&frame->reason)
+	: "a" (&frame->__base.reason)
 	: "ecx", "edx", "edi", "esi", "ebp", "memory");
 
     // Failure on VM-Entry.
     panic("x86-hvm: vmresume failed\n");
-}
-
-
-INLINE bool x86_x32_vmx_t::check_fixed_bits_cr0 (u64_t cr0)
-{
-    u64_t ncr0;
-    u64_t FIXED0 = x86_rdmsr (X86_MSR_VMX_CR0_FIXED0);
-    u64_t FIXED1 = x86_rdmsr (X86_MSR_VMX_CR0_FIXED1);
-
-    // Fixed 0s.
-    ncr0 = cr0 | FIXED0;
-    // Fixed 1s.
-    ncr0 = FIXED1 & ncr0;
-
-    return cr0 == ncr0;
-}
-
-INLINE bool x86_x32_vmx_t::check_fixed_bits_cr4 (u64_t cr4)
-{
-    u64_t ncr4;
-    u64_t FIXED0 = x86_rdmsr (X86_MSR_VMX_CR4_FIXED0);
-    u64_t FIXED1 = x86_rdmsr (X86_MSR_VMX_CR4_FIXED1);
-
-    // Fixed 0s.
-    ncr4 = cr4 | FIXED0;
-    // Fixed 1s.
-    ncr4 = FIXED1 & ncr4;
-
-    return cr4 == ncr4;
 }
 
 

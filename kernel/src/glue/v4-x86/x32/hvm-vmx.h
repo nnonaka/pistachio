@@ -37,8 +37,8 @@
 #include INC_GLUE(hvm-vtlb.h)
 
 
-class tcb_t;
-class x86_exceptionframe_t;
+struct tcb_t;
+typedef struct tcb_t tcb_t;
 
 #define X86_HVM_NUM_CREGS           8
 #define X86_HVM_NUM_DREGS           8
@@ -84,31 +84,20 @@ class x86_exceptionframe_t;
 				     X86_CR4_OSFXSR | X86_CR4_OSXMMEXCPT)
 
 
-class x32_hvm_vmx_t
+/*
+ * Was class x32_hvm_vmx_t, typedef'd to x86_svmx_hvm_t and inherited by
+ * arch_hvm_ktcb_t (glue/v4-x86/hvm.h), which arch_ktcb_t in turn inherited.
+ * A two-deep single-inheritance chain of pure state is one struct in C, so the
+ * two levels are merged here -- base members first, in their original order, so
+ * the layout is the one the C++ chain produced -- and hvm.h declares the
+ * arch-neutral half of the interface over it.  arch_ktcb_t holds it by value
+ * under the name `hvm' (see x32/ktcb.h).
+ *
+ * The x86_svmx_hvm_t alias is kept: it named "whichever of VMX and SVM this
+ * subarchitecture implements", and only the VMX half exists.
+ */
+struct arch_hvm_ktcb_t
 {
-protected:
-    bool load_vmcs()
-	{ return (vmcs && vmcs->load()); }
-
-    /* Initialize L4-specific VMCS data. */
-    void init_vmcs ();
-
-#if defined(CONFIG_IO_FLEXPAGES)
-    /* Set I/O permission bitmap. */
-    void set_io_pbm (addr_t paddr);
-#endif
-
-    /* Handle specific vmexit reasons. */
-    bool handle_debug_exit(vmcs_ei_qual_t qual);
-    bool handle_nomath_exit ();
-    bool handle_pagefault_exit (vmcs_ei_qual_t qual);
-    void handle_invd_exit ();
-    void handle_invlpg_exit (vmcs_ei_qual_t qual);
-
-
-    /* Save/restore DRs. */
-    void save_guest_drs ();
-    void restore_guest_drs  ();
 #if defined(CONFIG_DEBUG)
     /* Logic to pass through KDB DRs */
     word_t kdb_dr_mask;
@@ -117,11 +106,10 @@ protected:
     /* VCPU parts */
     vmcs_t *vmcs;
     x86_hvm_vtlb_t vtlb;
-   
+
 
     /* Virtual registers cache. */
     word_t guest_dr[8];
-    static word_t host_dr[8];
     word_t guest_cr2;
 
     word_t guest_cr0_mask;
@@ -147,12 +135,38 @@ protected:
 	bool bp;
 	bool db;
     } flags;
-    
-    friend class x86_hvm_space_t;
 
+    /* Were arch_hvm_ktcb_t's own members, after the base above. */
+    bool		hvm_enabled;
+    ringlist_tcb_t	space_list;
 };
+typedef struct arch_hvm_ktcb_t arch_hvm_ktcb_t;
+typedef struct arch_hvm_ktcb_t x86_svmx_hvm_t;
 
-typedef x32_hvm_vmx_t x86_svmx_hvm_t;
+/* Was the static member x32_hvm_vmx_t::host_dr. */
+extern word_t x86_hvm_host_dr[8];
+
+INLINE bool arch_hvm_ktcb_load_vmcs (arch_hvm_ktcb_t *self)
+{ return (self->vmcs && vmcs_load (self->vmcs)); }
+
+/* Initialize L4-specific VMCS data. */
+void arch_hvm_ktcb_init_vmcs (arch_hvm_ktcb_t *self);
+
+#if defined(CONFIG_IO_FLEXPAGES)
+/* Set I/O permission bitmap. */
+void arch_hvm_ktcb_set_io_pbm (arch_hvm_ktcb_t *self, addr_t paddr);
+#endif
+
+/* Handle specific vmexit reasons. */
+bool arch_hvm_ktcb_handle_debug_exit (arch_hvm_ktcb_t *self, vmcs_ei_qual_t qual);
+bool arch_hvm_ktcb_handle_nomath_exit (arch_hvm_ktcb_t *self);
+bool arch_hvm_ktcb_handle_pagefault_exit (arch_hvm_ktcb_t *self, vmcs_ei_qual_t qual);
+void arch_hvm_ktcb_handle_invd_exit (arch_hvm_ktcb_t *self);
+void arch_hvm_ktcb_handle_invlpg_exit (arch_hvm_ktcb_t *self, vmcs_ei_qual_t qual);
+
+/* Save/restore DRs. */
+void arch_hvm_ktcb_save_guest_drs (arch_hvm_ktcb_t *self);
+void arch_hvm_ktcb_restore_guest_drs (arch_hvm_ktcb_t *self);
 
 
 

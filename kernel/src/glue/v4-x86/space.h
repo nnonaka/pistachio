@@ -27,6 +27,18 @@ struct space_t {
 };
 typedef struct space_t space_t;
 
+#if defined(CONFIG_X_X86_HVM)
+/* Were space_t::get_hvm_space / ::is_hvm_space; the hvm_space member is in the
+   subarchitecture's x86_space_t::data (see x32/space.h). */
+INLINE x86_hvm_space_t * space_get_hvm_space (space_t *self)
+{ return &self->base.data.hvm_space; }
+
+INLINE bool space_is_hvm_space (space_t *self)
+{ return EXPECT_FALSE (x86_hvm_space_is_active (space_get_hvm_space (self))); }
+#else
+INLINE bool space_is_hvm_space (space_t *self) { (void) self; return false; }
+#endif
+
 #if defined(CONFIG_X86_COMPATIBILITY_MODE)
 INLINE bool space_is_compatibility_mode (space_t *self)
 {

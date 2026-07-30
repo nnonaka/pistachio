@@ -77,17 +77,6 @@ restart:
 }
 
 #if defined(CONFIG_X_X86_HVM)
-/*
- * NOT CONVERTED.  This command reaches into space_t's HVM members through
- * x86_hvm_space_t and tcb_t's ctrlxfer registers, and every one of those is
- * still C++ -- x32/hvm-vmx.cc, x32/hvm-vtlb.cc and arch/x86/x32/vmx.cc are
- * the last unconverted x86 sources.  The HVM configurations do not build for
- * that reason, so this body has never been compiled either; converting it
- * against headers that will change when they are converted is how the
- * gate-blind rewrites of §95, §116 and §123 happened.
- */
-#error CONFIG_X_X86_HVM: x32 HVM is not converted (see kdb/arch/x86/x32/disas.c)
-
 DECLARE_CMD(cmd_disas_hvm, arch, 'U', "disas", "disassemble HVM");
 
 CMD(cmd_disas_hvm, cg)
@@ -101,32 +90,32 @@ CMD(cmd_disas_hvm, cg)
     bool real_mode;
 restart:
     
-    if (current_disas_space && current_disas_space->is_hvm_space())
+    if (current_disas_space && space_is_hvm_space (current_disas_space))
     {
-	tcb = current_disas_space->get_hvm_space()->get_tcb_list();
+	tcb = x86_hvm_space_get_tcb_list (space_get_hvm_space (current_disas_space));
 	ASSERT(tcb);
-	pc = (u32_t) tcb->get_user_ip();
-	real_mode = tcb->get_user_flags() & X86_FLAGS_VM;
+	pc = (u32_t) (word_t) tcb_get_user_ip (tcb);
+	real_mode = tcb_get_user_flags (tcb) & X86_FLAGS_VM;
 	
 	if (real_mode)
-	    pc += tcb->arch.get_ctrlxfer_reg(ctrlxfer_item_t::id_csregs, 1);
+	    pc += arch_ktcb_get_ctrlxfer_reg (&tcb->arch, id_csregs, 1);
     }
 	    
-    if ((pc = get_hex("IP", f->eip)) == ABORT_MAGIC)
+    if ((pc = get_hex("IP", f->__base.regs[X86_EXC_IPREG], NULL)) == ABORT_MAGIC)
 	return CMD_NOQUIT;
 
     current_disas_space = get_space ("Space");
-    if (!current_disas_space) current_disas_space = get_kernel_space();
+    if (!current_disas_space) current_disas_space = get_kernel_space_c();
 
-    if (!current_disas_space->is_hvm_space())
+    if (!space_is_hvm_space (current_disas_space))
 	return CMD_NOQUIT;
 
-    if (! current_disas_space->get_hvm_space()->lookup_gphys_addr ((addr_t) pc, (addr_t *) &pc))
+    if (! x86_hvm_space_lookup_gphys_addr (space_get_hvm_space (current_disas_space), (addr_t) pc, (addr_t *) &pc))
 	return CMD_NOQUIT;
 
-    tcb = current_disas_space->get_hvm_space()->get_tcb_list();
+    tcb = x86_hvm_space_get_tcb_list (space_get_hvm_space (current_disas_space));
     ASSERT(tcb);
-    real_mode = tcb->get_user_flags() & X86_FLAGS_VM;
+    real_mode = tcb_get_user_flags (tcb) & X86_FLAGS_VM;
     
     
     printf("Key strokes: [space]=next instruction, u=new IP, q=quit\n");

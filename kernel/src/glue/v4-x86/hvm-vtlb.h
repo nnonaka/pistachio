@@ -34,89 +34,81 @@
 
 #include INC_ARCH_SA(ptab.h)
 
-class arch_hvm_ktcb_t;
+struct arch_hvm_ktcb_t;
+typedef struct arch_hvm_ktcb_t arch_hvm_ktcb_t;
+struct space_t;
 
-
-class x86_hvm_vtlb_t
+/*
+ * Was class x86_hvm_vtlb_t.  The methods become x86_hvm_vtlb_* functions taking
+ * the receiver first; the two overload pairs -- flush_gphys / flush_gvirt /
+ * flush_hpdir with and without an address -- keep the no-argument name and gain
+ * an _addr suffix for the one that takes one.
+ */
+struct x86_hvm_vtlb_t
 {
-public:
-    bool alloc (space_t *space);
-    void free ();
-
-    /* Flush a gphys mapping from all VTLBs. */
-    void flush_gphys () 
-	{ flush_hpdir(hpdir_paged); flush_hpdir(hpdir_nonpaged); }
-    void flush_gphys (addr_t gvaddr)
-	{ flush_hpdir(hpdir_paged, gvaddr); flush_hpdir(hpdir_nonpaged, gvaddr); }
-
-    /* Flush a gvirt mapping from the current VTLB. */
-    void flush_gvirt () 
-	{ flush_hpdir(hpdir);  }
-    void flush_gvirt (addr_t gvaddr)
-	{ flush_hpdir(hpdir, gvaddr); }
-
-    
-    word_t get_active_top_pdir ()
-	{ return virt_to_phys ((word_t) hpdir);	}
-
-    void set_guest_top_pdir (pgent_t *pdir)
-	{ gpdir = pdir; }
-
-    pgent_t *get_guest_top_pdir ()
-	{ return gpdir; }
-
-    void set_pe (bool pe) { flags.pe = pe; hpdir = pe ? hpdir_paged : hpdir_nonpaged; }
-    void set_wp (bool wp) { flags.wp = wp; };
-    void set_pg (bool pg) { flags.pg = pg; }
-
-    /* Called on a VTLB miss. */
-    bool handle_vtlb_miss (addr_t gvaddr, word_t access);
-
-    /* Lookup guest-virtual memory. */
-    bool lookup_gphys_addr (addr_t gvaddr, addr_t *gpaddr);
-
-    /* Lookup guest-virtual memory and dump corresponding ptab entry */
-    bool dump_ptab_entry (addr_t gvaddr);
-	
-private:
-    
-    /* Insert mapping into VTLB. */
-    void set_gphys_entry (addr_t gvaddr, addr_t gpaddr, pgent_t::pgsize_e gvpgsz, 
-			  word_t rwx, word_t attrib, bool kernel, bool global,
-			  word_t access);
-
-    /* Insert actual VTLB entry. */
-    void set_hphys_entry (addr_t gvaddr, addr_t hpaddr, pgent_t::pgsize_e hpgsz, 
-		    word_t rwx, word_t attrib, bool kernel, bool global);
-
-
-private:
-    
-    /* Flush the VTLB or the entry related to an address. */
-    void flush_hpdir (pgent_t *pdir);
-    void flush_hpdir (pgent_t *pdir, addr_t gvaddr);
-
     /* Unpaged host pdir */
     pgent_t *hpdir_nonpaged;
     pgent_t *hpdir_paged;
 
     /* Current host pdir (shadow page table) */
     pgent_t *hpdir;
-    
+
     /* Guest pdir ptr */
     pgent_t *gpdir;
     /* Guest physical space */
-    space_t	*space;
-    
+    struct space_t *space;
+
     /* Virtual register change flags */
     struct {
 	bool wp;
 	bool pg;
 	bool pe;
     } flags;
-
 };
+typedef struct x86_hvm_vtlb_t x86_hvm_vtlb_t;
 
+bool x86_hvm_vtlb_alloc (x86_hvm_vtlb_t *self, struct space_t *space);
+void x86_hvm_vtlb_free (x86_hvm_vtlb_t *self);
+
+/* Flush the VTLB or the entry related to an address.  Were private. */
+void x86_hvm_vtlb_flush_hpdir (x86_hvm_vtlb_t *self, pgent_t *pdir);
+void x86_hvm_vtlb_flush_hpdir_addr (x86_hvm_vtlb_t *self, pgent_t *pdir, addr_t gvaddr);
+
+/* Flush a gphys mapping from all VTLBs. */
+INLINE void x86_hvm_vtlb_flush_gphys (x86_hvm_vtlb_t *self)
+{ x86_hvm_vtlb_flush_hpdir (self, self->hpdir_paged); x86_hvm_vtlb_flush_hpdir (self, self->hpdir_nonpaged); }
+INLINE void x86_hvm_vtlb_flush_gphys_addr (x86_hvm_vtlb_t *self, addr_t gvaddr)
+{ x86_hvm_vtlb_flush_hpdir_addr (self, self->hpdir_paged, gvaddr); x86_hvm_vtlb_flush_hpdir_addr (self, self->hpdir_nonpaged, gvaddr); }
+
+/* Flush a gvirt mapping from the current VTLB. */
+INLINE void x86_hvm_vtlb_flush_gvirt (x86_hvm_vtlb_t *self)
+{ x86_hvm_vtlb_flush_hpdir (self, self->hpdir); }
+INLINE void x86_hvm_vtlb_flush_gvirt_addr (x86_hvm_vtlb_t *self, addr_t gvaddr)
+{ x86_hvm_vtlb_flush_hpdir_addr (self, self->hpdir, gvaddr); }
+
+
+INLINE word_t x86_hvm_vtlb_get_active_top_pdir (x86_hvm_vtlb_t *self)
+{ return virt_to_phys ((word_t) self->hpdir); }
+
+INLINE void x86_hvm_vtlb_set_guest_top_pdir (x86_hvm_vtlb_t *self, pgent_t *pdir)
+{ self->gpdir = pdir; }
+
+INLINE pgent_t * x86_hvm_vtlb_get_guest_top_pdir (x86_hvm_vtlb_t *self)
+{ return self->gpdir; }
+
+INLINE void x86_hvm_vtlb_set_pe (x86_hvm_vtlb_t *self, bool pe)
+{ self->flags.pe = pe; self->hpdir = pe ? self->hpdir_paged : self->hpdir_nonpaged; }
+INLINE void x86_hvm_vtlb_set_wp (x86_hvm_vtlb_t *self, bool wp) { self->flags.wp = wp; }
+INLINE void x86_hvm_vtlb_set_pg (x86_hvm_vtlb_t *self, bool pg) { self->flags.pg = pg; }
+
+/* Called on a VTLB miss. */
+bool x86_hvm_vtlb_handle_vtlb_miss (x86_hvm_vtlb_t *self, addr_t gvaddr, word_t access);
+
+/* Lookup guest-virtual memory. */
+bool x86_hvm_vtlb_lookup_gphys_addr (x86_hvm_vtlb_t *self, addr_t gvaddr, addr_t *gpaddr);
+
+/* Lookup guest-virtual memory and dump corresponding ptab entry */
+bool x86_hvm_vtlb_dump_ptab_entry (x86_hvm_vtlb_t *self, addr_t gvaddr);
 
 
 #endif /* !__GLUE__V4_X86__HVM_VTLB_H__ */

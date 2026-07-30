@@ -103,7 +103,7 @@ void return_to_user_wrapper (void)
 static void return_to_hvm (void)
 {
     tcb_t *current = get_current_tcb ();
-    current->get_arch()->enter_hvm_loop();
+    arch_hvm_ktcb_enter_hvm_loop (&current->arch.hvm);
 }
 #endif
 
@@ -123,7 +123,17 @@ void tcb_create_startup_stack (tcb_t *self, void (*func)(void))
     word_t flags = X86_USER_FLAGS;
     word_t return_ip = (word_t) return_to_user;
 
-    /* CONFIG_X_X86_HVM / CONFIG_X86_COMPATIBILITY_MODE are off in this config. */
+#if defined(CONFIG_X_X86_HVM)
+    if (resource_bits_have_resource (&self->resource_bits, HVM))
+    {
+	return_ip = (word_t) return_to_hvm;
+	flags = X86_HVM_FLAGS;
+    }
+#endif
+#if defined(CONFIG_X86_COMPATIBILITY_MODE)
+    if (resource_bits_have_resource (&self->resource_bits, COMPATIBILITY_MODE))
+        cs = X86_UCS32;       /* cs */
+#endif
 
     *(--self->stack) = X86_UDS;			/* ss (rpl = 3) */
     *(--self->stack) = 0x12345678;		/* sp */
@@ -360,8 +370,16 @@ msg_tag_t tcb_do_ipc (tcb_t *self, threadid_t to, threadid_t from, timeout_t tim
 
 void tcb_return_from_ipc (tcb_t *self)
 {
-    threadid_t local = tcb_get_local_id (self);
-    msg_tag_t tag = tcb_get_tag (self);
+    threadid_t local;
+    msg_tag_t tag;
+
+#if defined(CONFIG_X_X86_HVM)
+    if (EXPECT_FALSE (resource_bits_have_resource (&self->resource_bits, HVM)))
+	return;
+#endif
+
+    local = tcb_get_local_id (self);
+    tag = tcb_get_tag (self);
 
     __asm__ ("movl %0, %%esp\n"
 	     "mov  %3, %%ebp\n"

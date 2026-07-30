@@ -113,6 +113,11 @@ INLINE void pgent_set_cpulocal (pgent_t *self, struct space_t *s, word_t pgsize,
 INLINE bool pgent_is_kernel (pgent_t *self, struct space_t *s, word_t pgsize)
 { (void) s; (void) pgsize; return x86_pgent_is_kernel (&self->pgent); }
 
+/* pgent_t::is_global; only glue/v4-x86/x32/hvm-vtlb.c calls it, so the C form
+   was never needed before. */
+INLINE bool pgent_is_global (pgent_t *self, struct space_t *s, word_t pgsize)
+{ (void) s; (void) pgsize; return x86_pgent_is_global (&self->pgent); }
+
 /* pgent_t::dump_misc (kdb) -- native C, not a bridge: every accessor it needs
    already has an x86_pgent_* C form. */
 INLINE void pgent_dump_misc (pgent_t *self, struct space_t *s, word_t pgsize)

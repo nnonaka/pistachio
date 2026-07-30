@@ -33,43 +33,35 @@
 #define __GLUE__V4_X86__HVM_SPACE_H__
 
 
+struct tcb_t;
+typedef struct tcb_t tcb_t;
+struct space_t;
 
-class tcb_t;
-class space_t;
-class kdb_t;
-
-
-class x86_hvm_space_t {
-public:
-    /* Activate virtualization for this space. */
-    bool is_active() { return active; }
-    bool activate (space_t *space);
-
-    /* Remember attached TCBs. */
-    void enqueue_tcb (tcb_t *tcb, space_t *space);
-    void dequeue_tcb (tcb_t *tcb, space_t *space);
-
-    /* Handle unmapping on all attached VCPUs. */
-    void handle_gphys_unmap (addr_t g_paddr, word_t log2size);
-
-    /* Lookup a mapping in a VTLB. */
-    bool lookup_gphys_addr (addr_t gvaddr, addr_t *gpaddr);
-    
-#if defined(CONFIG_DEBUG)
-    tcb_t *get_tcb_list() { return tcb_list; }
-#endif
-    
-private:
-    /* Set virtualization mode according to space. */
-    void set_hvm_mode (tcb_t *tcb, space_t *space);
-
-private:
-    bool        active;
-    tcb_t 	*tcb_list;
-    
-    
+/* Was class x86_hvm_space_t; the kdb_t friend declaration went with the class. */
+struct x86_hvm_space_t
+{
+    bool         active;
+    struct tcb_t *tcb_list;
 };
+typedef struct x86_hvm_space_t x86_hvm_space_t;
 
+/* Activate virtualization for this space. */
+INLINE bool x86_hvm_space_is_active (x86_hvm_space_t *self) { return self->active; }
+bool x86_hvm_space_activate (x86_hvm_space_t *self, struct space_t *space);
+
+/* Remember attached TCBs. */
+void x86_hvm_space_enqueue_tcb (x86_hvm_space_t *self, struct tcb_t *tcb, struct space_t *space);
+void x86_hvm_space_dequeue_tcb (x86_hvm_space_t *self, struct tcb_t *tcb, struct space_t *space);
+
+/* Handle unmapping on all attached VCPUs. */
+void x86_hvm_space_handle_gphys_unmap (x86_hvm_space_t *self, addr_t g_paddr, word_t log2size);
+
+/* Lookup a mapping in a VTLB. */
+bool x86_hvm_space_lookup_gphys_addr (x86_hvm_space_t *self, addr_t gvaddr, addr_t *gpaddr);
+
+#if defined(CONFIG_DEBUG)
+INLINE struct tcb_t * x86_hvm_space_get_tcb_list (x86_hvm_space_t *self) { return self->tcb_list; }
+#endif
 
 
 #endif /* !__GLUE__V4_X86__HVM_SPACE_H__ */

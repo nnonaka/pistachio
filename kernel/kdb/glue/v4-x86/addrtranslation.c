@@ -61,15 +61,15 @@ CMD( cmd_virt_to_phys, cg )
     word_t offset = 0;
 
 #if defined(CONFIG_X_X86_HVM)
-    if(space->is_hvm_space())
+    if (space_is_hvm_space (space))
     {
-	x86_hvm_space_t *hvm_space = space->get_hvm_space();
-	tcb_t *tcb = hvm_space->get_tcb_list();
+	x86_hvm_space_t *hvm_space = space_get_hvm_space (space);
+	tcb_t *hvm_tcb = x86_hvm_space_get_tcb_list (hvm_space);
 	addr_t gpaddr;
-		
-	tcb->get_arch()->dump_hvm_ptab_entry(vaddr);
 
-	if(hvm_space->lookup_gphys_addr( vaddr, &gpaddr ))
+	arch_hvm_ktcb_dump_hvm_ptab_entry (&hvm_tcb->arch.hvm, vaddr);
+
+	if (x86_hvm_space_lookup_gphys_addr (hvm_space, vaddr, &gpaddr))
 	    vaddr = gpaddr;
     }
 #endif    

@@ -44,8 +44,10 @@
 
 #if defined(CONFIG_X_X86_HVM)
 #include INC_GLUE(hvm.h)
-#define X86_CTRLXFER_FLAGMASK		(hvm_enabled ? (word_t) X86_HVM_EFLAGS_MASK : (word_t)  X86_USER_FLAGMASK)
-#define X86_CTRLXFER_FAULT_MAX          VMCS_EI_REASON_BE_MAX
+/* Was a bare `hvm_enabled', the inherited member, read inside an arch_ktcb_t
+   method; its only use is in x32/thread.c, where `self' is the arch_ktcb_t. */
+#define X86_CTRLXFER_FLAGMASK		(self->hvm.hvm_enabled ? (word_t) X86_HVM_EFLAGS_MASK : (word_t)  X86_USER_FLAGMASK)
+#define X86_CTRLXFER_FAULT_MAX          VMCS_BE_MAX
 #else
 #define X86_CTRLXFER_FLAGMASK		(word_t) (X86_USER_FLAGMASK)
 #define X86_CTRLXFER_FAULT_MAX          0
@@ -58,13 +60,20 @@
 
 
 struct arch_ktcb_t {
-    /* Like x64, x32 carries no arch-specific ktcb state in any configuration
+#if defined(CONFIG_X_X86_HVM)
+    /* arch_ktcb_t derived from arch_hvm_ktcb_t, which has state; the base
+       becomes a by-value member.  arch_hvm_ktcb_* functions take &arch->hvm,
+       and addr_to_tcb() still recovers the TCB from a pointer to it. */
+    arch_hvm_ktcb_t hvm;
+#else
+    /* Without HVM, x32 carries no arch-specific ktcb state in any configuration
        this tree builds -- the CONFIG_X_CTRLXFER_MSG members below were static
        and the HVM base class empty.  arch_ktcb_t is a by-value member of
        tcb_t and an empty struct is a GNU C extension of size 0, which would
        shift every field after `arch'; the explicit byte pins the size at 1,
        matching the layout tcb_layout.h is generated against. */
     char __empty;
+#endif
 };
 typedef struct arch_ktcb_t arch_ktcb_t;
 

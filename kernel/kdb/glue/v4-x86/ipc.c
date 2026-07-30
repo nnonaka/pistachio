@@ -95,7 +95,7 @@ word_t arch_ktcb_get_ctrlxfer_reg (arch_ktcb_t *self, word_t id, word_t reg)
         break;
 #if defined(CONFIG_X_X86_HVM)
     case id_cregs ... id_otherregs:
-        return arch_hvm_ktcb_get_x86_hvm_ctrlxfer_reg (self, id, reg);
+        return arch_ktcb_get_x86_hvm_ctrlxfer_reg (self, id, reg);
 #endif /* defined(CONFIG_X_X86_HVM) */
     default:
         value = 0;
@@ -114,7 +114,7 @@ void tcb_dump_ctrlxfer_state (tcb_t *self, bool extended)
     {
 	word_t max = 4;
 #if defined(CONFIG_X_X86_HVM)
-	if (arch_hvm_ktcb_is_hvm_enabled (&self->arch))
+	if (arch_hvm_ktcb_is_hvm_enabled (&self->arch.hvm))
 	    max += ARCH_KTCB_FAULT_MAX;
 #endif
 	
@@ -140,7 +140,7 @@ void tcb_dump_ctrlxfer_state (tcb_t *self, bool extended)
 	}
     }
 #if defined(CONFIG_X_X86_HVM)
-    if (arch_hvm_ktcb_is_hvm_enabled (&self->arch))
+    if (arch_hvm_ktcb_is_hvm_enabled (&self->arch.hvm))
     {
         for (word_t id = 3; id < id_max; id++)
 	{
@@ -156,7 +156,7 @@ void tcb_dump_ctrlxfer_state (tcb_t *self, bool extended)
 	    }
 	}
 	if (extended)
-	    arch_hvm_ktcb_dump_hvm (&self->arch);
+	    arch_hvm_ktcb_dump_hvm (&self->arch.hvm);
     }
 #endif
     printf("\n");
@@ -189,7 +189,7 @@ void arch_hvm_ktcb_dump_hvm (arch_hvm_ktcb_t *self)
 	
 	for (int i = 0; i < GDT_SIZE; i++)
 	{
-	    if (readmem (space, vgdt + i, &r))
+	    if (readmem_u64 (space, vgdt + i, &r))
 	    {
 		x86_segdesc_t *ent = (x86_segdesc_t *)&r; 
 		
@@ -236,7 +236,7 @@ void arch_hvm_ktcb_dump_hvm (arch_hvm_ktcb_t *self)
 	printf("gpa %x\n", vidt);
     for (word_t i = 0; i < IDT_SIZE; i++)
     {
-	if (readmem (space, vidt + i, &r))
+	if (readmem_u64 (space, vidt + i, &r))
 	{
 	    x86_idtdesc_t *ent = (x86_idtdesc_t *) &r;
 	    if (ent->x.d.p)
