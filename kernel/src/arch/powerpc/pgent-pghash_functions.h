@@ -42,13 +42,10 @@
 
 EXTERN_KMEM_GROUP (kmem_pgtab);
 
-/* Every `#ifdef CONFIG_PPC_MMU_SEGMENT' below is the misspelling -- singular,
-   defined by no .cml and read by nothing.  It is preserved rather than
-   corrected, because correcting it changes behaviour on a port that cannot be
-   run here.  What it costs is recorded in notes §144: with it misspelt, this
-   file never syncs a page hash entry and never flushes one.  The bodies are
-   converted anyway, and are checked by compiling this header with the
-   identifier defined on the command line. */
+/* The guards below read CONFIG_PPC_MMU_SEGMENTS.  Upstream spells all three
+   without the S, which no .cml defines, so on a segment-MMU build this file
+   never synced a page hash entry and never flushed one -- see notes §144 and
+   §145.  Corrected, so the three bodies are now reached. */
 
 // Linknode access
 
@@ -144,7 +141,7 @@ INLINE word_t  pgent_get_translation (pgent_t *self, space_t *s, word_t pgsize)
     return self->raw & PPC_PAGE_PTE_MASK;
 }
 
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
 // Page hash synchronization
 
 INLINE void pgent_update_from_pghash (pgent_t *self, space_t * s, addr_t vaddr)
@@ -168,7 +165,7 @@ INLINE void pgent_update_from_pghash (pgent_t *self, space_t * s, addr_t vaddr)
 INLINE word_t  pgent_reference_bits (pgent_t *self, space_t *s, word_t pgsize, addr_t vaddr)
 {
     word_t rwx = 0;
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     pgent_update_from_pghash (self, s, vaddr);
 #endif
     if( self->map.referenced ) rwx = 5;
@@ -186,7 +183,7 @@ INLINE void  pgent_update_reference_bits (pgent_t *self, space_t *s, word_t pgsi
 
 INLINE void  pgent_flush (pgent_t *self, space_t *s, word_t pgsize, bool kernel, addr_t vaddr)
 {
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     /* Upstream calls get_pghash()->flush_mapping(s, vaddr, pgsize, this), and
        pghash_t has no such member -- not here and not in master.  The one
        flush this hash offers is flush_4k_mapping, and 4k is the only size the

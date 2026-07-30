@@ -157,7 +157,7 @@
 #define KIP_KIP_AREA		{ 12 }
 #define KIP_MIN_MEMDESCS	(16)
 
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
 #define KIP_ARCH_PAGEINFO	{SHUFFLE2(rwx:6, size_mask:(1 << POWERPC_PAGE_BITS) >> 10)}
 #else
 #define HW_VALID_PGSIZES	((1 << 12) | (1 << 22))

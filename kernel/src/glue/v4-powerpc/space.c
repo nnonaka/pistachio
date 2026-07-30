@@ -126,7 +126,7 @@ void space_add_mapping (space_t *self, addr_t vaddr, paddr_t paddr, word_t size,
     /* Modify page table */
     pgent_set_entry (pg, self, pgsize, paddr, writable ? 7 : 5, attrib, kernel);
 
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     ASSERT(pgsize == size_4k);
     /* Upstream passes `pgent', which this function has no such name for --
        the leaf entry the walk above ends on is `pg', and it is what
@@ -148,7 +148,7 @@ void space_add_4k_mapping (space_t *self, addr_t vaddr, paddr_t paddr, bool writ
     pgent_set_entry (pgent, self, size_4k, paddr, writable ? 7 : 5, 
 		      attrib, kernel);
 
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     pghash_insert_4k_mapping (get_pghash(), self, vaddr, pgent);
 #endif
 }
@@ -156,7 +156,7 @@ void space_add_4k_mapping (space_t *self, addr_t vaddr, paddr_t paddr, bool writ
 
 void space_flush_mapping (space_t *self, addr_t vaddr, word_t pgsize, pgent_t *pgent)
 {
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     ASSERT(pgsize == size_4k);
     pghash_flush_4k_mapping (get_pghash(), self, vaddr, pgent);
 #endif

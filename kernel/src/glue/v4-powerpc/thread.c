@@ -678,7 +678,7 @@ void tcb_set_space (tcb_t *self, space_t * space)
 	return;
     }
 
-#ifdef CONFIG_PPC_MMU_SEGMENT
+#ifdef CONFIG_PPC_MMU_SEGMENTS
     self->pdir_cache = (word_t)space_get_segment_id (space).raw;
     TRACE_TCB("set_space(), space 0x%p, tcb 0x%p, kernel_space 0x%p\n", 
 	      space, self, get_kernel_space() );
