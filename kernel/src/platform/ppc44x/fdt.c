@@ -166,7 +166,7 @@ fdt_property_t *fdt_find_property_node (fdt_t *self, char *path)
 	if (next_path != 0)
 	{
 	    *next_path = 0;
-	    node = fdt_find_subtree_node (self, node, path);
+	    node = fdt_header_node (fdt_find_subtree_node (self, node, path));
 	    *next_path = '/';
 	    path = next_path + 1;
 	    if (!node)
@@ -192,7 +192,7 @@ fdt_header_t *fdt_find_subtree (fdt_t *self, char *path)
 	if (next_path != 0)
 	{
 	    *next_path = 0;
-	    node = fdt_find_subtree_node (self, node, path);
+	    node = fdt_header_node (fdt_find_subtree_node (self, node, path));
 	    *next_path = '/';
 	    path = next_path + 1;
 	    if (!node)

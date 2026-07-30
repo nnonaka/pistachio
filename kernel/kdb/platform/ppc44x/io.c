@@ -549,7 +549,7 @@ bool bgtree_init (bgtree_t *self, fdt_t *fdt)
 {
     fdt_property_t *prop;
 
-    fdt_node_t *node = fdt_find_subtree (fdt, "/plb/tree");
+    fdt_node_t *node = fdt_header_node (fdt_find_subtree (fdt, "/plb/tree"));
     if (!node)
 	return false;
 
@@ -760,7 +760,7 @@ NOINLINE bool tree_console_init (tree_console_t *self, fdt_t *fdt)
 {
     fdt_property_t *prop;
 
-    fdt_node_t *tty = fdt_find_subtree (fdt, "/plb/tty");
+    fdt_node_t *tty = fdt_header_node (fdt_find_subtree (fdt, "/plb/tty"));
     if (!tty)
 	return false;
 
@@ -781,7 +781,7 @@ NOINLINE bool tree_console_init (tree_console_t *self, fdt_t *fdt)
     self->send_id = self->rcv_id = 2;
     self->dest_node = 0;
 
-    fdt_node_t *l4node = fdt_find_subtree (fdt, "/l4");
+    fdt_node_t *l4node = fdt_header_node (fdt_find_subtree (fdt, "/l4"));
     if ( l4node && (prop = fdt_find_property_node_in (fdt, l4node, "dbgcon")) )
     {
 	/* format: sndid,rcvid,dest */

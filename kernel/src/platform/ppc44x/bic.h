@@ -108,9 +108,14 @@ INLINE bool bgic_is_masked (bgic_t *self, word_t hwirq)
     ASSERT(hwirq < BGP_MAX_IRQS);
     val = self->groups[bgic_irq_to_group (hwirq)].target_irq[bgic_irq_of_group (hwirq) / 8];
     sync();
-    /* NB: this reads as (val & (0xf << offset)) == 0 only because == binds
-       tighter than & in C; preserved verbatim from the C++ original. */
-    return val & (0xf << offset) == 0;
+    /* Parenthesised.  `==' binds tighter than `&', so the unparenthesised form
+       is val & ((0xf << offset) == 0); offset is 0..28, so the shift is never
+       zero, the comparison is always false, and the function always returned
+       false -- no interrupt ever read as masked.  Upstream had it, C++ parses
+       it the same way, and -Wparentheses is what surfaced it.  Masked means the
+       4-bit target field is 0, which is what bgic_mask_irq writes.  Notes
+       §140. */
+    return (val & (0xf << offset)) == 0;
 }
 
 INLINE bool bgic_is_pending (bgic_t *self, word_t hwirq)

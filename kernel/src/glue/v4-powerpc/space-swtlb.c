@@ -222,7 +222,7 @@ NOINLINE bool space_handle_tlb_miss (space_t *self, addr_t lookup_vaddr, addr_t 
     paddr &= ~((1ull << size) - 1);
 
     TRACE_TLB("mapping found (%p): %p -> %lx (%x)\n",
-	      pg, lookup_vaddr, static_cast<word_t>(paddr), size);
+	      pg, lookup_vaddr, (word_t)paddr, size);
     TRACE_TLB("[%c%c%c], cache=%x, erpn=%x\n", 
 	      pg->map.read ? 'R' : ' ', pg->map.write ? 'W' : ' ',
 	      pg->map.execute ? 'X' : ' ', pg->map.caching, pg->map.erpn);
@@ -273,9 +273,13 @@ addr_t space_map_device_pinned (space_t *self, paddr_t paddr, word_t size, bool 
     size = 1 << log2sz;
 
     paddr_t paddr_align = paddr & ~((paddr_t)size - 1);
-    if (vaddr & (size - 1) != 0)
+    /* Parenthesised: `==' binds tighter than `&', so this was vaddr & 1 -- the
+       mapping was aligned up only for an odd vaddr, never for a merely
+       size-misaligned one, and ppc_tlb0_init_vaddr_size needs the alignment.
+       Upstream, and the same in the C++.  Notes §140. */
+    if ((vaddr & (size - 1)) != 0)
 	vaddr = (vaddr + size) & ~(size - 1);
-    
+
     ppc_tlb0_t tlb0;
     ppc_tlb1_t tlb1;
     ppc_tlb2_t tlb2;
@@ -358,7 +362,7 @@ void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr, word_t l
     ppc_mmucr_write_search_id(asid_get (asid), 0);
     isync();
 
-    if (ppc_tlbsx((word_t)addr, idx))
+    if (ppc_tlbsx((word_t)addr, &idx))
     {
 	TRACEF("invalidating TLB entry %d\n", idx);
 	{
@@ -374,8 +378,12 @@ void space_arch_free (space_t *self)
     space_flush_tlb_range (self, self, (addr_t)USER_AREA_START, (addr_t)USER_AREA_END);
 }
 
+/* Unused since space_sigma0_translate below became a loop over transtable[];
+   kept, but no longer C++.  Both this and the static_cast above survived the
+   conversion because their only expansion is inside a TRACE_TLB that expands to
+   nothing, so neither was ever parsed as an expression.  Notes §140. */
 #define RELOC(s0addr, physaddr, size) \
-    case s0addr ... s0addr + size - 1: paddr = physaddr + reinterpret_cast<paddr_t>(addr_offset(addr, -s0addr)); break;
+    case s0addr ... s0addr + size - 1: paddr = physaddr + (paddr_t)(word_t)addr_offset(addr, -s0addr); break;
 
 paddr_t space_sigma0_translate (addr_t addr, word_t size)
 {
@@ -416,7 +424,7 @@ EXTERN_C SECTION(".einit") void init_paging( int cpu )
     /* set search id to global */
     ppc_mmucr_write_search_id(0, 0);
 
-    ppc_tlbsx((u32_t)&init_paging, curr_entry); /* can't fail */
+    ppc_tlbsx((u32_t)&init_paging, &curr_entry); /* can't fail */
 
     // Clear out all mappings except for the one we run on
     for (index = 0; index < PPC_MAX_TLB_ENTRIES; index++)
@@ -513,7 +521,8 @@ addr_t setup_console_mapping(paddr_t paddr, int log2size)
     word_t vaddr = console_area;
     paddr_t paddr_align = paddr & ~((paddr_t)size - 1);
 
-    if (vaddr & (size - 1) != 0)
+    /* Parenthesised; see space_map_device_pinned above. */
+    if ((vaddr & (size - 1)) != 0)
 	vaddr = (vaddr + size) & ~(size - 1);
 
     ppc_tlb0_t tlb0;

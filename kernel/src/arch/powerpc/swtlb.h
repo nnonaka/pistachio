@@ -97,7 +97,10 @@ inline word_t ppc_tlbre(word_t index, const word_t field)
     return value;
 }
 
-/* index was a word_t& out-parameter. */
+/* index was a word_t& out-parameter, and the operand has to follow it: with
+   plain `index' the tlbsx result lands in the local pointer and the caller's
+   variable is never written, which is what -Wuninitialized was reporting at the
+   three call sites.  Notes §140. */
 INLINE word_t ppc_tlbsx(word_t vaddr, word_t *index)
 {
     word_t found;
@@ -105,17 +108,20 @@ INLINE word_t ppc_tlbsx(word_t vaddr, word_t *index)
 		  "beq	1f\n"
 		  "li	%[found], 0\n"
 		  "1:\n"
-		  : [index] "=b"(index), [found] "=&b"(found)
+		  : [index] "=b"(*index), [found] "=&b"(found)
 		  : [vaddr] "b"(vaddr), "[found]"(true));
     return found;
 }
 
-inline word_t ppc_get_pid()
+/* INLINE, not a bare `inline': ppc_get_spr / ppc_set_spr are static, and C
+   forbids a non-static inline function from referring to them -- legal in the
+   C++ these came from, a constraint violation here.  Notes §140. */
+INLINE word_t ppc_get_pid(void)
 {
     return ppc_get_spr(SPR_PID);
 }
 
-inline void ppc_set_pid(word_t pid)
+INLINE void ppc_set_pid(word_t pid)
 {
     ppc_set_spr(SPR_PID, pid);
 }

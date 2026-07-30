@@ -70,10 +70,12 @@ struct fdt_header_t
     char name[0];
 };
 
-/* NB: `sizeof + (strlen + 4) & ~3' -- + binds tighter than &, so this masks
-   the whole sum.  Preserved verbatim from the C++ original. */
+/* The parentheses are written out, not added: `+' binds tighter than `&', so
+   the whole sum was already what got masked.  Same value either way -- every
+   member of fdt_header_t is a u32_t, so sizeof is a multiple of 4.  Notes
+   §140. */
 INLINE int fdt_header_get_size (fdt_header_t *self)
-{ return sizeof(fdt_header_t) + (strlen(self->name) + 4) & ~3; }
+{ return (sizeof(fdt_header_t) + (strlen(self->name) + 4)) & ~3; }
 
 struct fdt_t
 {
@@ -98,7 +100,7 @@ struct fdt_property_t
 };
 
 INLINE int fdt_property_get_size (fdt_property_t *self)
-{ return sizeof(fdt_property_t) + (self->len - 1 + 4) & ~3; }
+{ return (sizeof(fdt_property_t) + (self->len - 1 + 4)) & ~3; }
 
 INLINE char * fdt_property_get_name (fdt_property_t *self, fdt_t *fdt)
 { return ((char*)fdt) + fdt->offset_dt_strings + self->offset_name; }
@@ -128,10 +130,20 @@ fdt_property_t * fdt_find_property_node (fdt_t *self, char *path);
 fdt_header_t *   fdt_find_subtree (fdt_t *self, char *path);
 void             fdt_dump (fdt_t *self);
 
+/*
+ * fdt_header_t and fdt_property_t derived from fdt_node_t, so C++ converted
+ * either to the base implicitly -- including the null pointer, which the
+ * standard requires to convert to null.  In C that conversion has to be
+ * written; this is it, null check included, and it folds away because the base
+ * is at offset zero.  Notes §140.
+ */
+INLINE fdt_node_t * fdt_header_node (fdt_header_t *self)
+{ return self ? &self->base : NULL; }
+
 INLINE fdt_header_t * fdt_find_first_subtree_node (fdt_t *self, fdt_node_t *node)
 { return fdt_next_subtree_node (self, node, false); }
 INLINE fdt_header_t * fdt_find_next_subtree_node (fdt_t *self, fdt_header_t *curr)
-{ return fdt_next_subtree_node (self, &curr->base, true); }
+{ return fdt_next_subtree_node (self, fdt_header_node (curr), true); }
 
 typedef fdt_t dtree_t;
 dtree_t *get_dtree();

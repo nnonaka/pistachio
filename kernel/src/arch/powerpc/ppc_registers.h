@@ -390,13 +390,19 @@ INLINE bool ppc_tsr_pending_irqs (ppc_tsr_t *self)
 }
 
 
-INLINE u64_t ppc_get_fpscr()
+/* The `=m'/`m' operands are not redundant with the address in `b': the asm
+   reaches `value' only through that address, so without them GCC is not told
+   the memory is written (here) or read (below).  It reported `value' as used
+   uninitialized on the way out.  Upstream from cc01ddb, not conversion
+   fallout.  Notes §140. */
+INLINE u64_t ppc_get_fpscr(void)
 {
     u64_t value;
     asm volatile (
 	    "mffs %%f0 ;"
-	    "stfd %%f0, 0(%0) ;"
-	    : /* ouputs */
+	    "stfd %%f0, 0(%1) ;"
+	    : /* outputs */
+	      "=m" (value)
 	    : /* inputs */
 	      "b" (&value)
 	    );
@@ -406,11 +412,11 @@ INLINE u64_t ppc_get_fpscr()
 INLINE void ppc_set_fpscr( u64_t value )
 {
     asm volatile (
-        "lfd %%f0, 0(%0) ;"
+        "lfd %%f0, 0(%1) ;"
         "mtfsf 0xff, %%f0 ;"
-        : /* ouputs */
+        : /* outputs */
         : /* inputs */
-          "b" (&value)
+          "m" (value), "b" (&value)
         );
 
 }

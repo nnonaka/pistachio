@@ -90,7 +90,7 @@ INLINE bool read_hvm_instruction(word_t ip, word_t *instr, bool speculative)
     if (EXPECT_FALSE(speculative))
     {
 	ppc_mmucr_write_search_id(2, 1);
-	if (!ppc_tlbsx(ip, idx))
+	if (!ppc_tlbsx(ip, &idx))
 	    return false;
     }
 
@@ -102,7 +102,11 @@ INLINE bool read_hvm_instruction(word_t ip, word_t *instr, bool speculative)
 		  "lwz %[instr], 0(%[ip])\n"
 		  "mtmsr %[origmsr]\n"
 		  "isync\n"
-		  : [instr] "=r" (instr), [origmsr] "=&r" (origmsr), [newmsr] "=&r"(newmsr)
+		  /* `*instr', not `instr': this was a word_t& out-parameter, and
+		     writing the bare pointer leaves the caller's word unset --
+		     which is what -Wmaybe-uninitialized reported at both call
+		     sites.  Same defect as ppc_tlbsx.  Notes §140. */
+		  : [instr] "=r" (*instr), [origmsr] "=&r" (origmsr), [newmsr] "=&r"(newmsr)
 		  : [dts1] "i"(1 << MSR_DS), [ip] "b" (ip));
     return true;
 }
@@ -245,12 +249,16 @@ space_handle_hvm_tlb_miss (space_t *self, ppc_softhvm_t *vm, ppc_hvm_tlb_t *tlbe
     ppc_tlb1_t tlb1 = tlbentry->phys_tlb1;   /* was a copy constructor */
 
     size_t gsize = ppc_tlb0_get_log2size (&tlbentry->tlb0);
-    gpaddr = ppc_tlb1_get_paddr (&tlbentry->tlb1) | (gvaddr & (ppc_tlb0_get_size (&tlbentry->tlb0) - 1));
+    /* gpaddr was a paddr_t& out-parameter; the three uses below were left as
+       the reference had them.  The TRACE_EMUL one still had its static_casts,
+       which compiled only because TRACE_EMUL expands to nothing and its
+       arguments are therefore never parsed.  Notes §140. */
+    *gpaddr = ppc_tlb1_get_paddr (&tlbentry->tlb1) | (gvaddr & (ppc_tlb0_get_size (&tlbentry->tlb0) - 1));
 
-    if (gpaddr >= USER_AREA_END)
+    if (*gpaddr >= USER_AREA_END)
 	return false;
 
-    TRACE_EMUL("GVA:%lx GPA:%lx.%lx\n", gvaddr, static_cast<word_t>(gpaddr >> 32), static_cast<word_t>(gpaddr));
+    TRACE_EMUL("GVA:%lx GPA:%lx.%lx\n", gvaddr, (word_t)(*gpaddr >> 32), (word_t)(*gpaddr));
 
     pgent_t *pg;
     word_t pgsize;

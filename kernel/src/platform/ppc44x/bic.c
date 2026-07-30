@@ -96,12 +96,12 @@ void SECTION (".init") intctrl_init_arch (void)
     if (!hdr)
 	panic("Couldn't find interrupt controller in FDT\n");
 
-    fdt_property_t *prop = fdt_find_property_node_in (fdt, hdr, "compatible");
+    fdt_property_t *prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "compatible");
 
     if (!prop || strcmp(fdt_property_get_string (prop), "ibm,bgic") != 0)
 	panic("BGIC: Couldn't find compatible node in FDT\n");
 
-    prop = fdt_find_property_node_in (fdt, hdr, "reg");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "reg");
     if (!prop || fdt_property_get_len (prop) != 3 * sizeof(u32_t))
 	panic("BGIC: Couldn't find valid 'reg' node in FDT (%p, %d)\n", 
 	      prop, fdt_property_get_len (prop));
@@ -109,7 +109,7 @@ void SECTION (".init") intctrl_init_arch (void)
     self->phys_addr = fdt_property_get_u64 (prop, 0);
     self->mem_size = fdt_property_get_word (prop, 2);
 
-    prop = fdt_find_property_node_in (fdt, hdr, "interrupts");
+    prop = fdt_find_property_node_in (fdt, fdt_header_node (hdr), "interrupts");
     if (!prop || fdt_property_get_len (prop) != sizeof(u32_t))
 	panic("BGIC: Couldn't find valid 'interrupts' node in FDT\n");
     

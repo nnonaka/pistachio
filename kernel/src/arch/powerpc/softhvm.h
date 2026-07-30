@@ -362,7 +362,7 @@ void ppc_softhvm_update_timers (ppc_softhvm_t *self, u64_t time);
 
 INLINE void ppc_softhvm_handle_pending_events (ppc_softhvm_t *self, except_regs_t *regs)
 	{
-	    if ((self->event_inject & (1 << evt_last) - 1) || ppc_tsr_pending_irqs (&self->tsr))
+	    if ((self->event_inject & ((1 << evt_last) - 1)) || ppc_tsr_pending_irqs (&self->tsr))
 		ppc_softhvm_inject_pending_events (self, regs);
 	}
 

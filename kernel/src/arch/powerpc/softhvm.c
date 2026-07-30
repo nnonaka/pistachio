@@ -346,7 +346,7 @@ bool ppc_softhvm_set_esr (ppc_softhvm_t *self, word_t val, except_regs_t *regs)
     else
     {
 	const word_t mask = (1U << MSR_EE);
-	ppc_softhvm_set_msr (self, self->msr & ~mask | (val & mask));
+	ppc_softhvm_set_msr (self, (self->msr & ~mask) | (val & mask));
 	regs->srr0_ip += sizeof(ppc_instr_t);
     }
     return true;
