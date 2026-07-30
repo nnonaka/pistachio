@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	platform/ofppc/1275tree.cc
+ * File path:	platform/ofppc/1275tree.c
  * Description:	Functions which enable easy access to the position-independent
  * 		Open Firmware device tree.
  *
@@ -27,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: 1275tree.cc,v 1.6 2003/09/24 19:05:45 skoglund Exp $
+ * $Id: 1275tree.c,v 1.6 2003/09/24 19:05:45 skoglund Exp $
  *
  ***************************************************************************/
 
@@ -36,10 +36,10 @@
 
 of1275_tree_t of1275_tree;
 
-int of1275_device_t::get_depth()
+int of1275_device_get_depth (of1275_device_t *self)
 {
     int depth = 0;
-    char *c = this->name;
+    char *c = self->name;
 
     while( *c )
     {
@@ -50,14 +50,16 @@ int of1275_device_t::get_depth()
     return depth;
 }
 
-bool of1275_device_t::get_prop( const char *name, char **data, word_t *data_len)
+bool of1275_device_get_prop (of1275_device_t *self, const char *name,
+			     char **data, word_t *data_len)
 {
     of1275_item_t *item_name, *item_data;
+    word_t i;
 
-    item_name = this->item_first();
-    item_data = item_name->next();
+    item_name = of1275_device_item_first (self);
+    item_data = of1275_item_next (item_name);
 
-    for( word_t i = 0; i < this->get_prop_count(); i++ )
+    for( i = 0; i < of1275_device_get_prop_count (self); i++ )
     {
 	if( !strcmp(item_name->data, name) )
 	{
@@ -65,28 +67,29 @@ bool of1275_device_t::get_prop( const char *name, char **data, word_t *data_len)
 	    *data_len = item_data->len;
 	    return true;
 	}
-	item_name = item_data->next();
-	item_data = item_name->next();
+	item_name = of1275_item_next (item_data);
+	item_data = of1275_item_next (item_name);
     }
 
     return false;
 }
 
-bool of1275_device_t::get_prop( word_t index, 
-	char **name, char **data, word_t *data_len )
+bool of1275_device_get_prop_index (of1275_device_t *self, word_t index,
+				   char **name, char **data, word_t *data_len)
 {
     of1275_item_t *item_name, *item_data;
+    word_t i;
 
-    if( index >= this->get_prop_count() )
+    if( index >= of1275_device_get_prop_count (self) )
 	return false;
 
-    item_name = this->item_first();
-    item_data = item_name->next();
+    item_name = of1275_device_item_first (self);
+    item_data = of1275_item_next (item_name);
 
-    for( word_t i = 0; i < index; i++ )
+    for( i = 0; i < index; i++ )
     {
-	item_name = item_data->next();
-	item_data = item_name->next();
+	item_name = of1275_item_next (item_data);
+	item_data = of1275_item_next (item_name);
     }
 
     *name = item_name->data;
@@ -95,53 +98,55 @@ bool of1275_device_t::get_prop( word_t index,
     return true;
 }
 
-of1275_device_t * of1275_tree_t::find( const char *name )
+of1275_device_t * of1275_tree_find (of1275_tree_t *self, const char *name)
 {
-    of1275_device_t *dev = this->first();
+    of1275_device_t *dev = of1275_tree_first (self);
     if( !dev )
 	return NULL;
 
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	if( !strcmp(dev->get_name(), name) )
+	if( !strcmp(of1275_device_get_name (dev), name) )
 	    return dev;
-	dev = dev->next();
+	dev = of1275_device_next (dev);
     }
 
     return NULL;
 }
 
-of1275_device_t * of1275_tree_t::find_handle( word_t handle )
+of1275_device_t * of1275_tree_find_handle (of1275_tree_t *self, word_t handle)
 {
-    of1275_device_t *dev = this->first();
+    of1275_device_t *dev = of1275_tree_first (self);
     if( !dev )
 	return NULL;
 
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	if( dev->get_handle() == handle )
+	if( of1275_device_get_handle (dev) == handle )
 	    return dev;
-	dev = dev->next();
+	dev = of1275_device_next (dev);
     }
 
     return NULL;
 }
 
-of1275_device_t * of1275_tree_t::get_parent( of1275_device_t *dev )
+of1275_device_t * of1275_tree_get_parent (of1275_tree_t *self, of1275_device_t *dev)
 {
     char *slash = NULL;
+    char *c;
     int cnt, depth;
+    of1275_device_t *parent;
 
-    if( !dev || !this->first() )
+    if( !dev || !of1275_tree_first (self) )
 	return NULL;
 
     // Do we have any parents?
-    depth = dev->get_depth();
+    depth = of1275_device_get_depth (dev);
     if( depth <= 1 )
 	return NULL;
 
     // Locate the last slash in the name.
-    for( char *c = dev->get_name(); *c; c++ )
+    for( c = of1275_device_get_name (dev); *c; c++ )
 	if( *c == '/' )
 	    slash = c;
     if( slash == NULL )
@@ -149,40 +154,39 @@ of1275_device_t * of1275_tree_t::get_parent( of1275_device_t *dev )
 
     // Count the offset of the last slash.
     cnt = 0;
-    for( char *c = dev->get_name(); c != slash; c++ )
+    for( c = of1275_device_get_name (dev); c != slash; c++ )
 	cnt++;
 
     // Search for the parent node.
-    of1275_device_t *parent = this->first();
-    while( parent->is_valid() )
+    parent = of1275_tree_first (self);
+    while( of1275_device_is_valid (parent) )
     {
-	if( !strncmp(parent->get_name(), dev->get_name(), cnt) )
-	    if( parent->get_depth() == (depth-1) )
+	if( !strncmp(of1275_device_get_name (parent), of1275_device_get_name (dev), cnt) )
+	    if( of1275_device_get_depth (parent) == (depth-1) )
 		return parent;
-	parent = parent->next();
+	parent = of1275_device_next (parent);
     }
 
     return NULL;
 }
 
-of1275_device_t * of1275_tree_t::find_device_type( const char *device_type )
+of1275_device_t * of1275_tree_find_device_type (of1275_tree_t *self, const char *device_type)
 {
     of1275_device_t *dev;
     word_t len;
     char *type;
 
-    dev = this->first();
+    dev = of1275_tree_first (self);
     if( !dev )
 	return NULL;
 
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	if( dev->get_prop("device_type", &type, &len) )
+	if( of1275_device_get_prop (dev, "device_type", &type, &len) )
 	    if( !strcmp(type, device_type) )
 		return dev;
-	dev = dev->next();
+	dev = of1275_device_next (dev);
     }
 
     return NULL;
 }
-

@@ -53,237 +53,241 @@ CMD(cmd_dump_ci, cg)
 
 of1275_client_interface_t of1275_ci;
 
-void of1275_client_interface_t::init( word_t entry )
+/* `ci' was a protected member called before its own definition; C needs the
+   prototype, and the name is taken by the object above, hence _call. */
+static word_t of1275_ci_call (of1275_client_interface_t *self, void *params);
+
+void of1275_ci_init (of1275_client_interface_t *self, word_t entry)
 {
-    this->entry = (of1275_ci_entry_t)entry;
-    this->ci_lock.init();
+    self->entry = (of1275_ci_entry_t)entry;
+    spinlock_init (&self->ci_lock, 0);
 
-    this->stdout = OF1275_INVALID_PHANDLE;
-    this->stdin = OF1275_INVALID_PHANDLE;
+    self->stdout = OF1275_INVALID_PHANDLE;
+    self->stdin = OF1275_INVALID_PHANDLE;
 
-    of1275_phandle_t chosen = this->find_device( "/chosen" );
+    of1275_phandle_t chosen = of1275_ci_find_device (self, "/chosen" );
     if( chosen == OF1275_INVALID_PHANDLE )
 	return;
 
-    this->get_prop( chosen, "stdout", &this->stdout, sizeof(of1275_phandle_t) );
-    this->get_prop( chosen, "stdin", &this->stdin, sizeof(of1275_phandle_t) );
+    of1275_ci_get_prop (self, chosen, "stdout", &self->stdout, sizeof(of1275_phandle_t) );
+    of1275_ci_get_prop (self, chosen, "stdin", &self->stdin, sizeof(of1275_phandle_t) );
 }
 
-word_t of1275_client_interface_t::ci( void *params )
+static word_t of1275_ci_call (of1275_client_interface_t *self, void *params)
 {
-    if( this->entry == NULL )
+    if( self->entry == NULL )
 	return (word_t)-1;
 
-    return get_of1275_space()->execute_of1275( this->entry, params );
+    return get_of1275_space()->execute_of1275( self->entry, params );
 }
 
-of1275_phandle_t of1275_client_interface_t::find_device( const char *name )
+of1275_phandle_t of1275_ci_find_device (of1275_client_interface_t *self, const char *name)
 {
     int namelen = strlen(name) + 1;
     
     // Is the request too large?
-    if( (sizeof(this->args.find_device) + namelen) > sizeof(this->args.shared) )
+    if( (sizeof(self->args.find_device) + namelen) > sizeof(self->args.shared) )
 	return OF1275_INVALID_PHANDLE;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Install all parameters in the shared data area.
-    this->args.find_device.service = "finddevice";
-    this->args.find_device.nargs = 1;
-    this->args.find_device.nret = 1;
-    this->args.find_device.name = this->args.shared + sizeof(this->args.find_device);
-    this->args.find_device.phandle = OF1275_INVALID_PHANDLE;
-    sstrncpy( this->args.find_device.name, name, namelen );
+    self->args.find_device.service = "finddevice";
+    self->args.find_device.nargs = 1;
+    self->args.find_device.nret = 1;
+    self->args.find_device.name = self->args.shared + sizeof(self->args.find_device);
+    self->args.find_device.phandle = OF1275_INVALID_PHANDLE;
+    sstrncpy( self->args.find_device.name, name, namelen );
 
     // Invoke OF.
-    this->ci( &this->args.find_device );
+    of1275_ci_call (self, &self->args.find_device );
 
-    of1275_phandle_t ret = this->args.find_device.phandle;
+    of1275_phandle_t ret = self->args.find_device.phandle;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
-int of1275_client_interface_t::get_prop( of1275_phandle_t phandle, 
-	const char *name, void *buf, int buflen )
+int of1275_ci_get_prop (of1275_client_interface_t *self, of1275_phandle_t phandle,
+	const char *name, void *buf, int buflen)
 {
     int ret = -1;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Initialize the argument structure, fitting all data within our
     // shared memory region.
     int namelen = strlen(name) + 1;
-    this->args.get_prop.service = "getprop";
-    this->args.get_prop.nargs = 4;
-    this->args.get_prop.nret = 1;
-    this->args.get_prop.phandle = phandle;
-    this->args.get_prop.name = this->args.shared + sizeof(this->args.get_prop);
-    this->args.get_prop.buf = addr_align_up(this->args.get_prop.name + namelen, sizeof(word_t) );
-    this->args.get_prop.buflen = buflen;
-    this->args.get_prop.size = ret;
+    self->args.get_prop.service = "getprop";
+    self->args.get_prop.nargs = 4;
+    self->args.get_prop.nret = 1;
+    self->args.get_prop.phandle = phandle;
+    self->args.get_prop.name = self->args.shared + sizeof(self->args.get_prop);
+    self->args.get_prop.buf = addr_align_up(self->args.get_prop.name + namelen, sizeof(word_t) );
+    self->args.get_prop.buflen = buflen;
+    self->args.get_prop.size = ret;
 
     // If the data fits, then invoke Open Firmware.
-    word_t tot = (word_t)this->args.get_prop.buf - (word_t)&this->args.shared + 
+    word_t tot = (word_t)self->args.get_prop.buf - (word_t)&self->args.shared + 
 	buflen;
-    if( tot <= sizeof(this->args.shared) )
+    if( tot <= sizeof(self->args.shared) )
     {
 	// Copy the name into the shared buffer.
-	sstrncpy( this->args.get_prop.name, name, namelen );
+	sstrncpy( self->args.get_prop.name, name, namelen );
 
-	this->ci( &this->args.get_prop ); // Call OF.
+	of1275_ci_call (self, &self->args.get_prop ); // Call OF.
 
-	if( (this->args.get_prop.size > -1) && 
-		(this->args.get_prop.size <= buflen) )
+	if( (self->args.get_prop.size > -1) && 
+		(self->args.get_prop.size <= buflen) )
 	{
 	    // Copy the data into the outgoing buffer.
-	    memcpy( buf, this->args.get_prop.buf, this->args.get_prop.size );
-	    ret = this->args.get_prop.size;
+	    memcpy( buf, self->args.get_prop.buf, self->args.get_prop.size );
+	    ret = self->args.get_prop.size;
 	}
     }
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
-int of1275_client_interface_t::write( of1275_phandle_t phandle, 
-	const void *buf, int len )
+int of1275_ci_write (of1275_client_interface_t *self, of1275_phandle_t phandle,
+	const void *buf, int len)
 {
     int ret = -1;
 
     // Adjust the amount of data to write as necessary.
-    if( (len + sizeof(this->args.write)) > sizeof(this->args.shared) )
-	len = sizeof(this->args.shared) - sizeof(this->args.write);
+    if( (len + sizeof(self->args.write)) > sizeof(self->args.shared) )
+	len = sizeof(self->args.shared) - sizeof(self->args.write);
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Initialize the argument structure, fitting all data within our
     // shared data region.
-    this->args.write.service = "write";
-    this->args.write.nargs = 3;
-    this->args.write.nret = 1;
-    this->args.write.phandle = phandle;
-    this->args.write.buf = this->args.shared + sizeof(this->args.write);
-    this->args.write.len = len;
-    this->args.write.actual = -1;
-    memcpy( this->args.write.buf, buf, len );
+    self->args.write.service = "write";
+    self->args.write.nargs = 3;
+    self->args.write.nret = 1;
+    self->args.write.phandle = phandle;
+    self->args.write.buf = self->args.shared + sizeof(self->args.write);
+    self->args.write.len = len;
+    self->args.write.actual = -1;
+    memcpy( self->args.write.buf, buf, len );
 
     // Invoke OF.
-    this->ci( &this->args.write );
-    ret = this->args.write.actual;
+    of1275_ci_call (self, &self->args.write );
+    ret = self->args.write.actual;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
-int of1275_client_interface_t::read( of1275_phandle_t phandle, 
-	void *buf, int len )
+int of1275_ci_read (of1275_client_interface_t *self, of1275_phandle_t phandle,
+	void *buf, int len)
 {
     int ret = -1;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Adjust the size of the requested data to fit our shared buffer size.
-    if( (len + sizeof(this->args.read)) > sizeof(this->args.shared) )
-	len = sizeof(this->args.shared) - sizeof(this->args.read);
+    if( (len + sizeof(self->args.read)) > sizeof(self->args.shared) )
+	len = sizeof(self->args.shared) - sizeof(self->args.read);
 
     // Initialize the argument structure, fitting all data within our
     // shared data region.
-    this->args.read.service = "read";
-    this->args.read.nargs = 3;
-    this->args.read.nret = 1;
-    this->args.read.phandle = phandle;
-    this->args.read.buf = this->args.shared + sizeof(this->args.read);
-    this->args.read.len = len;
-    this->args.read.actual = -1;
+    self->args.read.service = "read";
+    self->args.read.nargs = 3;
+    self->args.read.nret = 1;
+    self->args.read.phandle = phandle;
+    self->args.read.buf = self->args.shared + sizeof(self->args.read);
+    self->args.read.len = len;
+    self->args.read.actual = -1;
 
     // Call OF.
-    this->ci( &this->args.read );
+    of1275_ci_call (self, &self->args.read );
 
     // If possible, copy the input data to the outgoing buffer.
-    ret = this->args.read.actual;
+    ret = self->args.read.actual;
     if( (ret >= 0) && (ret <= len) )
-	memcpy( buf, this->args.read.buf, len );
+	memcpy( buf, self->args.read.buf, len );
     else
 	ret = -1;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
-void of1275_client_interface_t::exit()
+void of1275_ci_exit (of1275_client_interface_t *self)
 {
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.simple.service = "exit";
-    this->args.simple.nargs = 0;
-    this->args.simple.nret = 0;
+    self->args.simple.service = "exit";
+    self->args.simple.nargs = 0;
+    self->args.simple.nret = 0;
 
     // Invoke OF.
-    this->ci( &this->args.simple );
+    of1275_ci_call (self, &self->args.simple );
 
     // Hopefully the Open Firmware will never return to us ...
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 }
 
-void of1275_client_interface_t::enter()
+void of1275_ci_enter (of1275_client_interface_t *self)
 {
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.simple.service = "enter";
-    this->args.simple.nargs = 0;
-    this->args.simple.nret = 0;
+    self->args.simple.service = "enter";
+    self->args.simple.nargs = 0;
+    self->args.simple.nret = 0;
 
     // Invoke OF.
-    this->ci( &this->args.simple );
+    of1275_ci_call (self, &self->args.simple );
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 }
 
-int of1275_client_interface_t::interpret( const char *forth )
+int of1275_ci_interpret (of1275_client_interface_t *self, const char *forth)
 {
     int ret = -1;
     int forth_len = strlen(forth) + 1;
 
-    if( (forth_len + sizeof(this->args.interpret)) > sizeof(this->args.shared))
+    if( (forth_len + sizeof(self->args.interpret)) > sizeof(self->args.shared))
 	return ret;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.interpret.service = "interpret";
-    this->args.interpret.nargs = 1;
-    this->args.interpret.nret = 1;
-    this->args.interpret.forth = this->args.shared + sizeof(this->args.interpret);
-    this->args.interpret.result = -1;
-    sstrncpy( this->args.interpret.forth, forth, forth_len );
+    self->args.interpret.service = "interpret";
+    self->args.interpret.nargs = 1;
+    self->args.interpret.nret = 1;
+    self->args.interpret.forth = self->args.shared + sizeof(self->args.interpret);
+    self->args.interpret.result = -1;
+    sstrncpy( self->args.interpret.forth, forth, forth_len );
 
     // Invoke OF
-    this->ci( &this->args.interpret );
-    ret = this->args.interpret.result;
+    of1275_ci_call (self, &self->args.interpret );
+    ret = self->args.interpret.result;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
-void of1275_client_interface_t::quiesce()
+void of1275_ci_quiesce (of1275_client_interface_t *self)
 {
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.simple.service = "quiesce";
-    this->args.simple.nargs = 0;
-    this->args.simple.nret = 0;
+    self->args.simple.service = "quiesce";
+    self->args.simple.nargs = 0;
+    self->args.simple.nret = 0;
 
     // Invoke OF.
-    this->ci( &this->args.simple );
+    of1275_ci_call (self, &self->args.simple );
 
     // Prevent any further invocations of Open Firmware.
-    this->entry = NULL;
+    self->entry = NULL;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 }
 
 #endif	/* CONFIG_KDB_CONS_OF1275 */

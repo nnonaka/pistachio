@@ -44,9 +44,8 @@ typedef word_t of1275_ihandle_t;
 
 #define OF1275_INVALID_PHANDLE	((of1275_phandle_t)-1)
 
-class of1275_client_interface_t
+struct of1275_client_interface_t
 {
-protected:
     of1275_ci_entry_t entry;
     of1275_phandle_t stdout;
     of1275_phandle_t stdin;
@@ -104,30 +103,36 @@ protected:
 	    int nret;
 	} simple;
     } args;
-
-    word_t ci( void *params );
-
-public:
-    of1275_phandle_t get_stdout() { return this->stdout; }
-    of1275_phandle_t get_stdin()  { return this->stdin;  }
-
-    void init( word_t entry );
-    of1275_phandle_t find_device( const char *name );
-    int get_prop( of1275_phandle_t phandle, const char *name, void *buf, int buflen );
-    int write( of1275_phandle_t phandle, const void *buf, int len );
-    int read( of1275_phandle_t phandle, void *buf, int len );
-
-    void exit();
-    void quiesce();
-    void enter();
-    int interpret( const char *forth );
 };
+typedef struct of1275_client_interface_t of1275_client_interface_t;
 
-INLINE of1275_client_interface_t *get_of1275_ci()
+INLINE of1275_client_interface_t *get_of1275_ci (void)
 {
     extern of1275_client_interface_t of1275_ci;
     return &of1275_ci;
 }
+
+INLINE of1275_phandle_t of1275_ci_get_stdout (of1275_client_interface_t *self)
+{ return self->stdout; }
+INLINE of1275_phandle_t of1275_ci_get_stdin (of1275_client_interface_t *self)
+{ return self->stdin; }
+
+/* write, read and exit would shadow familiar names at file scope, so every
+   entry point carries the of1275_ci_ prefix rather than only the ones that
+   would collide. */
+void of1275_ci_init (of1275_client_interface_t *self, word_t entry);
+of1275_phandle_t of1275_ci_find_device (of1275_client_interface_t *self, const char *name);
+int of1275_ci_get_prop (of1275_client_interface_t *self, of1275_phandle_t phandle,
+			const char *name, void *buf, int buflen);
+int of1275_ci_write (of1275_client_interface_t *self, of1275_phandle_t phandle,
+		     const void *buf, int len);
+int of1275_ci_read (of1275_client_interface_t *self, of1275_phandle_t phandle,
+		    void *buf, int len);
+
+void of1275_ci_exit (of1275_client_interface_t *self);
+void of1275_ci_quiesce (of1275_client_interface_t *self);
+void of1275_ci_enter (of1275_client_interface_t *self);
+int  of1275_ci_interpret (of1275_client_interface_t *self, const char *forth);
 
 #endif	/* CONFIG_KDB_CONS_OF1275 */
 

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002, Karlsruhe University
  *
- * File path:	src/platform/ofppc/opic.cc
+ * File path:	src/platform/ofppc/opic.c
  * Description:	The open pic driver.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: opic.cc,v 1.26 2003/12/11 13:10:00 joshua Exp $
+ * $Id: opic.c,v 1.26 2003/12/11 13:10:00 joshua Exp $
  *
  ***************************************************************************/
 
@@ -130,8 +130,7 @@
  *   1		1	active high
  */
 
-class pci_addr_t {
-public:
+struct pci_addr_t {
     union {
 	struct {
 	    u32_t relocatable	: 1;	// n-bit
@@ -149,37 +148,50 @@ public:
     u32_t phys_hi;
     u32_t phys_lo;
 };
+typedef struct pci_addr_t pci_addr_t;
 
-class pci_reg_t {
-public:
+struct pci_reg_t {
     pci_addr_t addr;
     u32_t size_hi;
     u32_t size_lo;
 };
+typedef struct pci_reg_t pci_reg_t;
 
-class macio_reg_t {
-public:
+struct macio_reg_t {
     u32_t offset;
     u32_t size;
 };
+typedef struct macio_reg_t macio_reg_t;
 
-class opic_int_map_t {
-public:
+struct opic_int_map_t {
     word_t phandle;
     word_t source;
     word_t sense;
 };
+typedef struct opic_int_map_t opic_int_map_t;
 
-class opic_interrupt_t {
-public:
+struct opic_interrupt_t {
     word_t source;
     word_t sense;
 };
+typedef struct opic_interrupt_t opic_interrupt_t;
 
 intctrl_t intctrl;
 
+/* Private to this file, as the class members they came from were private. */
+static of1275_device_t *find_opic (intctrl_t *self);
+static void init_intctrl (intctrl_t *self);
+static void init_source (intctrl_t *self, int source, int sense);
+static void init_spurious (intctrl_t *self);
+static void init_timers (intctrl_t *self);
+static void init_all_ipi (intctrl_t *self);
+static void disable_8259_pass_through (intctrl_t *self);
+static void scan_interrupt_tree (intctrl_t *self, of1275_device_t *dev_opic);
+static void scan_interrupt_map (intctrl_t *self, of1275_device_t *dev_opic,
+				of1275_device_t *node);
 
-SECTION(".init") of1275_device_t *intctrl_t::find_opic()
+
+SECTION(".init") static of1275_device_t *find_opic (intctrl_t *self)
 {
     word_t len;
     char *data;
@@ -188,25 +200,25 @@ SECTION(".init") of1275_device_t *intctrl_t::find_opic()
     macio_reg_t *opic_reg;
 
     /* Look for the open-pic device. */
-    dev_opic = get_of1275_tree()->find_device_type( "open-pic" );
+    dev_opic = of1275_tree_find_device_type (get_of1275_tree(), "open-pic");
     if( dev_opic == NULL ) {
 	printf( "Error: unable to find an open-pic device.\n" );
 	return NULL;
     }
-    TRACE_INIT( "The open-pic device: %s\n", dev_opic->get_name() );
+    TRACE_INIT( "The open-pic device: %s\n", of1275_device_get_name (dev_opic) );
 
     /* Obtain the open-pic's parent handle. */
-    dev_bus = get_of1275_tree()->get_parent( dev_opic );
+    dev_bus = of1275_tree_get_parent (get_of1275_tree(), dev_opic);
     if( dev_bus == NULL ) {
 	printf( "Error: unable to find the open-pic's bus.\n" );
 	return NULL;
     }
-    TRACE_INIT( "The opic-pic bus: %s\n", dev_bus->get_name() );
+    TRACE_INIT( "The opic-pic bus: %s\n", of1275_device_get_name (dev_bus) );
 
     /* Figure out whether the open-pic is attached to the pci bus,
      * or a mac-io.
      */
-    if( !dev_bus->get_prop("device_type", &data, &len) ) {
+    if( !of1275_device_get_prop (dev_bus, "device_type", &data, &len) ) {
 	printf( "Error: unable to determine the device type of the open-pic's"
 		" bus.\n" );
 	return NULL;
@@ -224,21 +236,21 @@ SECTION(".init") of1275_device_t *intctrl_t::find_opic()
 
     /* Look for the assigned-addresses property.
      */
-    if( dev_pci_client->get_prop("assigned-addresses", (char **)&assigned_addr, &len) && (len == sizeof(pci_reg_t)) )
+    if( of1275_device_get_prop (dev_pci_client, "assigned-addresses", (char **)&assigned_addr, &len) && (len == sizeof(pci_reg_t)) )
     {
-	this->opic_paddr = assigned_addr[0].addr.phys_lo;
-	this->opic_size = assigned_addr[0].size_lo;
+	self->opic_paddr = assigned_addr[0].addr.phys_lo;
+	self->opic_size = assigned_addr[0].size_lo;
     }
 
     /* Look for the "reg" property of the open-pic, assuming it is on the
      * pci bus.  This is a backup.  We should use the "assigned-addresses"
      * property.
      */
-    else if( dev_pci_client->get_prop("reg", (char **)&assigned_addr, &len) 
+    else if( of1275_device_get_prop (dev_pci_client, "reg", (char **)&assigned_addr, &len)
 	    && (len == 2*sizeof(pci_reg_t)) )
     {
-	this->opic_paddr = assigned_addr[1].addr.phys_lo;
-	this->opic_size = assigned_addr[1].size_lo;
+	self->opic_paddr = assigned_addr[1].addr.phys_lo;
+	self->opic_size = assigned_addr[1].size_lo;
     }
 
     else {
@@ -252,35 +264,37 @@ SECTION(".init") of1275_device_t *intctrl_t::find_opic()
 	/* We have the address for the mac-io device.  Get the offset and size
 	 * of the open-pic.
 	 */
-	if( !dev_opic->get_prop("reg", (char **)&opic_reg, &len) ||
+	if( !of1275_device_get_prop (dev_opic, "reg", (char **)&opic_reg, &len) ||
 		(len != sizeof(macio_reg_t)) )
 	{
 	    printf( "Error: unable to find the 'reg' property of the"
 		    " open-pic.\n" );
 	    return NULL;
 	}
-	this->opic_paddr += opic_reg->offset;
-	this->opic_size = opic_reg->size;
+	self->opic_paddr += opic_reg->offset;
+	self->opic_size = opic_reg->size;
     }
 
     return dev_opic;
 }
 
 
-SECTION(".init") void intctrl_t::bat_map()
+SECTION(".init") void intctrl_bat_map (void)
 {
-    if( this->opic_paddr == 0 )
+    intctrl_t *self = get_interrupt_ctrl();
+    ppc_bat_t opic_bat;
+
+    if( self->opic_paddr == 0 )
 	return;
 
     // TODO: remove glue deps
-    this->opic_vaddr = DEVICE_AREA_START;
+    self->opic_vaddr = DEVICE_AREA_START;
 
-    ppc_bat_t opic_bat;
     opic_bat.raw.upper = opic_bat.raw.lower = 0;
-    opic_bat.x.bepi = this->opic_vaddr >> BAT_BEPI;
+    opic_bat.x.bepi = self->opic_vaddr >> BAT_BEPI;
     opic_bat.x.bl = BAT_BL_256K;
     opic_bat.x.vs = 1;
-    opic_bat.x.brpn = this->opic_paddr >> BAT_BRPN;
+    opic_bat.x.brpn = self->opic_paddr >> BAT_BRPN;
     opic_bat.x.w = 0;
     opic_bat.x.i = 1;	/* caching inhibited	*/
     opic_bat.x.m = 1;	/* memory coherent	*/
@@ -291,104 +305,115 @@ SECTION(".init") void intctrl_t::bat_map()
     isync();
 
     TRACE_OPIC( "mapped open-pic to %p (paddr %p)\n", 
-	        this->opic_vaddr, this->opic_paddr);
+	        self->opic_vaddr, self->opic_paddr);
 }
 
-SECTION(".init") void intctrl_t::init_intctrl()
+SECTION(".init") static void init_intctrl (intctrl_t *self)
 {
     opic_feature0_t feature0;
     u32_t freq;
     u32_t num_sources;
 
-    if( this->opic_paddr == 0 )
+    if( self->opic_paddr == 0 )
 	return;
 
-    feature0 = this->get_feature0();
+    feature0 = opic_get_feature0 (self);
     num_sources = feature0.x.last_source;
-    this->num_cpus = feature0.x.last_cpu;
-    if( !powerpc_version_t::read().is_psim() )
+    self->num_cpus = feature0.x.last_cpu;
+    if( !powerpc_version_is_psim (powerpc_version_read()) )
     {
     	num_sources++;
-	this->num_cpus++;
+	self->num_cpus++;
     }
-    this->last_vector = num_sources + intctrl_t::source_start_vec;
+    self->last_vector = num_sources + source_start_vec;
 
     TRACE_INIT( "Open-Pic version %d, supports %d cpu's and %d "
 	        "interrupt sources\n",
-	        feature0.x.version, this->num_cpus, num_sources );
+	        feature0.x.version, self->num_cpus, num_sources );
 
-    freq = this->get_timer_freq();
+    freq = opic_get_timer_freq (self);
     TRACE_INIT( "Open-Pic timer freq %d.%06d MHz\n",
 	        freq / 1000000, freq % 1000000 );
 
-    this->disable_8259_pass_through();
+    disable_8259_pass_through (self);
 }
 
-SECTION(".init") void intctrl_t::init_arch()
+SECTION(".init") void intctrl_init_arch (void)
 {
+    intctrl_t *self = get_interrupt_ctrl();
+    of1275_device_t *dev_opic;
+
+    /* These three read the fields before the three assignments below clear
+       them, which is upstream's order.  intctrl is in .bss, so on the only
+       call that happens they are already zero and the assertions hold
+       trivially. */
     ASSERT( DEVICE_AREA_BAT_SIZE == BAT_256K_PAGE_SIZE );
-    ASSERT( (this->opic_paddr % BAT_256K_PAGE_SIZE) == 0 );
-    ASSERT( (this->opic_vaddr % BAT_256K_PAGE_SIZE) == 0 );
+    ASSERT( (self->opic_paddr % BAT_256K_PAGE_SIZE) == 0 );
+    ASSERT( (self->opic_vaddr % BAT_256K_PAGE_SIZE) == 0 );
 
-    this->opic_vaddr = 0;
-    this->opic_paddr = 0;
-    this->opic_size = 0;
+    self->opic_vaddr = 0;
+    self->opic_paddr = 0;
+    self->opic_size = 0;
 
-    of1275_device_t *dev_opic = this->find_opic();
+    dev_opic = find_opic (self);
     if( dev_opic == NULL )
     {
 	printf( ">> Running without an interrupt controller! <<\n" );
 	return;
     }
     TRACE_INIT( "Found an open-pic at 0x%x, size 0x%x.\n", 
-	        this->opic_paddr, this->opic_size );
+	        self->opic_paddr, self->opic_size );
 
-    this->bat_map();
-    this->init_intctrl();
+    intctrl_bat_map ();
+    init_intctrl (self);
 
-    this->init_timers();
-    this->init_spurious();
-    this->init_all_ipi();
-    this->scan_interrupt_tree( dev_opic );
+    init_timers (self);
+    init_spurious (self);
+    init_all_ipi (self);
+    scan_interrupt_tree (self, dev_opic);
 }
 
-SECTION(".init") void intctrl_t::init_cpu( word_t cpu )
+SECTION(".init") void intctrl_init_cpu (word_t cpu)
 {
-    if( this->opic_paddr == 0 )
+    intctrl_t *self = get_interrupt_ctrl();
+    u32_t cnt = 0;
+
+    if( self->opic_paddr == 0 )
 	return;
 
     // Clear any pending interrupts.  Otherwise L4 will throw a fit
     // if we accept any outstanding interrupts.
-    u32_t cnt = 0;
     while( (cnt < OPIC_NUM_VECTORS) && 
-	    (this->get_irq_ack(cpu).x.vector != intctrl_t::spurious_vec) ) {
-	this->clear_eoi(cpu);
+	    (opic_get_irq_ack (self, cpu).x.vector != spurious_vec) ) {
+	opic_clear_eoi (self, cpu);
 	cnt++;
     }
  
     // Enable interrupts lower than priority 0.
-    this->set_current_task_priority( 0, cpu );
+    opic_set_current_task_priority (self, 0, cpu);
 }
 
 #if defined(CONFIG_SMP)
-SECTION(".init") void intctrl_t::start_new_cpu( word_t cpu )
+SECTION(".init") void intctrl_start_new_cpu (word_t cpu)
 {
-    if( this->opic_paddr == 0 )
+    intctrl_t *self = get_interrupt_ctrl();
+
+    if( self->opic_paddr == 0 )
 	return;
 
-    this->init_cpu( cpu );
-    this->send_ipi0( get_current_cpu(), 1 << cpu );
+    intctrl_init_cpu (cpu);
+    opic_send_ipi0 (self, get_current_cpu(), 1 << cpu);
 }
 #endif
 
-SECTION(".init") void intctrl_t::disable_8259_pass_through()
+SECTION(".init") static void disable_8259_pass_through (intctrl_t *self)
 {
-    opic_global_config0_t val = this->get_global_config0();
+    opic_global_config0_t val = opic_get_global_config0 (self);
     val.x.disable_8259 = 1;
-    this->set_global_config0( val );
+    opic_set_global_config0 (self, val);
 }
 
-SECTION(".init") void intctrl_t::init_timers()
+SECTION(".init") static void init_timers (intctrl_t *self)
 {
     opic_vector_priority_t info;
     word_t timer;
@@ -396,23 +421,23 @@ SECTION(".init") void intctrl_t::init_timers()
     for( timer = 0; timer < OPIC_NUM_TIMERS; timer++ ) {
 	/* Initialize as disabled. */
 	info.raw = 0;
-	info.x.vector = intctrl_t::timer0_vec + timer;
+	info.x.vector = timer0_vec + timer;
 	TRACE_OPIC( "timer %d, vector %d\n", timer, info.x.vector );
 	info.x.mask = 1;  // Disable.
-	info.x.priority = intctrl_t::priority_timer;
-	this->set_timer_vector_priority( timer, info );
-	this->set_timer_cpu( timer, OPIC_CPU_DISABLE );
+	info.x.priority = priority_timer;
+	opic_set_timer_vector_priority (self, timer, info);
+	opic_set_timer_cpu (self, timer, OPIC_CPU_DISABLE);
     }
 }
 
-SECTION(".init") void intctrl_t::init_source( int source, int sense )
+SECTION(".init") static void init_source (intctrl_t *self, int source, int sense)
 {
     opic_vector_priority_t info;
 
     info.raw = 0;
-    info.x.vector = intctrl_t::source_start_vec + source;
+    info.x.vector = source_start_vec + source;
     info.x.mask = 1;	// Disable.
-    info.x.priority = intctrl_t::priority_std_source;
+    info.x.priority = priority_std_source;
     info.x.level = sense;
     info.x.positive = !sense;
 
@@ -422,87 +447,94 @@ SECTION(".init") void intctrl_t::init_source( int source, int sense )
 	return;
     }
 
-    this->mask_source( source );
-    this->set_source_vector_priority( source, info );
-    this->set_source_cpu( source, get_current_cpu() );
+    opic_mask_source (self, source);
+    opic_set_source_vector_priority (self, source, info);
+    opic_set_source_cpu (self, source, get_current_cpu());
 }
 
-SECTION(".init") void intctrl_t::init_all_ipi()
+SECTION(".init") static void init_all_ipi (intctrl_t *self)
 {
     opic_vector_priority_t ipi;
 
     // Enable ipi 0
     ipi.raw = 0;
-    ipi.x.vector = intctrl_t::ipi0_vec;
+    ipi.x.vector = ipi0_vec;
     ipi.x.mask = 0; // Enable.
-    ipi.x.priority = intctrl_t::priority_std_ipi;
+    ipi.x.priority = priority_std_ipi;
     TRACE_OPIC( "ipi0 vector %d\n", ipi.x.vector );
-    this->write_vector_priority( OPIC_IPI0_PRIORITY_REG, ipi );
+    opic_write_vector_priority (self, OPIC_IPI0_PRIORITY_REG, ipi);
 
     // Disable the other ipi vectors.
     ipi.raw = 0;
-    ipi.x.vector = intctrl_t::spurious_vec;
+    ipi.x.vector = spurious_vec;
     ipi.x.mask = 1;  // Disable!
     ipi.x.priority = priority_spurious;
-    this->write_vector_priority( OPIC_IPI1_PRIORITY_REG, ipi );
-    this->write_vector_priority( OPIC_IPI2_PRIORITY_REG, ipi );
-    this->write_vector_priority( OPIC_IPI3_PRIORITY_REG, ipi );
+    opic_write_vector_priority (self, OPIC_IPI1_PRIORITY_REG, ipi);
+    opic_write_vector_priority (self, OPIC_IPI2_PRIORITY_REG, ipi);
+    opic_write_vector_priority (self, OPIC_IPI3_PRIORITY_REG, ipi);
 }
 
-SECTION(".init") void intctrl_t::init_spurious()
+SECTION(".init") static void init_spurious (intctrl_t *self)
 {
     opic_vector_priority_t info;
 
     info.raw = 0;
-    info.x.vector = intctrl_t::spurious_vec;
+    info.x.vector = spurious_vec;
     info.x.mask = 0;
-    info.x.priority = intctrl_t::priority_spurious;
+    info.x.priority = priority_spurious;
     TRACE_OPIC( "spurious vector %d\n", info.x.vector );
-    this->write_vector_priority( OPIC_SPURIOUS_REG, info );
+    opic_write_vector_priority (self, OPIC_SPURIOUS_REG, info);
 }
 
 /*****************************************************************************/
 
-void intctrl_t::write_vector_priority( word_t reg, opic_vector_priority_t val )
+/* `t' is loaded, masked, and then never written anywhere -- upstream's, kept
+   as it stands.  The masking the name implies does not happen; what the
+   function does is spin until the register goes inactive and then store the
+   caller's value.  Notes §144. */
+void opic_write_vector_priority (intctrl_t *self, word_t reg, opic_vector_priority_t val)
 {
     opic_vector_priority_t t;
 
-    t = this->get_vector_priority( reg );
+    t = opic_get_vector_priority (self, reg);
     t.x.mask = 1;
-    while( this->get_vector_priority(reg).x.activity ) ;
-    this->out32le( reg, val.raw );
+    while( opic_get_vector_priority (self, reg).x.activity ) ;
+    opic_out32le (self, reg, val.raw);
 }
 
 /*****************************************************************************/
 
-SECTION(".kdebug") void intctrl_t::enable_timer( word_t timer )
+SECTION(".kdebug") void intctrl_enable_timer (word_t timer)
 {
+    intctrl_t *self = get_interrupt_ctrl();
+
     ASSERT( timer < OPIC_NUM_TIMERS );
-    this->set_timer_freq( 4667 );
-    this->set_timer_cpu( timer, 1 );
-    this->restart_timer( timer );
+    opic_set_timer_freq (self, 4667);
+    opic_set_timer_cpu (self, timer, 1);
+    opic_restart_timer (self, timer);
 }
 
-void intctrl_t::handle_irq( word_t irq )
+void intctrl_handle_irq (word_t irq)
 {
+    intctrl_t *self = get_interrupt_ctrl();
     opic_irq_ack_t ack;
 
     // Retrieve the first pending interrupt.
-    ack = this->get_irq_ack( get_current_cpu() );
+    ack = opic_get_irq_ack (self, get_current_cpu());
     //TRACEF( "interrupt vector %d\n", ack.x.vector );
 
-    if( ack.x.vector == intctrl_t::spurious_vec )
+    if( ack.x.vector == spurious_vec )
 	return;
 #if defined(CONFIG_SMP)
-    if( ack.x.vector == intctrl_t::ipi0_vec ) {
-	this->ack( ack.x.vector );
-	::handle_smp_ipi( intctrl_t::ipi0_vec );
+    if( ack.x.vector == ipi0_vec ) {
+	intctrl_ack (ack.x.vector);
+	handle_smp_ipi( ipi0_vec );
 	return;
     }
 #endif
 
-    this->mask_and_ack( ack.x.vector );
-    ::handle_interrupt( ack.x.vector );
+    intctrl_mask_and_ack (ack.x.vector);
+    handle_interrupt( ack.x.vector );
 }
 
 /*****************************************************************************/
@@ -511,19 +543,18 @@ void intctrl_t::handle_irq( word_t irq )
  * Walks all device nodes of the Open Firmware device tree and looks for
  * interrupt definitions.
  */
-SECTION(".init") void intctrl_t::scan_interrupt_tree( 
-	of1275_device_t *dev_opic )
+SECTION(".init") static void scan_interrupt_tree (intctrl_t *self, of1275_device_t *dev_opic)
 {
     of1275_device_t *dev;
 
-    dev = get_of1275_tree()->first();
+    dev = of1275_tree_first (get_of1275_tree());
     if( !dev )
 	return;
 
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	this->scan_interrupt_map( dev_opic, dev );
-	dev = dev->next();
+	scan_interrupt_map (self, dev_opic, dev);
+	dev = of1275_device_next (dev);
     }
 }
 
@@ -532,8 +563,8 @@ SECTION(".init") void intctrl_t::scan_interrupt_tree(
  * If so, then it looks for interrupt resources in the "interrupts"
  * property, and in the "interrupt-map" property.
  */
-SECTION(".init") void intctrl_t::scan_interrupt_map( 
-	of1275_device_t *dev_opic, of1275_device_t *node )
+SECTION(".init") static void scan_interrupt_map (intctrl_t *self,
+	of1275_device_t *dev_opic, of1275_device_t *node)
 {
     word_t interrupt_parent;
     word_t *map_buf;
@@ -543,36 +574,36 @@ SECTION(".init") void intctrl_t::scan_interrupt_map(
     opic_interrupt_t *opic_int;
 
     // Ensure that this device's interrupt-parent points to our open-pic.
-    if( !node->get_prop("interrupt-parent", &interrupt_parent) )
+    if( !of1275_device_get_prop_word (node, "interrupt-parent", &interrupt_parent) )
 	return;
-    if( interrupt_parent != dev_opic->get_handle() )
+    if( interrupt_parent != of1275_device_get_handle (dev_opic) )
 	return;
-    TRACE_OPIC( "interrupt client: %s\n", node->get_name() );
+    TRACE_OPIC( "interrupt client: %s\n", of1275_device_get_name (node) );
 
     // Extract the device's interrupts property.
-    if( node->get_prop("interrupts", (char **)&map_buf, &len) && (len > 0) )
+    if( of1275_device_get_prop (node, "interrupts", (char **)&map_buf, &len) && (len > 0) )
     {
 	len /= sizeof(word_t);
 	for( j = 0; j < len; j += 2 ) 
 	{
 	    opic_int = (opic_interrupt_t *)&map_buf[j];
 	    if( opic_int->source < OPIC_MAX_SOURCES )
-		this->init_source( opic_int->source, opic_int->sense );
+		init_source (self, opic_int->source, opic_int->sense);
 	    TRACE_OPIC( "source %d, sense %d\n", 
 		    opic_int->source, opic_int->sense );
 	}
     }
 
     // Get the number of address cells.
-    if( !node->get_prop("#address-cells", &address_cells) )
+    if( !of1275_device_get_prop_word (node, "#address-cells", &address_cells) )
 	return;
 
     // Get the number of interrupt cells.
-    if( !node->get_prop("#interrupt-cells", &interrupt_cells) )
+    if( !of1275_device_get_prop_word (node, "#interrupt-cells", &interrupt_cells) )
 	return;
 
     // Get the interrupt map.
-    if( !node->get_prop("interrupt-map", (char **)&map_buf, &len) || (len <= 0))
+    if( !of1275_device_get_prop (node, "interrupt-map", (char **)&map_buf, &len) || (len <= 0))
 	return;
 
     // Walk the interrupt map.
@@ -584,10 +615,9 @@ SECTION(".init") void intctrl_t::scan_interrupt_map(
 	opic_map = (opic_int_map_t *)
 	    &map_buf[ j+address_cells+interrupt_cells ];
 	if( opic_map->source < OPIC_MAX_SOURCES )
-	    this->init_source( opic_map->source, opic_map->sense );
+	    init_source (self, opic_map->source, opic_map->sense);
 	TRACE_OPIC( "source %d, sense %d\n",
 		opic_map->source, opic_map->sense );
     }
 
 }
-

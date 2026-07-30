@@ -48,7 +48,7 @@ DECLARE_CMD( cmd_dump_translations, platform, 't', "translations", "Open Firmwar
 
 CMD(cmd_platform, cg)
 {
-    return platform.interact( cg, "platform" );
+    return cmd_group_interact (&platform, cg, "platform");
 }
 
 
@@ -57,19 +57,19 @@ CMD(cmd_dump_1275tree, cg)
      */
 {
     of1275_device_t *dev;
+    int tot = 1;
 
-    dev = get_of1275_tree()->first();
+    dev = of1275_tree_first (get_of1275_tree());
     if( !dev )
     {
 	printf( "No device tree found.\n" );
 	return CMD_NOQUIT;
     }
 
-    int tot = 1;
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	printf( "%x: %s\n", dev->get_handle(), dev->get_name() );
-	dev = dev->next();
+	printf( "%x: %s\n", of1275_device_get_handle (dev), of1275_device_get_name (dev) );
+	dev = of1275_device_next (dev);
 
 	if( !(tot % 23) )
 	    if( get_choice("Continue?", "Continue/Quit", 'c') == 'q' )
@@ -80,7 +80,7 @@ CMD(cmd_dump_1275tree, cg)
     return CMD_NOQUIT;
 }
 
-bool is_string( char *data, word_t data_len )
+static bool is_string( char *data, word_t data_len )
 {
     return data[data_len-1] == '\0';
 }
@@ -92,30 +92,32 @@ CMD(cmd_dump_complete_tree, cg)
      */
 {
     of1275_device_t *dev;
+    int tot = 1;
+    bool quit = false;
 
-    dev = get_of1275_tree()->first();
+    dev = of1275_tree_first (get_of1275_tree());
     if( !dev )
     {
 	printf( "No device tree found.\n" );
 	return CMD_NOQUIT;
     }
 
-    int tot = 1;
-    bool quit = false;
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
+	word_t prop;
+
 	// The device name.
-	printf( "%x: %s\n", dev->get_handle(), dev->get_name() );
+	printf( "%x: %s\n", of1275_device_get_handle (dev), of1275_device_get_name (dev) );
 	tot++;
 
 	// Walk the properties.
-	for( word_t prop = 0; prop < dev->get_prop_count(); prop++ )
+	for( prop = 0; prop < of1275_device_get_prop_count (dev); prop++ )
 	{
 	    char *prop_name, *prop_data;
 	    word_t prop_len;
 
 	    // Print the property.
-	    dev->get_prop( prop, &prop_name, &prop_data, &prop_len );
+	    of1275_device_get_prop_index (dev, prop, &prop_name, &prop_data, &prop_len);
 	    printf( "\t%s [%d]", prop_name, prop_len );
 	    if( prop_len == 4 )
 		printf( ": 0x%08x", *(word_t *)prop_data );
@@ -136,7 +138,7 @@ CMD(cmd_dump_complete_tree, cg)
 	if( quit )
 	    break;
 
-	dev = dev->next();
+	dev = of1275_device_next (dev);
 
 	// Prompt to continue dumping.
 	if( !(tot % 23) )
@@ -161,22 +163,22 @@ CMD(cmd_dump_translations, cg)
     of1275_device_t *dev;
     word_t handle;
     of1275_map_t *mappings;
-    word_t len;
+    word_t len, i;
 
-    dev = get_of1275_tree()->find( "/chosen" );
+    dev = of1275_tree_find (get_of1275_tree(), "/chosen");
     if( !dev )
 	goto abort;
-    if( !dev->get_prop("mmu", &handle) )
+    if( !of1275_device_get_prop_word (dev, "mmu", &handle) )
 	goto abort;
 
-    dev = get_of1275_tree()->find_handle( handle );
+    dev = of1275_tree_find_handle (get_of1275_tree(), handle);
     if( !dev )
 	goto abort;
-    if( !dev->get_prop( "translations", (char **)&mappings, &len) )
+    if( !of1275_device_get_prop (dev, "translations", (char **)&mappings, &len) )
 	goto abort;
 
     len = len / sizeof(of1275_map_t);
-    for( word_t i = 0; i < len; i++ )
+    for( i = 0; i < len; i++ )
 	printf( "paddr %p, vaddr %p, size %p, mode %4x\n",
 		mappings[i].paddr, mappings[i].vaddr, mappings[i].size,
 		mappings[i].mode );
@@ -192,51 +194,51 @@ abort:
 
 of1275_space_t of1275_space;
 
-void of1275_space_t::init( word_t stack_top, word_t stack_bottom )
+void of1275_space_init (of1275_space_t *self, word_t stack_top, word_t stack_bottom)
 {
-    this->lock.init();
+    spinlock_init (&self->lock, 0);
 
-    this->of1275_stack_top = stack_top;
-    this->of1275_stack_bottom = stack_bottom;
+    self->of1275_stack_top = stack_top;
+    self->of1275_stack_bottom = stack_bottom;
 
-    this->of1275_ptab_loc = this->get_ptab_loc();
-    this->get_segments( this->of1275_segments );
+    self->of1275_ptab_loc = of1275_space_get_ptab_loc (self);
+    of1275_space_get_segments (self, self->of1275_segments);
 }
 
-extern "C" word_t kdb_switch_space( 
+word_t kdb_switch_space(
 	word_t of1275_htab, word_t *of1275_segments, 
 	word_t old_htab, word_t *old_segments,
 	word_t new_stack, word_t (*func)(void *), void *param );
 
-word_t of1275_space_t::execute_of1275( word_t (*func)(void *), void *param )
+word_t of1275_space_execute_of1275 (of1275_space_t *self, word_t (*func)(void *), void *param)
 {
     word_t result;
     word_t *sp;
 
-    this->lock.lock();
+    spinlock_lock (&self->lock);
 
     // Choose a stack.  Note: to avoid TLB faults, it is important that we 
     // use a stack mapped by a bat register.  It is also important to use a 
     // large stack with sufficient space for Open Firmware.  The boot stack
     // is mapped by a bat, and rather large.
-    if( this->using_of1275_stack() )
+    if( of1275_space_using_of1275_stack (self) )
 	sp = NULL;
     else
     {
-	sp = (word_t *)(this->of1275_stack_top-16);
+	sp = (word_t *)(self->of1275_stack_top-16);
 	sp[0] = sp[1] = sp[2] = sp[3] = 0;
     }
 
     // Preserve the current address space settings.
-    this->current_ptab_loc = this->get_ptab_loc();
-    this->get_segments( this->current_segments );
+    self->current_ptab_loc = of1275_space_get_ptab_loc (self);
+    of1275_space_get_segments (self, self->current_segments);
 
     // Execute the function within the 1275 address space.
-    result = kdb_switch_space( this->of1275_ptab_loc, this->of1275_segments,
-	    this->current_ptab_loc, this->current_segments,
-	    this->of1275_stack_top-16, func, param );
+    result = kdb_switch_space( self->of1275_ptab_loc, self->of1275_segments,
+	    self->current_ptab_loc, self->current_segments,
+	    self->of1275_stack_top-16, func, param );
 
-    this->lock.unlock();
+    spinlock_unlock (&self->lock);
 
     return result;
 }

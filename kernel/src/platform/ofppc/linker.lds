@@ -69,6 +69,13 @@ SECTIONS
 	_start_kernel = .;
 	.init . : AT (ADDR(.init) - kernel_offset) {
 		*(.init) *(.init.*) *(.roinit)
+/* platform/ppc44x/linker.lds includes both of these here and this script
+ * includes neither, so glue/v4-powerpc/ctors.c's three __ctors_* arrays and
+ * the mapping database's linker sets have nowhere to land and the kernel does
+ * not link.  Same omission class as the four x86 scripts in notes §132.
+ */
+#include <generic/mdb.ldi>
+#include <generic/ctors.ldi>
 	} : kernel
 	.kdb . : AT (ADDR(.kdb) - kernel_offset) {
 		/* Match all modules in the kdb subdirectory. */

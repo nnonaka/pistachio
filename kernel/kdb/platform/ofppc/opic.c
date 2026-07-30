@@ -39,6 +39,6 @@ DECLARE_CMD( cmd_enable_timer, arch, 't', "timer", "Enable opic timer" );
 
 CMD( cmd_enable_timer, cg )
 {
-    get_interrupt_ctrl()->enable_timer( 0 );
+    intctrl_enable_timer( 0 );
     return CMD_NOQUIT;
 }

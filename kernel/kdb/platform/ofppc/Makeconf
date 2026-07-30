@@ -29,5 +29,5 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/platform/ofppc/, io.cc ofppc.cc reset.cc \
-	stack.S of1275.cc opic.cc)
+SOURCES += $(addprefix kdb/platform/ofppc/, io.c ofppc.c reset.c \
+	stack.S of1275.c opic.c)

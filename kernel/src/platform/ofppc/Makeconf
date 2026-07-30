@@ -31,4 +31,4 @@
 ##                
 ######################################################################
 SOURCES += $(addprefix src/platform/ofppc/, startup.S \
-	opic.cc 1275tree.cc ofppc.cc)
+	opic.c 1275tree.c ofppc.c)

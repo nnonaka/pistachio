@@ -47,84 +47,111 @@ INLINE word_t of1275_align( word_t val )
 }
 
 
-class of1275_item_t
+/* `char data[]' / `char name[]' are flexible array members, which C requires
+   to follow at least one named member -- they do here, so both structs port
+   unchanged. */
+struct of1275_item_t
 {
-public:
     word_t len;
     char data[];
-
-    of1275_item_t *next()
-    {
-	return (of1275_item_t *)of1275_align( (word_t)this->data + this->len );
-    }
 };
+typedef struct of1275_item_t of1275_item_t;
 
-
-class of1275_device_t
+INLINE of1275_item_t * of1275_item_next (of1275_item_t *self)
 {
-protected:
+    return (of1275_item_t *)of1275_align( (word_t)self->data + self->len );
+}
+
+
+struct of1275_device_t
+{
     word_t handle;
     word_t prop_count;
     word_t prop_size;
     word_t len;
     char name[];
-
-    of1275_item_t *item_first()
-    {
-	return (of1275_item_t *)of1275_align( (word_t)this->name + this->len );
-    }
-
-public:
-    char *get_name()        { return this->name; }
-    word_t get_handle()     { return this->handle; }
-    word_t get_prop_count() { return this->prop_count; }
-
-    bool is_valid() { return this->handle != 0; }
-
-    bool get_prop( const char *name, char **data, word_t *data_len );
-    bool get_prop( word_t index, char **name, char **data, word_t *data_len ); 
-    int get_depth();
-
-    bool get_prop( const char *name, word_t *data )
-    {
-	word_t *ptr, len;
-	if( !this->get_prop(name, (char **)&ptr, &len) )
-	    return false;
-	if( len != sizeof(*data) )
-	    return false;
-	*data = *ptr;
-	return true;
-    }
-
-    of1275_device_t *next()
-    {
-	return (of1275_device_t *)
-	    of1275_align( (word_t)this->name + this->len + this->prop_size );
-    }
 };
+typedef struct of1275_device_t of1275_device_t;
 
-
-class of1275_tree_t
+INLINE of1275_item_t * of1275_device_item_first (of1275_device_t *self)
 {
-protected:
+    return (of1275_item_t *)of1275_align( (word_t)self->name + self->len );
+}
+
+INLINE char * of1275_device_get_name (of1275_device_t *self)
+{ return self->name; }
+INLINE word_t of1275_device_get_handle (of1275_device_t *self)
+{ return self->handle; }
+INLINE word_t of1275_device_get_prop_count (of1275_device_t *self)
+{ return self->prop_count; }
+
+INLINE bool of1275_device_is_valid (of1275_device_t *self)
+{ return self->handle != 0; }
+
+/* get_prop was overloaded three ways upstream.  C has no overloading, and
+   collapsing an overload set to its narrowest member is exactly the failure
+   §140 chased, so all three keep distinct names rather than one of them
+   winning: by property name, by property index, and the word-sized
+   convenience wrapper over the first. */
+bool of1275_device_get_prop (of1275_device_t *self, const char *name,
+			     char **data, word_t *data_len);
+bool of1275_device_get_prop_index (of1275_device_t *self, word_t index,
+				   char **name, char **data, word_t *data_len);
+int  of1275_device_get_depth (of1275_device_t *self);
+
+INLINE bool of1275_device_get_prop_word (of1275_device_t *self,
+					 const char *name, word_t *data)
+{
+    word_t *ptr, len;
+    if( !of1275_device_get_prop (self, name, (char **)&ptr, &len) )
+	return false;
+    if( len != sizeof(*data) )
+	return false;
+    *data = *ptr;
+    return true;
+}
+
+INLINE of1275_device_t * of1275_device_next (of1275_device_t *self)
+{
+    return (of1275_device_t *)
+	of1275_align( (word_t)self->name + self->len + self->prop_size );
+}
+
+
+struct of1275_tree_t
+{
     of1275_device_t *head;
-
-public:
-    void init( char *spill )
-    {
-	this->head = (of1275_device_t *)of1275_align( (word_t)spill );
-    }
-
-    of1275_device_t *first()
-    {
-	return this->head;
-    }
-
-    of1275_device_t *find( const char *name );
-    of1275_device_t *find_handle( word_t handle );
-    of1275_device_t *find_device_type( const char *device_type );
-    of1275_device_t *get_parent( of1275_device_t *dev );
 };
+typedef struct of1275_tree_t of1275_tree_t;
+
+INLINE void of1275_tree_init (of1275_tree_t *self, char *spill)
+{
+    self->head = (of1275_device_t *)of1275_align( (word_t)spill );
+}
+
+INLINE of1275_device_t * of1275_tree_first (of1275_tree_t *self)
+{
+    return self->head;
+}
+
+of1275_device_t * of1275_tree_find (of1275_tree_t *self, const char *name);
+of1275_device_t * of1275_tree_find_handle (of1275_tree_t *self, word_t handle);
+of1275_device_t * of1275_tree_find_device_type (of1275_tree_t *self,
+						const char *device_type);
+of1275_device_t * of1275_tree_get_parent (of1275_tree_t *self,
+					  of1275_device_t *dev);
+
+/* Ten 32-bit files call get_of1275_tree -- platform/ofppc, ofpower3, ofg5,
+   their kdb halves and glue/v4-powerpc/init -- but upstream declares it only
+   in arch/powerpc64/1275tree.h, which INC_ARCH cannot reach from a 32-bit
+   build.  None of them has ever compiled.  The object it returns is defined at
+   file scope in 1275tree.c, so the accessor admits no behavioural choice; it is
+   the powerpc64 one, verbatim.  Notes §144. */
+INLINE of1275_tree_t * get_of1275_tree (void)
+{
+    extern of1275_tree_t of1275_tree;
+    return &of1275_tree;
+}
 
 
 #endif	/* __PLATFORM__OFPPC__1275TREE_H__ */

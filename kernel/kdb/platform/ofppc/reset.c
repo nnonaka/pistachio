@@ -43,10 +43,10 @@ DECLARE_CMD (cmd_shutdown, root, '7', "shutdown", "System shutdown");
 CMD(cmd_reset, cg)
 {
 #if defined(CONFIG_KDB_CONS_OF1275)
-    if( powerpc_version_t::read().is_psim() )
-	get_of1275_ci()->exit();
+    if( powerpc_version_is_psim (powerpc_version_read()) )
+	of1275_ci_exit (get_of1275_ci());
     else
-	get_of1275_ci()->interpret( "reset-all" );
+	of1275_ci_interpret (get_of1275_ci(), "reset-all");
 #endif
 
     return CMD_NOQUIT;
@@ -55,10 +55,10 @@ CMD(cmd_reset, cg)
 CMD(cmd_shutdown, cg)
 {
 #if defined(CONFIG_KDB_CONS_OF1275)
-    if( powerpc_version_t::read().is_psim() )
-	get_of1275_ci()->exit();
+    if( powerpc_version_is_psim (powerpc_version_read()) )
+	of1275_ci_exit (get_of1275_ci());
     else
-	get_of1275_ci()->interpret( "shut-down" );
+	of1275_ci_interpret (get_of1275_ci(), "shut-down");
 #endif
 
     return CMD_NOQUIT;

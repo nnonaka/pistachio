@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	platform/ofppc/ofppc.cc
+ * File path:	platform/ofppc/ofppc.c
  * Description:	Open Firmware PowerPC support
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: ofppc.cc,v 1.4 2003/10/31 16:04:41 joshua Exp $
+ * $Id: ofppc.c,v 1.4 2003/10/31 16:04:41 joshua Exp $
  *
  ***************************************************************************/
 
@@ -42,54 +42,53 @@ SECTION(".init") bool ofppc_get_cpu_speed( word_t *cpu_hz, word_t *bus_hz )
     of1275_device_t *dev;
 
     // First look for the device pointed to by the /chosen/cpu property.
-    dev = get_of1275_tree()->find( "/chosen" );
+    dev = of1275_tree_find (get_of1275_tree(), "/chosen");
     if( dev )
     {
 	word_t handle;
-	if( dev->get_prop("cpu", &handle) )
-	    dev = get_of1275_tree()->find_handle( handle );
+	if( of1275_device_get_prop_word (dev, "cpu", &handle) )
+	    dev = of1275_tree_find_handle (get_of1275_tree(), handle);
 	else
 	    dev = NULL;
     }
 
     if( dev == NULL )
-    	dev = get_of1275_tree()->find( "/cpus/cpu@0" ); // Try a fallback.
+    	dev = of1275_tree_find (get_of1275_tree(), "/cpus/cpu@0"); // Try a fallback.
     if( dev == NULL )
 	return false;
 
-    if( !dev->get_prop("clock-frequency", cpu_hz) )
+    if( !of1275_device_get_prop_word (dev, "clock-frequency", cpu_hz) )
 	return false;
-    if( !dev->get_prop("bus-frequency", bus_hz) )
+    if( !of1275_device_get_prop_word (dev, "bus-frequency", bus_hz) )
 	return false;
 
     return true;
 }
 
-SECTION(".init") int ofppc_get_cpu_count()
+SECTION(".init") int ofppc_get_cpu_count( void )
 {
     of1275_device_t *dev;
     int cnt = 0;
     char token[] = "/cpus/";
 
-    dev = get_of1275_tree()->first();
+    dev = of1275_tree_first (get_of1275_tree());
     if( dev == NULL )
 	return 1;
 
     // Search through every device, looking for those which are in the /cpus
     // tree.  Count those which are immediate children of /cpus.
-    while( dev->is_valid() )
+    while( of1275_device_is_valid (dev) )
     {
-	if( !strncmp(dev->get_name(), token, sizeof(token)-1) )
-	    if( dev->get_depth() == 2 )
+	if( !strncmp(of1275_device_get_name (dev), token, sizeof(token)-1) )
+	    if( of1275_device_get_depth (dev) == 2 )
 	    {
-		TRACE_INIT( "Found cpu: %s\n", dev->get_name() );
+		TRACE_INIT( "Found cpu: %s\n", of1275_device_get_name (dev) );
 		cnt++;
 	    }
-	dev = dev->next();
+	dev = of1275_device_next (dev);
     }
 
     if( !cnt )
 	cnt = 1;
     return cnt;
 }
-

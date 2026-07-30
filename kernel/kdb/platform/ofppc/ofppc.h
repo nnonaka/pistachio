@@ -40,9 +40,8 @@
 #include INC_ARCH(ppc_registers.h)
 #include INC_ARCH(pghash.h)
 
-class of1275_space_t
+struct of1275_space_t
 {
-protected:
     spinlock_t lock;
 
     word_t of1275_ptab_loc;
@@ -52,33 +51,37 @@ protected:
 
     word_t current_ptab_loc;
     word_t current_segments[16];
-
-protected:
-    word_t get_ptab_loc() { return ppc_get_sdr1(); }
-    void get_segments( word_t segments[16] )
-    {
-	for( int i = 0; i < 16; i++ )
-	    segments[i] = ppc_get_sr(i);
-    }
-
-    bool using_of1275_stack()
-    {
-	word_t stack = (word_t)&stack;
-	return (stack >= this->of1275_stack_bottom) &&
-	       (stack < this->of1275_stack_top);
-    }
-
-public:
-    void init( word_t stack_top, word_t stack_bottom );
-
-    word_t execute_of1275( word_t (*func)(void *), void *param );
 };
+typedef struct of1275_space_t of1275_space_t;
 
-INLINE of1275_space_t *get_of1275_space()
+INLINE of1275_space_t *get_of1275_space (void)
 {
     extern of1275_space_t of1275_space;
     return &of1275_space;
 }
+
+INLINE word_t of1275_space_get_ptab_loc (of1275_space_t *self)
+{ return ppc_get_sdr1(); }
+
+INLINE void of1275_space_get_segments (of1275_space_t *self, word_t segments[16])
+{
+    int i;
+    for( i = 0; i < 16; i++ )
+	segments[i] = ppc_get_sr(i);
+}
+
+/* `stack' is initialised from its own address, which is how it gets a stack
+   address to compare -- upstream's, and deliberate. */
+INLINE bool of1275_space_using_of1275_stack (of1275_space_t *self)
+{
+    word_t stack = (word_t)&stack;
+    return (stack >= self->of1275_stack_bottom) &&
+	   (stack < self->of1275_stack_top);
+}
+
+void of1275_space_init (of1275_space_t *self, word_t stack_top, word_t stack_bottom);
+
+word_t of1275_space_execute_of1275 (of1275_space_t *self, word_t (*func)(void *), void *param);
 
 #endif	/* CONFIG_KDB_CONS_OF1275 */
 

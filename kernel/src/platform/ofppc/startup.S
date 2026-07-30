@@ -131,7 +131,14 @@ _virt_mode:
 
 	/*  Jump into C code.  */
 2:
-	bl	l4_powerpc_init
+	/* Upstream branches to l4_powerpc_init, which is defined nowhere -- not
+	 * here and not in master.  The kernel's C entry point is
+	 * startup_system, which is what platform/ppc44x/startup.S enters and
+	 * what glue/v4-powerpc/init.c defines.  Its three word_t parameters are
+	 * named for r3-r5 but never read, so the fact that _real_mode above
+	 * clobbers r3 and r4 building the BATs costs nothing.  Notes §144.
+	 */
+	bl	startup_system
 	
 3:	b	3b		/* we should never execute this line.  */
 ._start_end:
