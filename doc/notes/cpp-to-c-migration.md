@@ -6619,6 +6619,12 @@ assembly (its register constraints are parsed but never assembled), the four
 `.S` files, `tcb_layout.h` and `asmsyms.h` -- which on PowerPC only the assembly
 includes, which is why the C checks without them -- and the link.
 
+**§140 supersedes the toolchain claim above.** A `powerpc-linux-gnu` cross
+compiler is installed now and the configuration links. The list in the previous
+paragraph turned out to be the right list: the asm register constraints were
+exactly where two out-parameters had lost their indirection, and neither the
+host check nor any x86 configuration could have found them.
+
 Two things fall out of it.
 
 `api/v4/tcb.h` carried a comment, added in `c50dc09`, saying that declaring
@@ -6635,3 +6641,253 @@ builds none of them: they belong to `powerpc64`, to the Open Firmware platforms
 which is the Ebony arm of the very `intctrl.h` above. So of the two
 subplatforms this configuration chooses between, BlueGene/P is C and Ebony is
 not.
+
+
+## §140 — The powerpc kernel links, and what `-Wconversion` found on the way
+
+§139 checked every PowerPC translation unit with the host compiler in `-m32`
+and reported all sixty-two clean. That was true and it was not enough. A real
+`powerpc-linux-gnu` cross toolchain is installed now, and with it the
+configuration compiles, assembles and links: `powerpc-kernel`, 330,172 bytes of
+text and 9,768 of data, zero errors.
+
+Getting there took nine files. Reading the warnings it then emitted took several
+more, and they divide cleanly: four defects the conversion introduced beyond the
+ones that had blocked the build, four that upstream has carried for a decade or
+more, and three classes that look alarming and are not.
+
+### What the host check could not see
+
+The host check compiled C, so it caught C errors. It did not link, did not
+assemble, and -- this is the part worth naming -- it did not instantiate the
+PowerPC `-imacros` and `INC_ARCH`/`INC_GLUE` chain the way the real build does.
+Four classes of fallout only appear under the cross build.
+
+**Derived-to-base on a pointer.** `fdt_header_t` and `fdt_property_t` both begin
+with an `fdt_node_t base`, and in C++ they derived from it, so a
+`fdt_header_t *` converted to `fdt_node_t *` implicitly -- null pointer
+included, which the standard requires to convert to null. In C that conversion
+has to be written. `fdt_header_node()` in `platform/ppc44x/fdt.h` is it, null
+check and all; it folds away, because the base is at offset zero. Nine call
+sites across `fdt.c`, `bic.c`, `bluegene.h` and `kdb/platform/ppc44x/io.c`.
+
+**`inline` that is not `INLINE`.** `ppc_get_pid` and `ppc_set_pid` in
+`arch/powerpc/swtlb.h` were bare `inline` and call `ppc_get_spr`/`ppc_set_spr`,
+which are `static`. C forbids a non-`static` `inline` function from referring to
+an identifier with internal linkage; C++ does not. `INLINE` (which is
+`static inline`) is the fix, and it is what every neighbour in the file already
+used.
+
+**`static_cast` that was never parsed.** `glue/v4-powerpc/space-swtlb.c` and
+`softhvm.c` still contained `static_cast<word_t>` and `reinterpret_cast<paddr_t>`
+after conversion. They compiled because their only appearances are inside
+`TRACE_TLB` and `TRACE_EMUL`, which expand to nothing when tracing is off, so
+the arguments are never parsed as expressions. Turning tracing on would not have
+built. The same blindness hid a `RELOC` macro that had gone unused when
+`space_sigma0_translate` became a loop over `transtable[]`.
+
+**An out-parameter that lost its indirection.** `space_handle_hvm_tlb_miss` took
+`paddr_t &gpaddr`; the conversion changed the parameter to `paddr_t *gpaddr` and
+left all three uses spelled as the reference had them.
+
+`generic/asid.h` also cleared one element past the end of `asid_user[]` -- a
+`<=` where the bound is the array size. Upstream had it; GCC's
+`-Waggressive-loop-optimizations` flags the last iteration as undefined.
+
+### Two C++ overload sets that C dropped in silence
+
+These are the findings that matter, and neither is visible on x86.
+
+**`addr_offset` / `addr_mask` on a `paddr_t`.** PowerPC's `arch/powerpc/types.h`
+carried, since `919fd02`, a second pair:
+
+    INLINE paddr_t addr_offset (paddr_t addr, word_t off);
+    INLINE paddr_t addr_mask   (paddr_t addr, word_t mask);
+
+overloading the `addr_t` pair in `generic/types.h`. On `ppc44x`, `paddr_t` is
+`u64_t` -- the 440 addresses 36 bits of physical memory -- while `addr_t` is a
+32-bit `void *`. The conversion renamed them `paddr_offset`/`paddr_mask`,
+correctly, because C has no overloading; and then recorded, in a comment, that
+"no caller passes a `paddr_t` today; every site in the powerpc tree uses the
+`addr_t` forms."
+
+The second half is true and the first is false, and the gap between them is the
+bug: the callers are not in the powerpc tree. `generic/linear_ptab_walker.c`
+passes a `paddr_t` at eighteen sites, and with the overload gone each one
+round-trips a 64-bit physical address through `void *`. **The top four bits of
+every physical address are discarded** -- in `map_fpage`, where
+`pgent_set_entry` receives the address a mapping is established at, and in
+`space_readmem`, which the debugger reads memory through. On x86 `paddr_t` *is*
+`void *`, so the same source line resolved to the same function before and
+after, and nothing showed.
+
+The fix restores the overload as an explicit choice the caller makes.
+`generic/types.h` now defines `paddr_offset`/`paddr_mask` forwarding to the
+`addr_t` pair, for the architectures where `paddr_t` is `addr_t`; PowerPC
+defines `HAVE_ARCH_PADDR_OPS` and keeps its own, because forwarding would
+truncate. The eighteen call sites name the `paddr` form.
+
+**`virt_to_phys` / `phys_to_virt`.** `glue/v4-powerpc/hwspace.h` had these as
+`template<typename T> INLINE T f(T x)` -- the return type is `T`, not `void *`.
+The conversion fixed the parameter at `void *`, and the callers do not all pass
+pointers: `arch/powerpc/pghash.c` and `glue/v4-powerpc/init.c` pass a `word_t`
+and expect one back, and `glue/v4-powerpc/space.c` passes a `paddr_t`. The first
+two became implicit integer/pointer conversions; the third truncated.
+`glue/v4-x86/hwspace.h` had already solved exactly this with `__typeof__`, so
+PowerPC now does the same -- plus a `+ 0`, because two callers pass arrays and
+`__typeof__` of an array is an array type, which is not something you can cast
+to. Binding an array to the template's by-value `T x` used to perform that decay.
+
+Together these were the twenty-four `-Wint-conversion` warnings. There are none
+now. In C++ every one of them was a hard error; in C they are, by default, a
+warning that the migration had never yet been in a position to see.
+
+### Three precedence bugs, all older than the migration
+
+`-Wparentheses` was on the whole time and had nothing to say about x86.
+PowerPC produced sixty-four instances, at six sites. Two of the six are real.
+
+`platform/ppc44x/bic.h`:
+
+    return val & (0xf << offset) == 0;
+
+`==` binds tighter than `&`, so this is `val & ((0xf << offset) == 0)`. `offset`
+is `(7 - (hwirq & 7)) * 4`, so zero to twenty-eight, so the shift is never zero,
+so the comparison is always false, so the expression is always zero.
+**`bgic_is_masked` has never once reported an interrupt as masked.** The
+intended reading is the parenthesised one: masked means the four-bit target
+field is zero, which is exactly what `bgic_mask_irq` writes.
+
+`glue/v4-powerpc/space-swtlb.c`, twice -- in `space_map_device_pinned` and in
+`setup_console_mapping`:
+
+    if (vaddr & (size - 1) != 0)
+        vaddr = (vaddr + size) & ~(size - 1);
+
+Same precedence, so the test is `vaddr & 1`. The mapping is aligned up only when
+`vaddr` is odd, never when it is merely misaligned for its page size, and
+`ppc_tlb0_init_vaddr_size` wants it aligned.
+
+C++ parses `&` and `==` exactly as C does, so all three are upstream, and all
+three would have been found the day anyone compiled this tree with
+`-Wparentheses`. The remaining three sites -- `arch/powerpc/softhvm.h`,
+`arch/powerpc/softhvm.c`, and the two `fdt.h` size helpers -- parse the way
+their authors meant; they have had the parentheses written out and nothing else.
+
+Note what the shape of the `bic.h` one was before this pass. It carried a
+comment, added during the conversion, reading "this reads as
+`(val & (0xf << offset)) == 0` only because `==` binds tighter than `&`". That
+is the precedence stated correctly and the conclusion drawn backwards: `==`
+binding tighter is precisely why it does *not* read that way. A note that
+records the right fact and the wrong inference is worse than no note, because it
+answers the question that would otherwise get asked.
+
+### Two asm operands that lost an indirection, and one that never had a constraint
+
+A reference parameter that becomes a pointer has to grow a `*` at every use, and
+the compiler enforces that everywhere except one place: inside an `asm` operand
+list, where `"=r" (p)` and `"=r" (*p)` are both perfectly well-formed and mean
+entirely different things. Two functions were converted with the operand left
+alone, and in both the result is written to the local pointer and discarded, so
+the caller's variable is never written at all.
+
+`arch/powerpc/swtlb.h`'s `ppc_tlbsx` took `word_t &index`:
+
+    : [index] "=b"(index), [found] "=&b"(found)
+
+`space_flush_tlbent` then invalidates whatever its uninitialised `idx` held, and
+`init_paging` preserves the wrong TLB entry while clearing all the others.
+`-Wuninitialized` reported it at all three call sites.
+
+`glue/v4-powerpc/softhvm.c`'s `read_hvm_instruction` took `word_t &instr`, and
+its operand is the destination of the `lwz` that fetches the faulting guest
+instruction:
+
+    : [instr] "=r" (instr), [origmsr] "=&r" (origmsr), ...
+
+so **every HVM instruction emulation and every HVM pagefault message carried a
+garbage instruction word.** `-Wmaybe-uninitialized` reported this one, at the
+two call sites in `handle_hvm_tlb_miss` and `handle_hvm_program`, and it is the
+more consequential of the two: `ppc_softhvm_emulate_instruction` decodes that
+word, and `arch_ktcb_send_hvm_pagefault` sends it to the guest monitor.
+
+Both operands now name `*index` and `*instr`. The rest of the PowerPC tree was
+swept for the same shape -- every other `asm` output in `arch/powerpc`,
+`glue/v4-powerpc`, `platform/ppc44x` and the three `kdb` trees binds a local,
+not a parameter.
+
+The third is a different animal. `arch/powerpc/ppc_registers.h`'s
+`ppc_get_fpscr` is upstream, unchanged by the
+migration, and wrong in the same family of way: the asm reaches `value` only
+through the address in a `"b"` input, declares no output and no memory clobber,
+and so GCC is never told the memory is written. It reported `value` as used
+uninitialised on the way out, in the FPU context-save path. `ppc_set_fpscr` has
+the mirror-image omission on the read side. Both now declare the access with an
+`"=m"`/`"m"` operand alongside the address.
+
+### `-Waddress-of-packed-member`: left alone, deliberately
+
+Two hundred and twenty-five instances, from two `__attribute__((packed))`
+structs, both upstream. C is what made them visible: the C++ called member
+functions on `tlb0`, and C has to write `&self->tlb0`.
+
+Eleven of them, in `platform/ppc44x/bic.h`, are spurious. `bgic_group_t` is
+packed because its layout is hardware-defined, but every member is a `word_t` at
+a four-aligned offset and the trailing `__align` pads it to exactly 0x80 bytes.
+Nothing in it is ever misaligned; `packed` merely drops the *declared* alignment
+to one, and GCC warns on the declaration rather than on the arithmetic.
+
+The other two hundred and fourteen are not spurious.
+`sizeof(ppc_hvm_tlb_t)` is 21, measured, and it is
+used as `ppc_hvm_tlb_t tlb[PPC_MAX_TLB_ENTRIES]`, so entries sit on 21-byte
+strides and three out of every four `&tlb[i].tlb0` genuinely are misaligned.
+The 440 core resolves unaligned integer loads and stores in hardware, so this
+costs cycles rather than correctness, and the layout is load-bearing:
+`ppc_hvm_tlb_ctrlxfer_get`/`_set` index the entry as a flat word array, and the
+struct's own comment says so.
+
+Dropping `packed` would make `sizeof` 24, leave the first five words where they
+are, and fix the alignment -- but it would also change the size of every
+`arch_ktcb_t` on the platform, and there is no way to boot a PowerPC kernel on
+this machine. That is not a change to make against a build that cannot be run.
+Recorded here instead.
+
+### What is left
+
+    1046  -Wsign-conversion
+     952  -Wconversion
+     225  -Waddress-of-packed-member   (above; not to be fixed)
+      55  -Wint-to-pointer-cast
+      37  -Wframe-address
+      28  -Wunused-but-set-variable
+      11  -Wpointer-to-int-cast
+       9  -Wmaybe-uninitialized       (SRA temporaries; conservative)
+       6  -Wcpp                        (upstream #warning directives)
+       3  -Wunused-{variable,function}
+
+Three of these were checked and are benign, which is worth recording so the
+check is not repeated. The twenty-eight `-Wunused-but-set-variable` are dead
+code in the C++ too, not statements dropped in conversion -- `pgent_clear`'s
+`tmp`, both variants of `init_bootmem`'s `tot`, and the rest were verified
+against their pre-conversion sources one by one. The nine remaining
+`-Wmaybe-uninitialized` are GCC's SRA temporaries (`r_num$`, `r_pg$`, `r_fnum$`)
+plus two conservative reports in the page-table walker. The six `-Wcpp` are
+upstream `#warning` directives left by the original authors as to-do markers.
+
+The two conversion classes are the bulk and are untouched: the PowerPC tree has
+never been compiled with `-Wconversion`, where x86 was driven from 190 to 14
+over earlier sections. Two of the fifty-five `-Wint-to-pointer-cast` are new and
+are the honest form of what used to be hidden -- `space.c`'s two
+`(addr_t) phys_to_virt (paddr)`, where the macro now correctly yields `paddr_t`
+and the source's own cast narrows it. A 36-bit physical address does not fit a
+32-bit kernel virtual address, and it is better for that to be legible.
+
+### Verification
+
+`powerpc-kernel` links, from a clean tree, with zero errors.
+
+Nothing in the PowerPC tree can be run here. Three of the changed files are
+shared -- `generic/types.h`, `generic/asid.h` and `generic/linear_ptab_walker.c`
+-- and those are covered the usual way: `tools/configsweep 'x86-*'` builds all
+thirty-one shipped x86 configurations, and `tools/boottest` boots each of them
+to the `l4test` menu. **Thirty-one of thirty-one, unchanged from §138.**
