@@ -285,7 +285,11 @@ void   tcb_set_fault_ctrlxfer_items (tcb_t *self, word_t fault, ctrlxfer_mask_t 
 ctrlxfer_mask_t tcb_get_fault_ctrlxfer_items (tcb_t *self, word_t fault);
 /* tcb_append_ctrlxfer_item is declared per-architecture: powerpc defines it
    INLINE in glue/v4-powerpc/tcb.h, x86 out of line in glue/v4-x86/thread.c
-   (declared in x32/ktcb.h).  A declaration here would clash with the former. */
+   (declared in x32/ktcb.h).  An earlier comment here claimed a declaration at
+   this point would clash with powerpc's INLINE; it would not.  The glue header
+   arrives at the INC_GLUE(tcb.h) above, so the static-inline definition would
+   precede the declaration, and GCC accepts that order -- it rejects only the
+   reverse.  The split is a choice, not a constraint.  See notes §139. */
 #if defined(CONFIG_DEBUG)
 void   tcb_dump_ctrlxfer_state (tcb_t *self, bool extended);
 #endif

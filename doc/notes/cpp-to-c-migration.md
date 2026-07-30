@@ -6571,3 +6571,67 @@ inferred from a failure produced by a helper that is not part of it. Both
 tools in the tree were right the whole time -- `configsweep` derived the
 `.config`, `boottest` would have accepted one -- and the scratch script between
 them was not.
+
+
+## §139 — The powerpc build: a config broken since 2010, and clean C behind it
+
+There is one shipped PowerPC configuration, `powerpc-bg-config.kernel.tar`
+(BlueGene/P, PPC440, `CONFIG_X_CTRLXFER_MSG` and `CONFIG_X_PPC_SOFTHVM` both
+on). It does not configure the tree. The build stops before compiling anything:
+
+    src/platform/ppc44x/intctrl.h:41:3: error: #error undefined interrupt controller
+
+`intctrl.h` chooses between `bic.h` and `uic.h` on `CONFIG_SUBPLAT_440_BGP` /
+`CONFIG_SUBPLAT_440_EBONY`. The config sets `CONFIG_PLAT_440_BGP`, which no
+`.cml` in the tree defines and nothing reads.
+
+The history is exact. `af23a20`, 13 September 2010, "PPC: use SUBPLATFORM
+instead of PLATFORM to distinguish between bg and ebony", renamed the symbol
+across `powerpc.cml` and seven sources -- and, being a textual substitution over
+the whole tree, across three binary config tarballs as well. The PowerPC tar
+grew by 18 bytes, which is six occurrences of `PLAT_440` gaining `SUB`, and
+`tar` cannot read past its second header afterwards. Three hours later
+`c38ee12`, "Fix config tarballs (broke during string replacement over the
+tree)", restored all three to their byte counts of the previous day. That
+undid the corruption and the intended update together, and also fixed the
+filename, which `af23a20` had left as `powercp-bg-config.kernel.tar`.
+
+So the configuration has named a symbol nothing reads for fifteen years, a
+decade before this migration started. The two x86 `statictcbs` tars were caught
+by the same substitution and the same repair; theirs contained no `PLAT_440`,
+so nothing was lost.
+
+The tar is repacked here with `SUBPLAT_440_BGP` in `config.h`, `config.out`,
+`.config` and the two `.old` backups -- by extracting, editing and re-creating
+it, not by substituting over the archive.
+
+Behind that, the C is in good shape. There is no PowerPC cross toolchain on
+this machine, so nothing here assembles or links; what can be checked is every
+C translation unit the configuration builds, with the host compiler in `-m32`
+(the config is `CONFIG_IS_32BIT`, so `word_t` is the right width), the real
+include and `-imacros` flags, and `-Wall -Wconversion`. **All sixty-two compile
+clean.** That covers `api/v4`, `generic`, `kdb`, `arch/powerpc`,
+`glue/v4-powerpc` and `platform/ppc44x`, including the SOFTHVM and ctrlxfer
+paths that no x86 configuration reaches by the same route.
+
+What that does not cover, and should not be read as covering: the inline
+assembly (its register constraints are parsed but never assembled), the four
+`.S` files, `tcb_layout.h` and `asmsyms.h` -- which on PowerPC only the assembly
+includes, which is why the C checks without them -- and the link.
+
+Two things fall out of it.
+
+`api/v4/tcb.h` carried a comment, added in `c50dc09`, saying that declaring
+`tcb_append_ctrlxfer_item` there "would clash" with the `INLINE` powerpc keeps
+in `glue/v4-powerpc/tcb.h`. It would not. The glue header arrives at the
+`INC_GLUE(tcb.h)` earlier in the same file, so the `static inline` definition
+*precedes* the declaration, and GCC accepts that order; it rejects only
+declaration-then-`static`-definition. Corrected in place. The per-architecture
+split is still reasonable, but it is a choice and the comment now says so.
+
+Forty-four `.cc` files remain under the PowerPC trees, and this configuration
+builds none of them: they belong to `powerpc64`, to the Open Firmware platforms
+(`ofppc`, `ofpower3`, `ofpower4`, `ofg5`), and to `platform/ppc44x/uic.cc` --
+which is the Ebony arm of the very `intctrl.h` above. So of the two
+subplatforms this configuration chooses between, BlueGene/P is C and Ebony is
+not.
