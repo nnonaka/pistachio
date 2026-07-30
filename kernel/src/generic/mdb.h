@@ -245,6 +245,17 @@ struct mdb_node_t {
  */
 struct mdb_tableent_t {
     word_t ptr_is_table	: 1;
+    /*
+     * A node or table pointer shifted right by one -- both are at least
+     * 2-byte aligned, which buys the bit ptr_is_table uses.
+     *
+     * Reconstructing it must shift a value that has already been converted to
+     * word_t: `(word_t) (self->ptr << 1)' is not the same expression in C as it
+     * was in C++.  GCC's C front end gives a bit-field wider than int the
+     * bit-field's own precision, so on a 64-bit word `self->ptr << 1' is
+     * evaluated modulo 2^63 and loses the top bit -- which every kernel
+     * pointer has set.  See notes §136.
+     */
     word_t ptr		: BITS_WORD - 1;
 };
 
@@ -305,14 +316,14 @@ INLINE mdb_table_t * mdb_tableent_get_table (mdb_tableent_t *self)
 {
     if (! self->ptr_is_table)
 	return NULL;
-    return (mdb_table_t *) (word_t) (self->ptr << 1);
+    return (mdb_table_t *) (((word_t) self->ptr) << 1);
 }
 
 INLINE mdb_node_t * mdb_tableent_get_node (mdb_tableent_t *self)
 {
     if (self->ptr_is_table)
 	return mdb_table_get_node (mdb_tableent_get_table (self));
-    return (mdb_node_t *) (word_t) (self->ptr << 1);
+    return (mdb_node_t *) (((word_t) self->ptr) << 1);
 }
 
 INLINE void mdb_tableent_set_table (mdb_tableent_t *self, mdb_table_t *t)
@@ -407,14 +418,14 @@ INLINE mdb_table_t * mdb_node_get_table (mdb_node_t *self)
 {
     if (! self->next_is_table)
 	return NULL;
-    return (mdb_table_t *) (word_t) (self->next << 1);
+    return (mdb_table_t *) (((word_t) self->next) << 1);
 }
 
 INLINE mdb_node_t * mdb_node_get_next (mdb_node_t *self)
 {
     if (self->next_is_table)
 	return mdb_table_get_node (mdb_node_get_table (self));
-    return (mdb_node_t *) (word_t) (self->next << 1);
+    return (mdb_node_t *) (((word_t) self->next) << 1);
 }
 
 INLINE word_t mdb_node_get_depth (mdb_node_t *self)	{ return self->depth; }

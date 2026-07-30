@@ -146,7 +146,9 @@ INLINE bool vrt_node_is_table (vrt_node_t *self)	{ return self->is_table_ptr; }
 INLINE word_t vrt_node_get_object (vrt_node_t *self)	{ return self->value; }
 
 INLINE vrt_table_t * vrt_node_get_table (vrt_node_t *self)
-{ return (vrt_table_t *) (word_t) (self->is_table_ptr ? (self->value << 1) : 0); }
+/* value is a BITS_WORD-1 bit-field: the cast belongs inside the shift, or C
+   evaluates it at 63-bit precision and loses the top bit (notes §136). */
+{ return (vrt_table_t *) (self->is_table_ptr ? (((word_t) self->value) << 1) : 0); }
 
 INLINE void vrt_node_clear (vrt_node_t *self)		{ self->raw = 0; }
 

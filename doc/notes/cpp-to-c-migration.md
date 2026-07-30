@@ -6342,3 +6342,91 @@ unchanged by this:
     link fails on `printf` and `init_console`. The configuration compiles under
     `tools/configsweep`, which derives its own `.config`; it just has no console
     a serial harness can read.
+
+
+## §136 — The fault at `ffffffffc0602a68`: a 63-bit bit-field shifted left
+
+`x86-x64-p4-iofp` and `x86-x64-p4-newmdb` both took a #GP at
+`ffffffffc0602a68`, which §131 left undiagnosed. That address is inside
+`mdb_tree_map`, and the faulting instruction is a load through `rbx`, which the
+register dump gives as `7fffffffc0672040` -- a kernel pointer with bit 63
+cleared, hence non-canonical, hence #GP with error code 0. `rdi` in the same
+dump is `7fffffffffffffff`, and the code that computed `rbx` is
+
+    mov    0x10(%r13),%rbx
+    movabs $0x7fffffffffffffff,%rdi
+    and    $0xfffffffffffffffe,%rbx
+    and    %rdi,%rbx                    <- clears bit 63
+
+The source is `mdb_node_get_table` in `generic/mdb.h`:
+
+    return (mdb_table_t *) (word_t) (self->next << 1);
+
+`next` is a `word_t next : BITS_WORD - 1` bit-field holding a pointer shifted
+right by one, the spare bit going to `next_is_table`. The C++ original was the
+same expression, `(mdb_table_t *) (next << 1)`.
+
+GCC's C and C++ front ends do not agree on the type of that shift. Compiled as
+C++, `(next << 1)` is a 64-bit shift and the reconstruction is
+`and $0xfffffffffffffffe`. Compiled as C, GCC gives a bit-field wider than
+`int` the bit-field's own precision, so the shift is evaluated modulo 2^63 and
+the result is masked to 63 bits: `and $0x7ffffffffffffffe`. Two lines of
+throwaway C and C++ over the same struct reproduce it exactly. The `(word_t)`
+cast outside the parentheses does not help -- by then the value has already
+been truncated. Moving it inside does:
+
+    return (mdb_table_t *) (((word_t) self->next) << 1);
+
+which compiles to the instruction the C++ produced.
+
+Why only these two configurations. On x32 the field is 31 bits wide, `int` can
+represent every value of a 31-bit unsigned, so C's integer promotion converts it
+to `int` and the shift is a full-width 32-bit one -- correct by accident.
+63 bits do not fit in `int`, so only 64-bit builds are affected, and only where
+the truncated value is a pointer with bit 63 set, which on x86-64 is every
+kernel pointer. Four shipped configurations set `CONFIG_NEW_MDB`
+(`x86-x32-p4-iofp`, `x86-x32-p4-newmdb` and the two x64 ones); the x32 pair
+boots, the x64 pair faults on its first sub-table lookup.
+
+This hazard was found once before in this migration and fixed in one place.
+`api/v4/memdesc.h` already carries the cast and a comment saying why:
+
+    NOTE the explicit (word_t) casts before the shifts: _low/_high are 54-bit
+    bitfields, and C gives such an expression a 54-bit type (so << 10 discards
+    the top bits) where C++ uses the declared word_t.
+
+`generic/mapping.h` -- the old mapping database, which every other
+configuration uses -- has it too, on all twelve of its
+`((word_t) self->x.next_ptr << 2)` reconstructions. That is why the old MDB
+works and the new one does not. The remaining three places had not been done:
+
+  - `generic/mdb.h`, four sites: `mdb_tableent_get_table`,
+    `mdb_tableent_get_node`, `mdb_node_get_table`, `mdb_node_get_next`. Fatal
+    on x64.
+  - `generic/mdb_mem.c`, `mm_space`: `misc.space` is 56 bits holding a
+    `space_t *` shifted right by eight, so the read back lost the whole kernel
+    half. Fatal on x64 as soon as anything asks a node which space it belongs
+    to.
+  - `generic/vrt.h`, `vrt_node_get_table_ptr`: 63 bits, same shape as
+    `mdb.h`. `x86-x64-p4-iofp` is the only configuration that builds it, and it
+    was already failing in `mdb_tree_map` before reaching this.
+  - `api/v4/ipc.h`, `acceptor_get_rcv_window`: 60 bits shifted left by four.
+    Latent rather than live -- the top four bits of an fpage a user can name are
+    zero -- but the same defect, and fixing it *removes* an instruction:
+    `extended_transfer` loses the `movabs $0x0fffffffffffffff; and` pair that
+    the truncation had been generating.
+
+A grep for the shape -- a cast outside a shift of a struct member -- now finds
+nothing but the comment quoted above.
+
+`x86-x64-p4-iofp` and `x86-x64-p4-newmdb` boot to the `l4test` menu. Nine of
+eleven x64 configurations boot, where seven did after §135 and six before it.
+The two that do not are `p4-fullkdb`, which prints the virtual-memory layout and
+stops, and `p4-statictcbs`, which §135 explains cannot be given a serial
+console at all. All twenty x32 configurations still compile and the four that
+were spot-checked still boot.
+
+Against `f201f44`: `x86-x64-p4-smp`, which has neither `CONFIG_NEW_MDB` nor IO
+flexpages, is 706 symbols with 704 identical bodies -- `extended_transfer` and
+the constructor table that shifted when it shrank. `x86-x64-p4-newmdb` is 559
+with 538, and every one of the twenty-one that moved is MDB code.

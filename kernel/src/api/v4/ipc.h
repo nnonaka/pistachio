@@ -186,7 +186,10 @@ typedef struct acceptor_t acceptor_t;
 INLINE void acceptor_set_rcv_window (acceptor_t *self, fpage_t fpage)
 { word_t window = fpage.raw >> 4; self->x.rcv_window = window & (~0UL >> 4); }
 INLINE bool   acceptor_accept_strings (const acceptor_t *self)	{ return self->x.strings; }
-INLINE word_t acceptor_get_rcv_window (const acceptor_t *self)	{ return self->x.rcv_window << 4; }
+/* rcv_window is a (BITS_WORD-4)-bit bit-field; cast before shifting, or C
+   evaluates the shift at that precision and drops the top four bits (§136).
+   Those bits are zero for every fpage a user can name, so this one is latent. */
+INLINE word_t acceptor_get_rcv_window (const acceptor_t *self)	{ return ((word_t) self->x.rcv_window) << 4; }
 #if defined(CONFIG_X_CTRLXFER_MSG)
 INLINE bool   acceptor_accept_ctrlxfer (const acceptor_t *self)	{ return self->x.ctrlxfer; }
 #endif

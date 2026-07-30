@@ -57,7 +57,10 @@ INLINE word_t mm_purged_status (mdb_node_t *node)
 INLINE space_t * mm_space (mdb_node_t *node)
 {
     mdb_mem_misc_t misc; misc.raw = mdb_node_get_misc (node);
-    return (space_t *) (word_t) (misc.space << 8);
+    /* space is a BITS_WORD-8 bit-field; the cast has to be inside the shift or
+       C evaluates it at that precision and drops the top eight bits, which for
+       a kernel-half space_t * is all of them.  See notes §136. */
+    return (space_t *) (((word_t) misc.space) << 8);
 }
 
 
