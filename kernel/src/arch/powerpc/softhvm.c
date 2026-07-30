@@ -252,7 +252,11 @@ bool ppc_softhvm_tlbre (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *r
     else
     {
 	word_t val = 0;
-	int idx = except_regs_get_register (regs, ppc_instr_ra (instr));
+	/* word_t, not int: the value comes from a guest register, and as an
+	   int every value with bit 31 set is negative, passes the bound, and
+	   indexes tlb[] from before its start.  Upstream, and the same in the
+	   C++; -Wsign-conversion is what surfaced it.  Notes §141. */
+	word_t idx = except_regs_get_register (regs, ppc_instr_ra (instr));
 
 	if (idx < PPC_MAX_TLB_ENTRIES)
 	    switch(ppc_instr_rb (instr))
@@ -268,7 +272,7 @@ bool ppc_softhvm_tlbre (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *r
 	except_regs_set_register (regs, ppc_instr_rt (instr), val);
 	regs->srr0_ip += sizeof(instr);
 
-	TRACEPOINT(PPC_HVM_EMUL_TLBRE, "tlbre [%02d:%d] val=%08x", idx, ppc_instr_rb (instr), val); 
+	TRACEPOINT(PPC_HVM_EMUL_TLBRE, "tlbre [%02u:%d] val=%08x", idx, ppc_instr_rb (instr), val);
     }
     return true;
 }
@@ -317,7 +321,10 @@ bool ppc_softhvm_tlbwe (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *r
 	ppc_softhvm_raise_exception (self, exc_program, regs);
     else
     {
-	int idx = except_regs_get_register (regs, ppc_instr_ra (instr));
+	/* word_t for the same reason as tlbre above, and it matters more here:
+	   the negative index is written through, with a guest-supplied value.
+	   Notes §141. */
+	word_t idx = except_regs_get_register (regs, ppc_instr_ra (instr));
 	if (idx < PPC_MAX_TLB_ENTRIES)
 	{
 	    ppc_softhvm_update_tlb_dirty (self, &self->tlb[idx]);
@@ -331,7 +338,7 @@ bool ppc_softhvm_tlbwe (ppc_softhvm_t *self, ppc_instr_t instr, except_regs_t *r
 	    case 1: self->tlb[idx].tlb1.raw = val; break;
 	    case 2: self->tlb[idx].tlb2.raw = val; break;
 	    }
-	    TRACEPOINT(PPC_HVM_EMUL_TLBWE, "tlbwe entry=[%02d:%d], val=%08x\n", idx, ppc_instr_rb (instr), val);
+	    TRACEPOINT(PPC_HVM_EMUL_TLBWE, "tlbwe entry=[%02u:%d], val=%08x\n", idx, ppc_instr_rb (instr), val);
 	}
 	regs->srr0_ip += sizeof(instr);
     }
