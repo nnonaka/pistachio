@@ -106,6 +106,47 @@ void tcb_resources_save (thread_resources_t *self, tcb_t *tcb)
 #endif
 }
 
+#ifdef CONFIG_PPC_MMU_SEGMENTS
+/* Point the copy area's segment register at the partner's space.
+ *
+ * Upstream casts &src->resource_bits to a `ppc_resource_bits_t *' and calls
+ * get_copy_area_dst_seg() on it.  Neither the type nor the method exists
+ * anywhere in the tree, master included, so this never compiled and §144 left
+ * it unimplemented rather than guess.  It need not be guessed: what the
+ * missing accessor has to return is fixed by the two functions either side of
+ * it.
+ *
+ * tcb_resources_setup_copy_area stores
+ *
+ *	copy_area_offset = daddr & ~(COPY_AREA_SIZE - 1)
+ *
+ * and COPY_AREA_SIZE is 0x10000000 on this MMU -- one PowerPC segment -- so
+ * copy_area_offset is the base of the segment the destination lives in, in the
+ * partner's space.  space_get_vsid builds a VSID as
+ *
+ *	segment_id.raw | (addr >> 28)
+ *
+ * so the value this register wants is the partner's segment id or'd with that
+ * segment's index, which is copy_area_offset >> 28.  That is what
+ * get_copy_area_dst_seg() must have returned, and it is already recorded;
+ * ppc_resource_bits_t was a second place to keep it.
+ *
+ * The author's own warning about tunnelled pagefaults stands and is not
+ * addressed here.  Notes §153.
+ */
+void tcb_resources_enable_copy_area (thread_resources_t *self, tcb_t *src)
+{
+    threadid_t partner_tid = tcb_get_partner (src);
+    tcb_t *partner = tcb_get_tcb (partner_tid);
+    ppc_segment_t partner_seg = space_get_segment_id (tcb_get_space (partner));
+
+    isync();
+    ppc_set_sr( COPY_AREA_SEGMENT,
+		partner_seg.raw | (self->copy_area_offset >> 28) );
+    isync();
+}
+#endif
+
 void tcb_resources_load (thread_resources_t *self, tcb_t *tcb)
 {
     if (resource_bits_have_resource (&tcb->resource_bits, COPY_AREA))

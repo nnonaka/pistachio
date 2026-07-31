@@ -64,31 +64,11 @@ INLINE void tcb_resources_setup_copy_area (thread_resources_t *self, tcb_t *src,
 }
 
 #ifdef CONFIG_PPC_MMU_SEGMENTS
-/* Upstream's body cannot be translated, because there is nothing to translate
-   it into: it casts &src->resource_bits to `ppc_resource_bits_t *' and calls
-   get_copy_area_dst_seg() on it, and neither the type nor the method is
-   declared anywhere in the tree -- master included.  This function has
-   therefore never compiled, in either language, and the author's own #warning
-   two lines down says the logic was known to be wrong besides.  Recovering the
-   intent would be invention, so it is left explicitly unimplemented, which is
-   what the tree does elsewhere for paths in this state.  Notes §144.
+/* Out of line in resources.c.  It needs tcb_get_partner and tcb_get_tcb, and
+   this header is reached from api/v4/tcb.h before either is declared -- which
+   is how §144 came to leave it unimplemented rather than translated. */
+void tcb_resources_enable_copy_area (thread_resources_t *self, tcb_t *src);
 
-    ppc_resource_bits_t *bits = (ppc_resource_bits_t *)&src->resource_bits;
-    threadid_t partner_tid = tcb_get_partner (src);
-    tcb_t *partner = tcb_get_tcb (partner_tid);
-    ppc_segment_t partner_seg = space_get_segment_id (partner->space);
-
-    // Change the copy area segment register to point into the target space.
-    // VU: copy area code is inorrect for tunnelled PFs
-    isync();
-    ppc_set_sr( COPY_AREA_SEGMENT,
-		partner_seg.raw | bits->get_copy_area_dst_seg() );
-    isync();
- */
-INLINE void tcb_resources_enable_copy_area (thread_resources_t *self, tcb_t *src)
-{
-    UNIMPLEMENTED();
-}
 INLINE void tcb_resources_flush_copy_area (thread_resources_t *self, tcb_t *tcb) { }
 
 #elif defined(CONFIG_PPC_MMU_TLB)
