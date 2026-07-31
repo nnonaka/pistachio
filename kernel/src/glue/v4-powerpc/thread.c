@@ -849,20 +849,23 @@ void tcb_switch_to (tcb_t *self, tcb_t * dest)
 void tcb_init_tcbs (void)			{ /* Nothing to do (CONFIG_STATIC_TCBS off). */ }
 #endif
 
-/* Switch to the initial thread: install its stack and return into it.  The
-   powerpc thread-switch record puts the resume address at the top of the
-   stack, which is what tcb_switch_to's epilogue also relies on. */
+/* Switch to the initial thread.
+ *
+ * This was written out again here rather than calling the arch inline, and in
+ * doing so lost its first line: initial_switch_to stores the incoming tcb in
+ * SPRG_CURRENT_TCB before branching, and the replacement did not.  So SPRG1
+ * still held whatever it had at reset when the idle thread started, and the
+ * first thing the idle thread runs -- notify_trampoline -- asserts that the
+ * tcb derived from the stack pointer matches the one in SPRG.  It read
+ * 0xffffff70 against a correct 0xd6000800.
+ *
+ * The rest of the replacement was faithful: reading the resume address from
+ * 0(%r1) is get_kthread_ip(tcb), whose tswitch_frame_t puts ip first.  There
+ * is no reason to keep a second copy, so this now calls the one in
+ * glue/v4-powerpc/tcb.h and cannot drift from it again.  Notes §147. */
 void initial_switch_to_c (tcb_t *tcb)
 {
-    __asm__ __volatile__ (
-	"mr	%%r1, %0 ;"		/* install the new stack */
-	"lwz	%%r3, 0(%%r1) ;"	/* resume address */
-	"mtctr	%%r3 ;"
-	"bctr ;"
-	:
-	: "b" (tcb->stack)
-	: "r3", "ctr");
-    while (1);
+    initial_switch_to (tcb);
 }
 
 /* tcb_migrate_to_processor's uniprocessor form is in api/v4/thread.c. */
