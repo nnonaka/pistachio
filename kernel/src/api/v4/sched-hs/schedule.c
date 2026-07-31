@@ -437,7 +437,7 @@ prio_queue_t * prio_queue_add_prio_domain (prio_queue_t *self, schedule_ctrl_t p
 	    hs_sched_get_domain_prio_queue (&((tcb_t *) &domain_tcbs[(cpu + 1) % num_cpus])->sched_state.base);
 #endif
 
-	if (prio_control.raw != 0)
+	if (!schedule_ctrl_is_nil (&prio_control))
 	{
 	    /* set stride and priority of the domain */
 	    if (prio_control.stride)
@@ -704,7 +704,7 @@ bool sched_is_scheduler (tcb_t *tcb, tcb_t *dest_tcb)
 
 word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
 {
-    if (req->preemption_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->preemption_control))
     {
 	/* Extended HS schedule control
 	 * control &  1 -> new domain
@@ -761,17 +761,17 @@ word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
 	    return ENO_PRIVILEGE;
     }
 
-    if (req->prio_control.raw != 0 &&
+    if (!schedule_ctrl_is_nil (&req->prio_control) &&
 	req->prio_control.prio > hs_sched_get_priority (&scheduler->sched_state.base) &&
 	!is_privileged_space_c (tcb_get_space (scheduler)))
 	return ENO_PRIVILEGE;
 
-    if (req->time_control.raw != 0 &&
+    if (!schedule_ctrl_is_nil (&req->time_control) &&
 	(!(req->time_control.total_quantum.time.type == 0) ||
 	 !(req->time_control.timeslice.time.type == 0)))
 	return EINVALID_THREAD;
 
-    if (req->processor_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->processor_control))
     {
 	/* can't move domain tcbs */
 	if (hs_flag_is_set (&req->tcb->sched_state.base,
@@ -784,7 +784,7 @@ word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
 
 void sched_commit_schedule_parameters (schedule_req_t *req)
 {
-    if (req->preemption_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->preemption_control))
     {
 	if (req->preemption_control.hs_extended)
 	{
@@ -802,7 +802,7 @@ void sched_commit_schedule_parameters (schedule_req_t *req)
 					 (prio_t) req->preemption_control.sensitive_prio);
     }
 
-    if (req->prio_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->prio_control))
     {
 	sched_deschedule (req->tcb);
 
@@ -821,10 +821,10 @@ void sched_commit_schedule_parameters (schedule_req_t *req)
 	do_schedule (req->tcb, sched_current);
     }
 
-    if (req->processor_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->processor_control))
 	tcb_migrate_to_processor (req->tcb, req->processor_control.processor);
 
-    if (req->time_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->time_control))
     {
 	hs_sched_init_timeslice (&req->tcb->sched_state.base, req->time_control.timeslice);
 	hs_sched_set_total_quantum (&req->tcb->sched_state.base,
@@ -836,7 +836,7 @@ word_t sched_return_schedule_parameter (word_t num, schedule_req_t *req)
 {
     if (!req->tcb) return 0;
 
-    if (req->preemption_control.raw != 0 && req->preemption_control.hs_extended)
+    if (!schedule_ctrl_is_nil (&req->preemption_control) && req->preemption_control.hs_extended)
     {
 	if (req->preemption_control.hs_extended_ctrl & 4)
 	{

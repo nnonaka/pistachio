@@ -311,18 +311,18 @@ bool sched_idle_hlt (void)
 
 word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
 {
-    if (req->prio_control.raw != 0 &&
+    if (!schedule_ctrl_is_nil (&req->prio_control) &&
 	req->prio_control.prio > rr_sched_get_priority (&scheduler->sched_state.base) &&
 	!is_privileged_space_c (tcb_get_space (scheduler)))
 	return ENO_PRIVILEGE;
 
-    if (req->time_control.raw != 0 &&
+    if (!schedule_ctrl_is_nil (&req->time_control) &&
 	(!(req->time_control.total_quantum.time.type == 0) ||
 	 !(req->time_control.timeslice.time.type == 0)))
 	return EINVALID_THREAD;
 
     /* only set sensitive prio if _at most_ equal to the scheduler's prio */
-    if (req->preemption_control.raw != 0 &&
+    if (!schedule_ctrl_is_nil (&req->preemption_control) &&
 	(prio_t) req->prio_control.sensitive_prio > rr_sched_get_priority (&scheduler->sched_state.base))
 	return ENO_PRIVILEGE;
 
@@ -331,7 +331,7 @@ word_t sched_check_schedule_parameters (tcb_t *scheduler, schedule_req_t *req)
 
 void sched_commit_schedule_parameters (schedule_req_t *req)
 {
-    if (req->prio_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->prio_control))
     {
 	sched_deschedule (req->tcb);
 
@@ -342,7 +342,7 @@ void sched_commit_schedule_parameters (schedule_req_t *req)
 	do_schedule (req->tcb, sched_current);
     }
 
-    if (req->preemption_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->preemption_control))
     {
 	rr_sched_init_maximum_delay (&req->tcb->sched_state.base,
 				     (u16_t) req->preemption_control.max_delay);
@@ -354,10 +354,10 @@ void sched_commit_schedule_parameters (schedule_req_t *req)
 					 (prio_t) req->preemption_control.sensitive_prio);
     }
 
-    if (req->processor_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->processor_control))
 	tcb_migrate_to_processor (req->tcb, req->processor_control.processor);
 
-    if (req->time_control.raw != 0)
+    if (!schedule_ctrl_is_nil (&req->time_control))
     {
 	rr_sched_init_timeslice (&req->tcb->sched_state.base, req->time_control.timeslice);
 	rr_sched_set_total_quantum (&req->tcb->sched_state.base,

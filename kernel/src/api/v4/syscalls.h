@@ -272,6 +272,14 @@ typedef struct schedule_ctrl_t schedule_ctrl_t;
 
 INLINE word_t schedule_ctrl_get_raw (const schedule_ctrl_t *self) { return self->raw; }
 
+/* The "leave this alone" value a caller passes for a control word it does not
+   want to change -- L4_Set_Priority and friends pass ~0UL for the other three.
+   It is NOT zero: zero is a legitimate request (priority 0, say).  This is
+   master's schedule_ctrl_t::nilctrl comparison, which the conversion had
+   turned into `.raw != 0' at all seventeen sites.  Notes §160. */
+INLINE bool schedule_ctrl_is_nil (const schedule_ctrl_t *self)
+{ return self->raw == (~0UL); }
+
 /*
  * Error code values
  */

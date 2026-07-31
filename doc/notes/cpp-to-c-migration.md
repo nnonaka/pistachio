@@ -8705,3 +8705,73 @@ Neither was caught by more measurement of the same kind -- final values cannot
 distinguish "happened and did nothing" from "never happened". The ring buffer
 settled it in one run because it records order and identity, and a *missing*
 event in a sequence is evidence in a way that a zero in a variable is not.
+
+
+## §160 — the two tests §159 uncovered: one upstream, one live on x86
+
+Enabling `X_PAGER_EXREGS` let the suite run fourteen tests further and exposed
+two failures. They turned out to have nothing to do with each other.
+
+### `ThreadControl+ExReg` — powerpc's `setup_exreg` never set the entry point
+
+`setup_exreg (&ip, &sp, func)` allocates a stack and reports where to start the
+thread. Every port's copy ends with
+
+    *ip = (L4_Word_t) func;
+
+except powerpc's, which allocates the stack and returns. So `ip` stays whatever
+was on the caller's stack.
+
+Only one caller notices. `exreg.cc` and `tcontrol.cc`'s `run_a_thread` pass the
+value to `start_thread` and then check what `ExchangeRegisters` *returned*, so a
+junk entry point never shows up -- and `run_a_thread` prints
+`print_result ("Run a thread", true)`, a literal. `tc_then_exreg` is the one
+test that starts a thread purely by ExchangeRegisters and then checks whether it
+ran; it is the one that failed.
+
+`master`'s powerpc/help.cc has the same omission, so this is upstream, not the
+conversion. powerpc64's file has neither function.
+
+### `Change priority associated` — `nilctrl` became zero
+
+`L4_Set_Priority` passes `~0UL` for the three control words it does not want to
+change. Master tests for exactly that:
+
+    if (req.time_control != schedule_ctrl_t::nilctrl() && ...)   // nilctrl() == ~0UL
+
+The conversion rendered every one of those as `.raw != 0` -- the opposite
+sentinel -- and dropped `nilctrl` entirely. Both directions are wrong: a caller
+saying "leave this alone" (`~0UL`) now takes the change path, and a caller
+asking for zero (priority 0) is now skipped.
+
+The visible symptom was the `time_control` guard. With `~0UL` no longer
+recognised as "unchanged", `check_schedule_parameters` went on to test whether
+the quantum and timeslice were periods, which `~0UL` is not, and returned
+`EINVALID_THREAD`. Every `L4_Set_Priority` failed. Its companion test
+"Change priority unassociated (ok=change failed)" passed throughout -- it
+expects failure, and got it for the wrong reason.
+
+Seventeen sites, matching master's seventeen `nilctrl` comparisons exactly:
+seven in `sched-rr/schedule.c`, ten in `sched-hs/schedule.c`. `nilctrl` is
+restored as `schedule_ctrl_is_nil` in `api/v4/syscalls.h`.
+
+**This one was live on x86**, in generic code, on both schedulers -- found only
+because a platform nobody had booted since 2010 ran a test the x86 harness never
+reaches (x86's l4test is not built `-DL4TEST_AUTORUN`, so it sits at a menu):
+
+    x86-x64-p4-smp     (sched-rr)  before: FAILED   after: OK
+    x86-x32-p4-hsched  (sched-hs)  before: FAILED   after: OK
+    ofppc              (sched-rr)  before: FAILED   after: OK
+
+The rest of the x86 run is unchanged line for line, including its one
+pre-existing failure (`Local destination Id`).
+
+    ofppc:  OK=56  FAILED=0
+
+### Unrelated, found while sweeping
+
+`tools/configsweep 'x86-x*'` builds 30 of 31 configurations. `x86-x64-p4-cm`
+fails with four `conflicting types for 'mem_region_is_intersection'` errors in
+`generic/memregion.h` -- the function §144 restored, against an
+`x32_mem_region_t`. It fails identically with these changes stashed, so it
+predates them and is not touched here.

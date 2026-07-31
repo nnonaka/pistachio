@@ -49,6 +49,13 @@ void setup_exreg(L4_Word_t *ip, L4_Word_t *sp, void (*func)(void))
       assert( stack != NULL );
       *sp = (L4_Word_t)&stack[max-1];
     }
+
+  /* Every other port sets this; powerpc's copy never did, so the one caller
+     that starts a thread purely by ExchangeRegisters -- tcontrol.cc's
+     ThreadControl+ExReg -- exregs it to an uninitialised local.  The other
+     callers pass the value to start_thread and then only check what
+     ExchangeRegisters returned, so a junk entry point does not show up.  */
+  *ip = (L4_Word_t) func;
 }
 
 void *code_addr(void *addr)
