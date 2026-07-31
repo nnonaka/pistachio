@@ -7940,3 +7940,56 @@ What is left: the cpu and bus speeds are not found in the device tree, so the
 decrementer runs off a 1MHz fallback; and nothing yet confirms sigma0 and the
 root task run past creation, because the userland has no console on this
 platform.
+
+
+## §149 — The cpu node is not called what the code thinks it is
+
+§148 left the decrementer running off a 1MHz fallback:
+
+    Error: unable to obtain the cpu and bus speeds.
+	PowerPC CPU speed: 1000 KHz (CPU 0)
+	Bus speed: 1000 KHz (CPU 0)
+
+`ofppc_get_cpu_speed` tries two lookups. The first reads a `cpu` property from
+`/chosen`; OpenBIOS's `/chosen` has `stdin`, `stdout`, `nvram`, `mmu`, `rtc`
+and `memory`, and no `cpu`. The second is the literal path `/cpus/cpu@0`, and
+Open Firmware does not promise that name -- a processor node is named for the
+part it describes. Here:
+
+    0 > dev /cpus ls
+    fff6692c PowerPC,750@0
+
+The properties are all present on that node, including both the function wants:
+
+    device_type               "cpu"
+    timebase-frequency        5f5e100         (100 MHz)
+    clock-frequency           35a4e900        (900 MHz)
+    bus-frequency             5f5e100         (100 MHz)
+
+The file already knows the name cannot be trusted -- `ofppc_get_cpu_count`,
+thirty lines below, finds processors by walking `/cpus/` and checking depth
+rather than by matching a name. `ofppc_get_cpu_speed` was written the other way
+and contradicts it.
+
+`device_type` is what identifies the node, and
+`of1275_tree_find_device_type` already exists: it is how `opic.c` locates the
+`open-pic`. It now goes in ahead of the literal path, which stays for firmware
+that has the node but no `device_type`.
+
+    PowerPC CPU speed: 900000 KHz (CPU 0)
+    Bus speed: 100000 KHz (CPU 0)
+    Decrementer 100000 KHz, timer tick 1953 us
+    Decrementer ticks 195300 (CPU 0)
+    Registering processor 0 in KIP (100MHz, 900MHz)
+
+Both figures now match the device tree, and the decrementer is programmed from
+the real timebase rather than a guess -- which matters for anything that
+measures time, and would have been an invisible wrongness rather than a
+failure had the port ever run without it being noticed.
+
+This is upstream's, converted faithfully in §144; `master` has the same two
+lookups. It is the fifteenth upstream defect in this platform and the first
+that a working system would have tolerated rather than died of.
+
+What remains: nothing confirms sigma0 and the root task run past creation,
+because the userland has no console on this platform.
