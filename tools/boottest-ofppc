@@ -30,6 +30,10 @@
 #     defined, lib/io/powerpc.cc drives a UART it finds through a flattened
 #     device tree, which a PowerMac does not have.  Undefined, it uses
 #     L4_KDB_PrintChar, and user output goes out through the kernel's console.
+#   * the kernel must be configured X_PAGER_EXREGS=y.  It defaults to n, and
+#     every other config that runs l4test -- including ppc44x -- has it on.
+#     Without it a pager cannot ExchangeRegisters a thread in another address
+#     space, so l4test's inter-space abort tests hang.  See §159.
 #   * l4test must be built -DL4TEST_AUTORUN.  The console can be typed at --
 #     see the 'g' feeding below -- but driving a menu by timing is fragile,
 #     and the x86 harness does not do it either.

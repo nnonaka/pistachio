@@ -7397,6 +7397,9 @@ were reachable. They are the same item and it configures:
 	CONFIG_PLAT_OFPPC=y
 	CONFIG_PPC_MMU_SEGMENTS=y
 
+(That line is the minimum that builds.  To *run l4test* add `X_PAGER_EXREGS=y`
+-- see §159; without it the inter-space abort tests hang.)
+
 `powerpc.cml:179` derives `PPC_MMU_SEGMENTS` from the 750 or the 604, and
 `:169` suppresses `PLAT_OFPPC` unless it is set -- so choosing the CPU is what
 opens the platform, and the segment MMU comes with it. Behind it sit
@@ -8618,3 +8621,87 @@ What remains is to determine the sender's thread state at that moment and follow
 `tcb_unwind` from it -- the interesting case being whether an abort delivered
 while a *nested* pagefault IPC is outstanding unwinds the outer string-copy IPC
 as well, or leaves it half-unwound with nothing to resume it.
+
+
+## §159 — the abort hang was a missing config option, not a defect
+
+§158 concluded the sender blocks in `L4_Send`, the fault path is quiescent, and
+the pager had taken its abort branch -- so the abort was issued and failed to
+unblock anything. The first half was right. The last clause was not, and it was
+inferred rather than observed: `ipc_pf_abort_address` reading 0 was taken as
+proof the pager cleared it, but the test clears that variable itself on the line
+after the send. Zero was consistent with the abort never happening.
+
+Settling it needed the *order* of events, not their final values, so the probes
+became a 256-entry ring in the kernel -- `dbg_ev (id, a, b, c)` writing into a
+`.bss` array -- dumped through the QEMU monitor after the hang. Events recorded:
+ExchangeRegisters aborts, every `tcb_unwind` pass with its state and reason,
+the active-sender branch's partner check, `handle_ipc_error`, and every
+pagefault IPC sent and returned.
+
+The tail of the ring ends:
+
+    2415 pf-SEND     t117 addr=0x032d5000 ip=0x0060943c
+    2416 pf-ret-ok   t117 tag=0x80 err=0x1000c
+    2417 pf-SEND     t117 addr=0x032d5000 ip=0xc0015b24     <- never returns
+
+`ip=0xc0015b24` is a kernel address: this is the tunnelled pagefault raised from
+inside the string-copy path, at the address the test revoked. It is the last
+event in the ring. **No `exregs-abort` event follows it** -- and the ring shows
+those events firing happily for the intra-space abort tests earlier
+(`exregs-abort tid=t112.1 state=POLLING ctrl=0x6`). So the pager's
+`L4_ExchangeRegisters` was never reaching the abort code at all.
+
+It was being rejected at the door. `has_exregs_perms` allows ExchangeRegisters
+only within one address space, with one exception:
+
+    #if defined(CONFIG_X_PAGER_EXREGS)
+        // all threads in pager address space can ex-regs
+        ...
+    #endif
+
+l4test's pager lives in the root task's space; `t117` is in a separate space for
+the inter-space string-copy tests. Without that option the call returns
+`EINVALID_THREAD`, the pager silently gets a nilthread back, nobody replies to
+the fault, and the sender waits forever. The code is byte-for-byte master's --
+the function, the caller, and the check all match.
+
+`CONFIG_X_PAGER_EXREGS` defaults to `n`. Every build directory that runs l4test
+has it on, **including `scratch-ppc` (ppc44x)**; the only two with it off are
+`scratch-ofppc` and `scratch-ebony`, the two configs created during this work
+with a minimal `batchconfig` line listing just the architecture, CPU and
+platform. The option was never turned off -- it was never turned on.
+
+    make batchconfig CMLBATCH_PARAMS="ARCH_POWERPC=y CPU_POWERPC_IBM750=y \
+                                      PLAT_OFPPC=y X_PAGER_EXREGS=y"
+
+With it enabled, `Sender abort` and `Receiver abort` both pass, and the run
+continues into fourteen tests it had never reached:
+
+    before:  OK=38  FAILED=0   (suite hangs at "Sender abort")
+    after:   OK=54  FAILED=2   (suite runs to the end menu)
+
+The two failures -- `ThreadControl+ExReg` and `Change priority associated` --
+are in test groups the hang had been hiding. They are new ground, not
+regressions.
+
+Because `build/` is not tracked, the config itself cannot be committed; the
+recipe above and `tools/boottest-ofppc`'s header are the durable record, and
+both now say so.
+
+### What went wrong in §155 and §158
+
+Three sections chased this bug and the first two localised it wrongly, in the
+same way each time: a fact was *inferred* from a value that had another equally
+good explanation, and the inference was then treated as established.
+
+  - §155: four aborts were in states the code handles, therefore the abort
+    mechanism is innocent. Those four were from other tests.
+  - §158: `ipc_pf_abort_address` is 0, therefore the pager cleared it. The test
+    clears it too.
+
+Both would have been caught by asking "what else makes this value what it is?"
+Neither was caught by more measurement of the same kind -- final values cannot
+distinguish "happened and did nothing" from "never happened". The ring buffer
+settled it in one run because it records order and identity, and a *missing*
+event in a sequence is evidence in a way that a zero in a variable is not.
