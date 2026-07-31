@@ -7848,3 +7848,95 @@ The position, once more: **boots, initialises its address space, activates its
 page hash, builds its mapping database, reaches and runs the idle thread, and
 brings up its interrupt controller.** What is left is starting the root
 servers.
+
+
+## §148 — init_root_servers was never reached: vectors overwritten after the source was freed
+
+§147 left the boot stopping inside `init_all_threads`, with no diagnostic,
+between `init_interrupt_threads` and `init_root_servers`. Bisecting it with
+prints puts it in `init_kernel_threads`, on the first touch of the TCB area:
+
+    IKT: tcb addr e0022000
+    IKT: about to read e0022000
+    <nothing>
+
+`0xe0022000` is in the KTCB area, which is mapped on demand: the read must
+fault, and `space_handle_pagefault` routes a TCB-area fault to
+`space_allocate_tcb`. A counter in the DSI handler never fired -- **no
+exception was taken at all**. Reading the vector directly explains why:
+
+    VEC@0x300: 0 0 0 0
+
+### Two meanings for one function name
+
+`install_exception_handlers` is called from two places, neither guarded, and it
+does something different in each MMU variant:
+
+  - **BookE** (`except_handlers.c`): writes `SPR_IVOR(0..15)` and `SPR_IVPR`.
+    These are *per-processor* registers, so the call from `cpu_init` is exactly
+    right and every processor must make it.
+  - **Segment MMU** (`init.c`): a one-time `memcpy_cache_flush` of the vector
+    code from `_start_except` down to `PHYS_EXCEPT_START`. It returns
+    immediately unless `cpu == 0`.
+
+`startup_system` calls it once, before `init_bootmem`. `init_bootmem` then does
+this:
+
+    // Claim the memory used by the exception vector code.
+    size = (word_t)memcfg_start_kernel() - phys_to_virt(PHYS_START_AVAIL);
+    if( size ) kmem_add(&kmem, (addr_t)phys_to_virt(PHYS_START_AVAIL), size);
+
+-- handing the `.except` source region to the kernel allocator, which is only
+sound *because the copy has already happened*. The comment says so.
+
+Then `cpu_init(0)` runs, and calls it again. By then the source has been handed
+out and written over. Instrumenting both runs shows it exactly:
+
+    IEH: right after copy: +0=7d9343a6 +0x200=7d9343a6
+    IEH: right after copy: +0=0        +0x200=0
+
+`7d9343a6` is `mtsprg 3,r12`, the first instruction of `EXCEPT_STACK`. The
+second call copied zeroes over it. From that point the machine had no exception
+vectors, and the first page fault branched into an empty page — which is why
+there was no diagnostic to see. `master` has the same unguarded pair of calls.
+
+Guarding the `cpu_init` call to `CONFIG_PPC_MMU_TLB` fixes it and leaves BookE
+alone: ppc44x keeps both call sites, and its instruction stream is unchanged
+byte for byte against the same tree without the commit.
+
+### It boots
+
+    System has 68 hardware interrupts
+    Initializing root servers
+    root-servers: utcb_area: bf000110 (128KB), kip_area: bff000c0 (4KB)
+    Creating sigma0 (SIGMA0)
+    Creating root server (ROOTTASK)
+	Idle thread started on CPU 0
+
+`init_root_servers` completes. sigma0 and the root task are created, and the
+idle thread runs. **`Idle thread started` is the string `tools/boottest`
+already greps for as a pass on x86**, so by the harness's own criterion this
+platform now boots.
+
+### What the last five sections cost, and what they were worth
+
+§143 through §148 began from "the segment MMU and OFPPC are unconverted by
+design" and end with the platform booting. Counting the defects: **fourteen
+upstream**, of which one commit (`d52a5e2`, 2010) accounts for eleven, and
+**three the migration's own** -- `asid.h`'s template instantiation (§144),
+`initial_switch_to_c`'s dropped `set_sprg_tcb` (§147), and the retracted
+verification method in §146. Two of those three were invisible to every audit
+§141 designed, because both were *rewrites* rather than conversions, with no
+C++ counterpart to diff against.
+
+Of the eleven found by reading, none was wrong. Of the four found by running,
+none could have been found by reading: a `.lcomm` that does not advance the
+location counter, a computed stack pointer thrown away, a missing SPRG store,
+and a second call to an idempotent-looking function that is not idempotent.
+That is the case for booting things, and it is the last thing §142 said it
+could not do.
+
+What is left: the cpu and bus speeds are not found in the device tree, so the
+decrementer runs off a 1MHz fallback; and nothing yet confirms sigma0 and the
+root task run past creation, because the userland has no console on this
+platform.
