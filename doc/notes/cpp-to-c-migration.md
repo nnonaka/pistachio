@@ -8554,3 +8554,67 @@ the sender reaches `Sender abort` and stops somewhere after
 `setup_t2_mappings` returns and before the send completes. Where, exactly, is
 not established, and the remaining candidates are the `L4_Load`/`L4_Send` pair
 and the fault path underneath them.
+
+
+## §158 — `L4_Send` blocks; the fault path is quiescent
+
+§157 left two candidates for where the sender stops: the `L4_Load`/`L4_Send`
+pair, or the fault path underneath. Measuring it needed a method that does not
+perturb what it measures, which rules out the console: §157's own retraction was
+caused by printing.
+
+The root task is loaded at physical `0x600000` and runs identity-mapped there,
+so its globals can be read from **QEMU's monitor** while the guest is wedged --
+`xp/1xw`, no guest cost at all. Four `volatile` globals were added: a progress
+marker the sender bumps through the `Sender abort` section, a count of faults
+the pager sees from the sender, and the last such fault address.
+
+Sampled twice, thirty seconds apart, identical both times:
+
+    0x619534  dbg_mark       = 4           entered L4_Send, never returned
+    0x61952c  dbg_t2_faults  = 0x18 (24)   not increasing
+    0x619530  dbg_last_fault = 0x032d5000  the abort address
+    0x619524  ipc_pf_abort_address = 0     cleared
+
+Reading them in order gives the whole sequence:
+
+  - `mark = 4` is set immediately before `L4_Send` and `5` immediately after.
+    It is 4, so **the send is what blocks.**
+  - The fault count is static across thirty seconds. **There is no fault loop**;
+    the fault path is not where it is stuck.
+  - The last fault the pager saw is `0x32d5000`, which is
+    `&t2_buf[PAGE_SIZE]` -- the page the test revoked, and the address it had
+    just installed as `ipc_pf_abort_address`.
+  - That variable now reads 0, and the *only* code that clears it is the
+    pager's abort branch. So the pager matched the fault, called
+    `L4_ExchangeRegisters (tid, 3 << 1, ...)` to abort the sender's IPC, and
+    deliberately did not reply to the fault.
+
+So the fault arrives exactly once, the pager aborts, and the sender never
+returns. **The hang is in the abort, not underneath it.**
+
+That restores §155's original hypothesis, which this investigation discarded on
+bad grounds. §155 checked the thread state at four `ExchangeRegisters` aborts,
+found them all in states the code handles, and concluded the abort was
+innocent. Those four were aborts from *earlier* tests: the check never
+established that any of them was this one, nor -- more importantly -- that an
+abort which reports success actually unblocks the thread. "The mechanism works
+somewhere" is not evidence that it worked here.
+
+### A fragility worth recording
+
+Twice now, an unrelated change to `l4test`'s layout has left the run hanging in
+the KIP test at `APIVersion reports 132.5` -- once when a `L4_Msg_t` was added
+to a stack frame, once when two initialised globals were added. Both times the
+addresses of everything else were unchanged. Something in the KIP test or its
+surroundings is sensitive to layout in a way that has nothing to do with what
+was being measured, and it will waste time again if it is not expected.
+
+### Next
+
+The sender is in `L4_Send`, inside a string copy, faulting on its own send
+buffer, with a pagefault IPC outstanding to its pager, when the pager aborts it.
+What remains is to determine the sender's thread state at that moment and follow
+`tcb_unwind` from it -- the interesting case being whether an abort delivered
+while a *nested* pagefault IPC is outstanding unwinds the outer string-copy IPC
+as well, or leaves it half-unwound with nothing to resume it.
