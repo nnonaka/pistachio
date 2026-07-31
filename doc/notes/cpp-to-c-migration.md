@@ -8459,6 +8459,12 @@ Printing both sides of one write:
 The sender's store lands somewhere the pager does not read. **They are not the
 same page.**
 
+**Wrong; corrected by §157.** The two `blocking` lines are not one value read
+twice. The sender sets the flag once per test and clears it once per test, and
+the instrumented clear was the first of two such pairs -- so the second
+`blocking` line is a legitimate block from the *following* test, which had set
+the flag again. The pages are shared, and §157 shows the kernel sharing them.
+
 That is the hang. After `Sender xfer timeout`, the sender clears
 `ipc_pf_block_address` so the pager will serve faults again; the pager never
 sees the clear, so it keeps withholding faults at that address. The next test
@@ -8484,3 +8490,67 @@ Either the map item is not delivered, or it is delivered and does not share.
 That is the question to answer next, and it is a kernel question rather than a
 test one -- `L4_Flush` not working (§154) hid it, because before that fix the
 sender never faulted here at all.
+
+
+## §157 — Retracting §156: the pages are shared, and three localisations were wrong
+
+§156 concluded that `l4test`'s pager and a sender in its own address space do
+not share the globals they coordinate through. That is wrong, and the kernel
+says so directly. Tracing every cross-space `space_map_fpage`:
+
+    [MAP f_spc=c0032000 t_spc=c003a000 snd=6190c7 base=619000 rcv=10]
+
+`c0032000` is the root task's space and `c003a000` the sender's.
+`snd=0x6190c7` is page `0x619000`, size_log2 12, **rwx 7**; `rcv=0x10` is the
+complete address space. And `ipc_pf_block_address` lives at `0x619528`:
+
+    00619524 B ipc_pf_abort_address
+    00619528 B ipc_pf_block_address
+
+The page holding both flags is mapped from the pager's space into the sender's,
+fully accessible. They are shared, and the map items work -- which they must,
+since the sender executes at all only because its text arrives the same way.
+
+### What the evidence actually said
+
+    164:   Zero xfer timeouts:                          OK
+    165: [PGR blocking 32d5000 (blk=32d5000)]
+    166: [T2 cleared blk, readback=0]
+    167:   Sender xfer timeout:                         OK
+    168: [PGR blocking 32d5000 (blk=32d5000)]
+
+Line 168 does follow line 166, which is what the claim rested on. But the
+sender sets the flag once per test and clears it once per test, and there are
+two such pairs; the instrumented clear was the first. Line 168 is the block
+belonging to the *next* test, which had set the flag again a few statements
+earlier. Nothing was stale.
+
+### Three wrong localisations, one cause
+
+This investigation produced three confident and wrong answers before this one:
+
+  - §155: the sender never reaches the `Sender abort` section. It does.
+  - §156: the coordinating flags are not shared. They are.
+  - and, within §156's own follow-up, that the hang sits in
+    `setup_t2_mappings`. Tracing it shows the function completing, including
+    with the `no_access` argument.
+
+Two of the three came from the same mechanism, and it is worth stating because
+it will recur: **printing through the Open Firmware console costs enough time
+to change what the run reaches.** Forty lines of pager tracing kept the run
+from ever arriving at the section under investigation, which then looked like
+evidence that the section was unreachable. §150's input measurement failed the
+same way from the other side -- sampling before the stimulus.
+
+On a console where each character is a client-interface call, instrumentation
+is not free and is not neutral. Anything measured this way needs a control run,
+and a claim of the form "X never happens" needs to be distinguished from "the
+run never got to X".
+
+### What is known
+
+`L4_Flush` works (§154), the transfer timeouts pass, the map items share, and
+the sender reaches `Sender abort` and stops somewhere after
+`setup_t2_mappings` returns and before the send completes. Where, exactly, is
+not established, and the remaining candidates are the `L4_Load`/`L4_Send` pair
+and the fault path underneath them.
