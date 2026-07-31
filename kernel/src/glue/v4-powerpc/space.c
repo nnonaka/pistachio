@@ -445,6 +445,13 @@ fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_
     mdb_ctrl_t ctrl;
 
     ctrl.raw = 0;
+    /* mapctrl_self and unmap were dropped when api/v4/space.h's single generic
+       space_t::unmap_fpage became one copy per architecture.  glue/v4-x86 has
+       all five fields; this had three, so the mapping database was told
+       neither to unmap nor to act on the caller's own mappings, and L4_Flush
+       revoked nothing at all.  Notes §154. */
+    ctrl.mapctrl_self	= flush;
+    ctrl.unmap		= fpage_is_rwx (&fpage);
     ctrl.set_rights	= !fpage_is_rwx (&fpage);
     ctrl.reset_status	= 1;
     ctrl.deliver_status	= 1;
