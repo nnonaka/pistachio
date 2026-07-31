@@ -7993,3 +7993,107 @@ that a working system would have tolerated rather than died of.
 
 What remains: nothing confirms sigma0 and the root task run past creation,
 because the userland has no console on this platform.
+
+
+## §150 — l4test runs: the console was a configuration, not a defect
+
+§149 closed on "nothing confirms sigma0 and the root task run past creation,
+because the userland has no console on this platform." That turned out to be
+the easiest thing in the last eight sections, and the only one that needed no
+source change at all.
+
+`user/lib/io/powerpc.cc` has two console backends. Under `CONFIG_COMPORT` it
+drives a UART, either at a fixed address or one it locates through a flattened
+device tree. Without it:
+
+    extern "C" void __l4_putc( int c )
+    {
+	L4_KDB_PrintChar( c );
+	if( c == '\n' ) L4_KDB_PrintChar( '\r' );
+    }
+
+-- the kernel debugger syscall, which the kernel already answers
+(`kdb/glue/v4-powerpc/prepost.c` handles `L4_TRAP_KPUTC` by calling `putc`).
+The kernel's console works, so user output only has to be routed through it.
+
+`configure` defaults `CONFIG_COMPORT` to 0, and `#if defined(CONFIG_COMPORT)`
+is true for 0, so the default build takes the UART path and looks for a device
+tree that a PowerMac does not have. `--with-comport=no` leaves it undefined --
+`configure.in` guards the `AC_DEFINE` with `!= xno` precisely so it can be --
+and the KDB path is selected. That is the whole fix.
+
+    Creating sigma0 (SIGMA0)
+    Creating root server (ROOTTASK)
+	Idle thread started on CPU 0
+    L4/Pistachio test suite ready to go.
+
+    Main menu
+    =========
+    0) Test KIP
+    1) PowerPC Tests
+    ...
+
+### The menu cannot be driven, and that is the firmware
+
+Nothing typed at it arrives. Instrumenting the read shows why:
+
+    GETC: stdin ihandle 7c5ab88
+    GETC: read -> 0
+    GETC: read -> 0
+
+The ihandle is right -- it matches `/chosen`'s `stdin` -- and OpenBIOS's own
+Forth prompt reads typed input perfectly well, which is how every diagnostic in
+§146 onwards was issued. But its **client-interface `read` returns no data**;
+the prompt uses an internal word, not the CI method. Output through the same
+mechanism works, so this is not the conversion and not the kernel.
+
+`l4test` already has the answer: `main.cc` runs `all_tests()` without the menu
+when built `-DL4TEST_AUTORUN`. The x86 harness cannot type either.
+
+### What the tests say
+
+    Kernel Interface Page
+    =====================
+    KernelID reports 0x4.0x2: L4Ka/Pistachio from UKa
+    Address of KIP is 0xbff00000
+    KIP alignment is OK
+    Threads: IRQs=68, sys=32, valid TID bits=17
+    Kernel Version: 0.4.0
+    Processors: 1
+      CPU0: int freq=900000kHz, ext freq=100000kHz
+    Checking KIP, depth 0 .. depth 9
+      Generic exception test:                             FAILED
+      Legacy system call exception test:                  FAILED
+      Generic exception unwind:                           OK
+      Legacy system call unwind:                          OK
+    Unable to deliver user exception: no exception handler.
+    >> KD# unhandled user exception, halting thread
+
+The KIP test passes throughout, and `CPU0: int freq=900000kHz, ext
+freq=100000kHz` is §149's fix arriving where it was always meant to go: user
+space, out of the KIP, matching the device tree.
+
+Then two of the four PowerPC exception tests fail and the run stops on an
+undelivered user exception. Those are real failures on a port that has never
+executed a user thread before today, and they are the next thing.
+
+`tools/boottest-ofppc` makes all of this reproducible. It cannot share
+`tools/boottest`: there is no multiboot here, and QEMU's `-kernel` relocates
+the image past a loader that is not position-independent, so Open Firmware must
+do the loading from a filesystem -- ext2, because OpenBIOS reads ISO9660 names
+mangled. One detail that cost an hour and belongs in writing: **Open Firmware
+separates device from path with a backslash.** `hd:\ofppc` opens; `hd:,/ofppc`,
+`hd:/ofppc` and `hd:,ofppc` all return zero, and `boot` reports only "No valid
+state has been set by load or init-program", which says nothing about why.
+
+### Where the platform stands
+
+    kernel      boots, page hash active, MPIC up, idle thread running
+    sigma0      created and running
+    root task   created, running, printing, executing tests
+    l4test      KIP suite passes; 2 of 4 exception tests fail
+
+Eight sections ago this configuration did not compile, and §142 recorded the
+segment MMU and OFPPC as "unconverted by design". Fifteen upstream defects and
+three of the migration's own separate that from a system running its own test
+suite.
