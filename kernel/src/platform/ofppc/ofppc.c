@@ -52,6 +52,16 @@ SECTION(".init") bool ofppc_get_cpu_speed( word_t *cpu_hz, word_t *bus_hz )
 	    dev = NULL;
     }
 
+    /* Upstream's only fallback is the literal path "/cpus/cpu@0", and Open
+     * Firmware does not promise that name -- the node is named for the part.
+     * OpenBIOS calls it "/cpus/PowerPC,750@0", so neither lookup found it and
+     * the timer fell back to a 1MHz guess: /chosen carries no "cpu" property
+     * there either.  What identifies a processor node is its device_type, so
+     * look for that first, and keep the literal path after it for firmware
+     * that has the node but no device_type.  ofppc_get_cpu_count below already
+     * declines to rely on the name.  Notes §149. */
+    if( dev == NULL )
+	dev = of1275_tree_find_device_type (get_of1275_tree(), "cpu");
     if( dev == NULL )
     	dev = of1275_tree_find (get_of1275_tree(), "/cpus/cpu@0"); // Try a fallback.
     if( dev == NULL )
