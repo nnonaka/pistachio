@@ -8329,3 +8329,72 @@ chose to stop rather than to look one function further. The three of them
 together say that the risk in a mechanical migration is not the mechanical
 part; it is the handful of places where the machinery stops and a judgement is
 made with less context than the codebase actually offers.
+
+
+## §154 — Unmap never unmapped: two fields lost when a generic inline was split
+
+The five transfer-timeout failures §153 left were not about timeouts. Every
+measurement taken to find them said the same thing in a different way, and it
+took four of them to hear it:
+
+  - no copy-area DSI is ever taken;
+  - `handle_xfer_timeouts` is never called;
+  - `pghash_flush_4k_mapping` is never called;
+  - `pgent_clear` fires six times in a run, all of them UTCB and KIP teardown.
+
+Nothing was faulting because **nothing was being unmapped**. `l4test` revokes a
+page with `L4_Flush` and expects the string transfer to stop on it; the page
+stayed mapped, the transfer ran to completion, and the test reported the only
+thing it could -- no error, no cut.
+
+`master` has one generic `space_t::unmap_fpage`, an inline in
+`api/v4/space.h`:
+
+    ctrl.mapctrl_self	= flush;
+    ctrl.unmap		= fpage.is_rwx ();
+    ctrl.set_rights	= ! fpage.is_rwx ();
+    ctrl.reset_status	= 1;
+    ctrl.deliver_status	= 1;
+
+The conversion turned it into one copy per architecture. `glue/v4-x86/space.c`
+has all five fields. `glue/v4-powerpc/space.c` had three: **`mapctrl_self` and
+`unmap` are missing.** The mapping database was told neither to unmap nor to
+act on the caller's own mappings, so `L4_Flush` did nothing whatever -- on both
+PowerPC platforms, not just the one being brought up.
+
+    Zero xfer timeouts:                                   OK
+    Sender xfer timeout:                                  OK
+    Receiver xfer timeout:                                OK
+
+### Two things not done
+
+A `tlbie` was *not* added to `pghash_flush_4k_mapping`. Clearing a page hash
+entry leaves the translation the CPU has already cached, and the eviction path
+in `pghash_insert_4k_mapping` brackets exactly that store with `sync()` and
+`ppc_invalidate_tlbe()` -- so the omission looks wrong. It was added while the
+real cause was still unknown, and then tested: the tests pass identically
+without it. An unverifiable fix is not worth carrying, and this is the same
+judgement §146 made about claiming memory from Open Firmware.
+
+The **transfer-abort tests are not fixed**, and now hang rather than fail. They
+used to complete instantly, because no IPC ever blocked long enough to abort;
+now one does, and aborting it through `L4_ExchangeRegisters` does not return.
+The suite therefore stops before `ThreadControl+ExReg` and priority change,
+which it previously reached and failed. That bug was always there; the fix
+above is what made it reachable.
+
+### The fourth of the migration's own
+
+This is the fourth defect that belongs to the conversion rather than to
+upstream, after `asid.h` (§144), `initial_switch_to_c` (§147) and the copy area
+(§153). Three of the four share a shape worth stating plainly: **a construct
+that existed once became several copies, and one copy lost something.** A
+template collapsed to its single instantiation; a generic inline split per
+architecture, twice. None is a mistranslation of an expression. Each is a place
+where structure that used to guarantee agreement was replaced by duplication
+that merely permits it -- and where nothing then checked that the copies still
+said the same thing.
+
+`glue/v4-x86/space.c` and `glue/v4-powerpc/space.c` still hold two copies of a
+function that has no architecture-specific content at all. They agree today
+because this section made them agree.
