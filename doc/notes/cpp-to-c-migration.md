@@ -8398,3 +8398,44 @@ said the same thing.
 `glue/v4-x86/space.c` and `glue/v4-powerpc/space.c` still hold two copies of a
 function that has no architecture-specific content at all. They agree today
 because this section made them agree.
+
+
+## §155 — The abort hang: two hypotheses eliminated, not fixed
+
+§154's unmap fix made `Sender abort` and `Receiver abort` reachable, and they
+hang. This section did not fix them. It records what they are *not*, because
+both wrong answers were plausible enough to cost a day twice.
+
+**Not a thread-state classification problem.** The tunnelled-pagefault path
+leaves the copier in `THREAD_STATE_WAITING_TUNNELED_PF` and the partner in
+`LOCKED_RUNNING_NESTED`. `exregs.c` acts on an abort only for
+
+    is_sending()	polling, locked_running
+    is_receiving()	waiting_forever, waiting_timeout, locked_waiting
+
+and neither tunnelled state appears in either list -- while `tcb_unwind` has an
+explicit `WAITING_TUNNELED_PF` branch, so the machinery plainly expects to be
+called for it. That asymmetry looks exactly like the bug and is not: printing
+the state at every abort shows the four that occur are `polling`,
+`waiting_forever` and `halted`, all handled correctly. `master`'s predicates are
+identical, so it would have been upstream's had it been anything.
+
+**Not a missing `tlbie`.** Recorded in §154 and repeated here because it is the
+same trap: `pghash_flush_4k_mapping` clears a hash entry without invalidating
+the cached translation, where the eviction path a few lines up does. Adding it
+changes no observable behaviour.
+
+What is established: the run stops *before* any `ExchangeRegisters` for this
+test -- the pager never issues the abort. The sender unmaps the second page of
+its own send buffer, sets `ipc_pf_abort_address` to it, and sends; the pager is
+supposed to receive the fault, match the address, and abort. Either the fault
+does not arrive or it does not match. Note that the sender runs in a *separate
+address space* (`setup_ipc_threads (..., rcv_same_space = true,
+snd_same_space = false)`), so `ipc_pf_abort_address` reaches the pager only
+because sigma0 hands both spaces the same physical page -- a sharing assumption
+worth checking before anything subtler.
+
+The tests that this unblocked stand: `Zero xfer timeouts`, `Sender xfer
+timeout` and `Receiver xfer timeout` pass, and the suite has no failures where
+it reaches. It reaches less far in wall-clock terms than before §154, because
+transfers now genuinely block for the thirty-second periods the tests ask for.
