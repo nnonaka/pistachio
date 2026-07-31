@@ -59,7 +59,7 @@ INLINE void pgent_update_from_pghash (pgent_t *self, space_t * s, addr_t vaddr, 
     // Force the cpu to sync the tlb with the page hash before we read from it.
     sync();
 
-    pte = get_pghash()->get_htab()->locate_pte( (word_t)vaddr, 
+    pte = ppc64_htab_locate_pte( pghash_get_htab (get_pghash()), (word_t)vaddr,
 	    space_get_vsid (s, vaddr), self->map.pteg_slot, self->map.second_hash, large );
 
     if( pte )
@@ -177,7 +177,7 @@ INLINE word_t pgent_attributes (pgent_t *self, space_t * s, pgsize_e pgsize)
 INLINE void pgent_flush (pgent_t *self, space_t *s, pgsize_e pgsize, bool kernel, 
 	addr_t vaddr)
 {
-    get_pghash()->flush_mapping( s, vaddr, self, pgsize );
+    pghash_flush_mapping( get_pghash(), s, vaddr, self, pgsize );
 }
 
 INLINE void pgent_clear (pgent_t *self, space_t * s, pgsize_e pgsize, bool kernel, 
@@ -190,7 +190,7 @@ INLINE void pgent_clear (pgent_t *self, space_t * s, pgsize_e pgsize, bool kerne
     if( !kernel )
 	pgent_set_linknode (self, s, pgsize, 0);
     
-    tmp.flush( s, pgsize, kernel, vaddr );
+    pgent_flush( &tmp, s, pgsize, kernel, vaddr );
 }
 
 INLINE void pgent_make_subtree (pgent_t *self, space_t * s, pgsize_e pgsize, bool kernel)

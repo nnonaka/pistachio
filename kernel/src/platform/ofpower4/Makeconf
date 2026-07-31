@@ -31,6 +31,6 @@
 ######################################################################
 SOURCES += $(addprefix src/platform/ofpower4/, head.S call.S prom.cc xics.cc )
 
-SOURCES += $(addprefix src/arch/powerpc64/, 1275tree.cc of1275.cc rtas.cc )
+SOURCES += $(addprefix src/arch/powerpc64/, 1275tree.c of1275.cc rtas.cc )
 
 SOURCES += $(addprefix src/glue/v4-powerpc64/, rtas.cc )

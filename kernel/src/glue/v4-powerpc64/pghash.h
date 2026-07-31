@@ -36,29 +36,34 @@
 #include INC_ARCH(pghash.h)
 #include INC_GLUE(pgent.h)
 
-class space_t;
+struct space_t;
+typedef struct space_t space_t;
 
-class pghash_t
+struct pghash_t
 {
-protected:
     ppc64_htab_t htab;
-
-    bool try_location( word_t phys_start, word_t size );
-    bool finish_init( word_t phys_start, word_t size );
-
-public:
-    ppc64_htab_t *get_htab() { return &this->htab; }
-
-    bool init( word_t tot_phys_mem );
-
-    void update_mapping( space_t *s, addr_t vaddr, pgent_t *pgent,
-		    pgent_t::pgsize_e size );
-    void insert_mapping( space_t *s, addr_t vaddr, pgent_t *pgent,
-		    pgent_t::pgsize_e size, bool bolted = false );
-    void flush_mapping( space_t *s, addr_t vaddr, pgent_t *pgent, pgent_t::pgsize_e size );
 };
+typedef struct pghash_t pghash_t;
 
-INLINE pghash_t *get_pghash()
+/* Out of line in glue/v4-powerpc64/pghash.c.  try_location and finish_init
+   were protected and are file-static there. */
+BEGIN_DECLS
+bool pghash_init( pghash_t *self, word_t tot_phys_mem );
+void pghash_update_mapping( pghash_t *self, space_t *s, addr_t vaddr,
+			    pgent_t *pgent, pgsize_e size );
+/* The bolted argument defaulted to false; C has no defaults, so the two
+   spellings are separate entry points. */
+void pghash_insert_mapping_bolted( pghash_t *self, space_t *s, addr_t vaddr,
+				   pgent_t *pgent, pgsize_e size, bool bolted );
+void pghash_insert_mapping( pghash_t *self, space_t *s, addr_t vaddr,
+			    pgent_t *pgent, pgsize_e size );
+void pghash_flush_mapping( pghash_t *self, space_t *s, addr_t vaddr,
+			   pgent_t *pgent, pgsize_e size );
+END_DECLS
+
+INLINE ppc64_htab_t *pghash_get_htab( pghash_t *self ) { return &self->htab; }
+
+INLINE pghash_t *get_pghash(void)
 {
     extern pghash_t pghash;
     return &pghash;

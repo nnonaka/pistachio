@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2005, National ICT Australia
  *
- * File path:	platform/ofg5/intr.cc
+ * File path:	platform/ofg5/intr.c
  * Description:	G5 interrupt controller.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@
 
 intctrl_t intctrl;
 
-SECTION(".init") void intctrl_t::init_arch()
+SECTION(".init") void intctrl_init_arch (void)
 {
     printf("not implmented %s\n", __func__);
 }

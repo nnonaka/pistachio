@@ -50,9 +50,8 @@
 
 #include <generic/memregion.h>
 
-class ppc64_sdr1_t
+struct ppc64_sdr1_t
 {
-public:
     union {
 	struct {
     	    word_t htaborg : 46;
@@ -61,13 +60,11 @@ public:
 	} x;
 	u64_t raw;
     };
-
-    void create( word_t base, word_t size);
 };
+typedef struct ppc64_sdr1_t ppc64_sdr1_t;
 
-class ppc64_pte_t
+struct ppc64_pte_t
 {
-public:
     union {
 	struct {
 	    /* Word 0 */
@@ -98,16 +95,13 @@ public:
 	} raw;
     };
 
-//    void create( word_t virt, word_t phys, word_t vsid, word_t wimg, word_t noexecute, word_t pp);
-    void create_4k( word_t virt, word_t entry, word_t vsid, word_t second );
-    void create( word_t virt, word_t entry, word_t vsid, word_t second, word_t large );
-    void create( word_t virt, word_t entry, word_t vsid, word_t second, word_t large, word_t bolted );
-
-    static word_t virt_to_api( word_t virt )
-	{ return (virt >> PTE_API_SHIFT) & 0x1f; }
-    static word_t api_to_virt( word_t api )
-	{ return api << PTE_API_SHIFT; }
 };
+typedef struct ppc64_pte_t ppc64_pte_t;
+
+INLINE word_t ppc64_pte_virt_to_api( word_t virt )
+	{ return (virt >> PTE_API_SHIFT) & 0x1f; }
+INLINE word_t ppc64_pte_api_to_virt( word_t api )
+	{ return api << PTE_API_SHIFT; }
 
 #define HTAB_VSID_HASH_MASK	((1ul << 39) - 1)
 #define HTAB_EA_PAGE_MASK	((1ul << 16) - 1)
@@ -121,28 +115,38 @@ public:
 #define PTE_PAGE_INDEX_MASK	((1ul << 11)-1)
 #define PTE_PAGE_INDEX_SHIFT	7
 
-class ppc64_htab_t
+struct ppc64_htab_t
 {
-public:
-    void init( word_t phys_base, word_t virt_start, word_t size );
-    void activate();
+    ppc64_pte_t * base;
+    word_t phys_base;
+    word_t size;
+    word_t hash_mask;
+    word_t htab_size;
+};
+typedef struct ppc64_htab_t ppc64_htab_t;
 
-    ppc64_pte_t * locate_pte( word_t virt, word_t vsid, word_t slot, 
-	    bool is_second_hash, bool large );
-    ppc64_pte_t * find_insertion( word_t virt, word_t vsid, word_t *slot, 
-	    word_t *is_second_hash, bool large );
+/* Out of line in arch/powerpc64/pghash.c. */
+BEGIN_DECLS
+void ppc64_htab_init( ppc64_htab_t *self, word_t phys_base, word_t virt_start,
+		      word_t size );
+void ppc64_htab_activate( ppc64_htab_t *self );
+ppc64_pte_t * ppc64_htab_find_insertion( ppc64_htab_t *self, word_t virt,
+					 word_t vsid, word_t *slot,
+					 word_t *is_second_hash, bool large );
+END_DECLS
 
-    word_t reverse_hash( ppc64_pte_t *pghash_pte );
+INLINE ppc64_pte_t * ppc64_htab_get_pteg( ppc64_htab_t *self, word_t hash )
+	{ return (ppc64_pte_t *)((word_t)self->base |
+			((hash & self->hash_mask) << HTAB_PTEG_BITS)); }
 
-    ppc64_pte_t * get_pteg( word_t hash )
-	{ return (ppc64_pte_t *)((word_t)this->base |
-			((hash & this->hash_mask) << HTAB_PTEG_BITS)); }
+INLINE word_t ppc64_htab_min_size( void )
+	{ return (1ul << (HTAB_PTEGs_BITS + HTAB_PTEG_BITS)); }
 
-    word_t optimal_size( word_t tot_phys_mem )
+INLINE word_t ppc64_htab_optimal_size( word_t tot_phys_mem )
 	{ 
 	    word_t size = ((tot_phys_mem >> (POWERPC64_PAGE_BITS + 1)) << HTAB_PTEG_BITS);
-	    if( size < min_size() )
-		size = min_size();
+	    if( size < ppc64_htab_min_size() )
+		size = ppc64_htab_min_size();
 	    else {
 		// Choose a size such that only a single bit is set.
 		int bits = 0;
@@ -154,20 +158,6 @@ public:
 	    }
 	    return size;
 	}
-
-    word_t min_size() { return (1ul << (HTAB_PTEGs_BITS + HTAB_PTEG_BITS)); }
-
-private:
-    word_t primary_hash( word_t virt, word_t vsid, bool large );
-    word_t secondary_hash( word_t hash );
-
-
-    ppc64_pte_t * base;
-    word_t phys_base;
-    word_t size;
-    word_t hash_mask;
-    word_t htab_size;
-};
 
 /****************************************************************************
  *
@@ -217,82 +207,68 @@ INLINE void ppc64_invalidate_tlbe( addr_t addr, bool large )
     asm volatile( "eieio; tlbsync; ptesync" : : : "memory" );
 }
 
-INLINE void ppc64_sdr1_t::create( word_t base, word_t size)
+INLINE void ppc64_sdr1_create( ppc64_sdr1_t *self, word_t base, word_t size)
 {
-    this->raw = 0;
-    this->x.htaborg = base >> POWERPC64_HTABORG_SHIFT;
-    this->x.htabsize = size;
+    self->raw = 0;
+    self->x.htaborg = base >> POWERPC64_HTABORG_SHIFT;
+    self->x.htabsize = size;
 }
 
 /*
 INLINE void ppc64_pte_t::create( word_t virt, word_t phys, word_t vsid, word_t wimg, word_t noexecute, word_t pp )
 {
-    this->raw.word0 = this->raw.word1 = 0;
-    this->x.vsid = vsid;
-    this->x.api = virt_to_api( virt );
-    this->x.rpn = phys >> POWERPC64_PAGE_BITS;
-    this->x.r = 1;
-    this->x.c = 1;
-    this->x.wimg = wimg;
-    this->x.n = noexecute;
-    this->x.pp = pp;
-    this->x.v = 1;
+    self->raw.word0 = self->raw.word1 = 0;
+    self->x.vsid = vsid;
+    self->x.api = virt_to_api( virt );
+    self->x.rpn = phys >> POWERPC64_PAGE_BITS;
+    self->x.r = 1;
+    self->x.c = 1;
+    self->x.wimg = wimg;
+    self->x.n = noexecute;
+    self->x.pp = pp;
+    self->x.v = 1;
 }
 */
 
-INLINE void ppc64_pte_t::create_4k( word_t virt, word_t entry,
+/* Upstream declared three overloads of ppc64_pte_t::create, which C cannot
+   carry.  They are the same function: each begins by zeroing word0, so the
+   fields the shorter forms omit -- `l' and `bolted' -- are already 0, and
+   setting them to 0 explicitly is what the longer form does.  Only the
+   six-argument one has callers (glue/v4-powerpc64/pghash.c, twice); the other
+   two are named here for the entry points they were, and delegate. */
+INLINE void ppc64_pte_create_bolted( ppc64_pte_t *self, word_t virt, word_t entry,
+		word_t vsid, word_t second, word_t large, word_t bolted )
+{
+    self->raw.word1 = entry;
+    asm volatile( "eieio;" ::: "memory" );
+    self->raw.word0 = 0;
+    self->x.vsid = vsid;
+
+    if (large)
+	self->x.api = ppc64_pte_virt_to_api( virt ) & (~(1ul));
+    else
+	self->x.api = ppc64_pte_virt_to_api( virt );
+
+    self->x.bolted = bolted;
+    self->x.l = large;
+    self->x.h = second;
+    self->x.v = 1;
+    asm volatile( "sync;" ::: "memory" );
+}
+
+INLINE void ppc64_pte_create( ppc64_pte_t *self, word_t virt, word_t entry,
+		word_t vsid, word_t second, word_t large )
+{
+    ppc64_pte_create_bolted( self, virt, entry, vsid, second, large, 0 );
+}
+
+INLINE void ppc64_pte_create_4k( ppc64_pte_t *self, word_t virt, word_t entry,
 		word_t vsid, word_t second )
 {
-    this->raw.word1 = entry;
-    asm volatile( "eieio;" ::: "memory" );
-    this->raw.word0 = 0;
-    this->x.vsid = vsid;
-    this->x.api = virt_to_api( virt );
-    this->x.h = second;
-    this->x.v = 1;
-    asm volatile( "sync;" ::: "memory" );
+    ppc64_pte_create_bolted( self, virt, entry, vsid, second, 0, 0 );
 }
 
-INLINE void ppc64_pte_t::create( word_t virt, word_t entry, word_t vsid,
-		word_t second, word_t large )
-{
-    this->raw.word1 = entry;
-    asm volatile( "eieio;" ::: "memory" );
-    this->raw.word0 = 0;
-    this->x.vsid = vsid;
-
-    if (large)
-	this->x.api = virt_to_api( virt ) & (~(1ul));
-    else
-	this->x.api = virt_to_api( virt );
-
-    this->x.l = large;
-    this->x.h = second;
-    this->x.v = 1;
-    asm volatile( "sync;" ::: "memory" );
-}
-
-INLINE void ppc64_pte_t::create( word_t virt, word_t entry, word_t vsid,
-		word_t second, word_t large, word_t bolted )
-{
-    this->raw.word1 = entry;
-    asm volatile( "eieio;" ::: "memory" );
-    this->raw.word0 = 0;
-    this->x.vsid = vsid;
-
-    if (large)
-	this->x.api = virt_to_api( virt ) & (~(1ul));
-    else
-	this->x.api = virt_to_api( virt );
-
-    this->x.bolted = bolted;
-    this->x.l = large;
-    this->x.h = second;
-    this->x.v = 1;
-    asm volatile( "sync;" ::: "memory" );
-}
-
-INLINE word_t ppc64_htab_t::primary_hash( word_t virt, word_t vsid, bool large )
+INLINE word_t ppc64_htab_primary_hash( ppc64_htab_t *self, word_t virt, word_t vsid, bool large )
 {
     if (large)
 	return (vsid & HTAB_VSID_HASH_MASK) ^ ((virt >> POWERPC64_LARGE_BITS) & HTAB_EA_LARGE_MASK);
@@ -300,7 +276,7 @@ INLINE word_t ppc64_htab_t::primary_hash( word_t virt, word_t vsid, bool large )
 	return (vsid & HTAB_VSID_HASH_MASK) ^ ((virt >> POWERPC64_PAGE_BITS) & HTAB_EA_PAGE_MASK);
 }
 
-INLINE word_t ppc64_htab_t::secondary_hash( word_t hash )
+INLINE word_t ppc64_htab_secondary_hash( ppc64_htab_t *self, word_t hash )
 {
     // TODO: see the PPC eqv instruction; it can compute the complete
     // secondary hash in one instruction.
@@ -312,7 +288,7 @@ INLINE word_t ppc64_htab_t::secondary_hash( word_t hash )
  * @param pghash_pte The location of the pte, in the page hash.
  * #return The virtual address which the pte maps.
  */
-INLINE word_t ppc64_htab_t::reverse_hash( ppc64_pte_t *pghash_pte )
+INLINE word_t ppc64_htab_reverse_hash( ppc64_htab_t *self, ppc64_pte_t *pghash_pte )
 {
     word_t vsid = pghash_pte->x.vsid;
     word_t api = pghash_pte->x.api;
@@ -355,21 +331,21 @@ INLINE word_t ppc64_htab_t::reverse_hash( ppc64_pte_t *pghash_pte )
     return va;
 }
 
-INLINE ppc64_pte_t* ppc64_htab_t::locate_pte( word_t virt, word_t vsid, 
-	word_t slot, bool is_second_hash, bool large )
+INLINE ppc64_pte_t* ppc64_htab_locate_pte( ppc64_htab_t *self, word_t virt,
+	word_t vsid, word_t slot, bool is_second_hash, bool large )
 {
     // Create the hash.
-    word_t hash = this->primary_hash( virt, vsid, large );
+    word_t hash = ppc64_htab_primary_hash( self, virt, vsid, large );
     if( is_second_hash )
-	hash = this->secondary_hash( hash );
+	hash = ppc64_htab_secondary_hash( self, hash );
 
     // Go directly to the pte in the pteg, based on the pteg_slot stored
     // in the pgent.
-    ppc64_pte_t *pte = get_pteg(hash);
+    ppc64_pte_t *pte = ppc64_htab_get_pteg( self, hash );
     pte = &pte[ slot ];
 
     // Verify that the pte matches the search criteria.
-    word_t api = ppc64_pte_t::virt_to_api( virt );
+    word_t api = ppc64_pte_virt_to_api( virt );
 
     if( (pte->x.v == 1) && (pte->x.vsid == vsid) && (pte->x.api == api) )
 	return pte;

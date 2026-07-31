@@ -8980,3 +8980,71 @@ numbered.
 
 ofppc, ppc44x and x86-x64 all still build; these headers are reachable from
 powerpc64 configurations only.
+
+
+## §164 — powerpc64: the page hash, the device tree, and the first two sources
+
+Four more headers and the first two `.cc` files. The kernel `.cc` count is
+39 -> 37.
+
+### The three-way overload
+
+`arch/powerpc64/pghash.h` held the construct §163 flagged: `ppc64_pte_t::create`
+declared three ways -- four arguments, five, and six. They are not three
+functions. Each begins by zeroing `word0`, so the fields the shorter forms omit
+(`l` and `bolted`) are *already* zero, and what the longest form does with them
+is assign zero. The four-argument form is the six-argument one with
+`large = 0, bolted = 0`; the five-argument form is it with `bolted = 0`.
+
+That is checkable rather than assumed, so the conversion keeps all three entry
+points -- `ppc64_pte_create_4k`, `ppc64_pte_create`, `ppc64_pte_create_bolted`
+-- with the first two delegating. The names say which field each admits instead
+of numbering them. Only the six-argument form has callers
+(`glue/v4-powerpc64/pghash.c`, twice); the other two were already dead.
+
+`ppc64_htab_t`'s `optimal_size` and `min_size` were instance methods touching no
+member, so they become free functions; `get_pteg` takes the htab. The
+`pghash_t` glue class had a `bolted` argument defaulting to `false`, so its two
+spellings become two entry points, `pghash_insert_mapping` and
+`pghash_insert_mapping_bolted`.
+
+### The device tree, against a converted twin
+
+`arch/powerpc64/1275tree.{h,cc}` and `platform/ofppc/1275tree.{h,c}` are the
+same code -- the 64-bit copy adds `find_device_type`, `next_by_type`,
+`get_parent` and four PCI address structures. The ofppc pair was converted
+earlier in this migration, so the 64-bit one had a finished model to match
+name for name rather than a style to invent.
+
+Its `get_prop` was overloaded two ways, by name and by index. As with `create`,
+the names now say what they look up: `of1275_device_get_prop` and
+`of1275_device_get_prop_index`, plus the existing word-sized wrapper as
+`of1275_device_get_prop_word`.
+
+The one thing the model did not cover is that C wants loop variables declared
+before the loop; four `for( word_t i = ...)` and `for( char *c = ...)` headers
+needed a surrounding block. That is mechanical but it is where a careless
+conversion silently changes a scope, so each one was bracketed explicitly.
+
+### The stub interrupt controller
+
+`platform/ofg5/intctrl.h` inherited from `generic_intctrl_t`, a base with no
+members that describes an interface. As in ofppc and ppc44x the struct stands
+alone and the members become free `intctrl_*` entry points. Every one of them
+is `UNIMPLEMENTED()` upstream and the controller reports a single interrupt --
+this platform's interrupt support does not exist yet, which is worth knowing
+before anything tries to boot it.
+
+### Where it stands
+
+    §163:  29 errors
+    now:   35, and they have moved
+
+The number went up because it is measuring something different. Every C file
+that now compiles reaches further and finds the next unconverted header:
+`hwspace.h`, `string.h`, `glue/v4-powerpc64/intctrl.h`, `space.h`'s residue.
+That is the shape of this job -- each converted source exposes the next layer,
+and the count will keep rising before it falls.
+
+Remaining: 15 headers and 13 `.cc` files for OFG5; the other two platforms and
+the eleven kdb files after that. ofppc, ppc44x and x86-x64 all still build.

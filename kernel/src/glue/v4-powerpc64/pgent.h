@@ -150,8 +150,7 @@ enum wimg_e {
    consumer; as in the 32-bit port they are deliberately not prototyped here,
    a non-static declaration ahead of a static-inline definition being a
    conflict in C.  dump_misc is the one real out-of-line function. */
-BEGIN_DECLS
-void pgent_dump_misc (pgent_t *self, space_t * s, pgsize_e pgsize);
-END_DECLS
+/* dump_misc is INLINE in pgent_inline.h like the rest, so it is not
+   prototyped here either. */
 
 #endif	/* __GLUE__V4_POWERPC64__PGENT_H__ */
