@@ -7756,3 +7756,95 @@ links". It became "compiles, links, and its MMU is wired up". It is now
 **boots, brings up its address space, activates its page hash, builds its
 mapping database, and reaches the idle thread.** What remains is one assertion
 in the thread switch, and a machine to reproduce it on.
+
+
+## §147 — The assertion was right: a line the conversion did not carry over
+
+§146 left ofppc stopping on
+
+    Assertion tcb == get_sprg_tcb() failed  (thread.c:49)
+
+at the first instruction the idle thread executes. Printing both sides settles
+it in one run:
+
+    NT: frame-derived tcb d6000800, sprg tcb ffffff70, stack d6000f68
+
+The frame-derived side is right — `d6000800` is `__whole_idle_tcb`, 2048-aligned
+as `KTCB_BITS` requires, and the stack is inside it. `SPRG_CURRENT_TCB` holds
+`0xffffff70`, which is what SPRG1 contained at reset. Nothing had written it.
+
+`mtsprg 1` appears **once** in the whole kernel, inside `tcb_switch_to`. The
+initial switch never sets it.
+
+### Not a conversion defect — a rewrite
+
+`glue/v4-powerpc/tcb.h` has always carried `initial_switch_to`, and its first
+line is the one that matters:
+
+    INLINE void NORETURN initial_switch_to( tcb_t *tcb )
+    {
+	// Store the target thread's tcb in the appropriate sprg.
+	set_sprg_tcb( tcb );
+	asm volatile ( "mtctr %0 ; mr %%r1, %1 ; bctr ;" : :
+		       "r" (get_kthread_ip(tcb)), "b" (tcb->stack) );
+
+The migration did not convert this. It wrote a **new** `initial_switch_to_c` in
+`thread.c`, from scratch, and that function got the difficult half right and
+dropped the easy one: reading the resume address from `0(%r1)` is precisely
+`get_kthread_ip(tcb)`, because `tswitch_frame_t` puts `ip` first. The
+`set_sprg_tcb` line simply is not there.
+
+This is worth separating from every other defect in §144 to §146. Those were
+upstream's, and the audits in §141 were built to catch the conversion's own:
+return types, parameter lists, collapsed overloads. **None of them can see
+this one**, because there is no C++ counterpart to compare `initial_switch_to_c`
+against. It is a hand-written function whose only obligation was to match a
+sibling nobody diffed it against. The fix is to delete it: the wrapper now
+calls the arch inline, so the two cannot drift again.
+
+`asid.h` in §144 was the same shape of mistake -- a construct rewritten rather
+than converted, losing a property the original had for free. Two in the whole
+migration, both found only by running the result.
+
+### It is not an ofppc bug
+
+`thread.c` is shared. **Every PowerPC configuration has been making its first
+thread switch with a stale SPRG**, including the shipped ppc44x kernel, which
+now goes from one `mtsprg 1` to two. It survived because ppc44x has only ever
+been verified to build and link -- §140 through §142 never ran it -- and because
+the assertion that catches it is compiled out of a non-debug build, so the
+damage would have been a wrong `get_sprg_tcb()` somewhere later rather than a
+clean stop.
+
+That is the argument for booting things, made better than any of the previous
+six sections made it: three sections of static reasoning about ofppc found
+eleven upstream defects and missed a live bug in the port that was supposed to
+be working.
+
+### Where it reaches now
+
+    Switching to idle thread (CPU 0)
+    Remapping device tree from 0061e000 to d0040000 (sz=4000)
+	Registering processor 0 in KIP (1MHz, 1MHz)
+    The open-pic device: /pci@f2000000/mac-io@c/interrupt-controller@40000
+    Found an open-pic at 0x80040000, size 0x40000.
+    Open-Pic version 2, supports 1 cpu's and 64 interrupt sources
+    Open-Pic timer freq 4.160000 MHz
+    Found cpu: /cpus/PowerPC,750@0
+    Detected 1 processors
+    System has 68 hardware interrupts
+
+The interrupt controller is the OPIC driver §144 converted, talking to the
+MPIC in QEMU's KeyLargo, reporting a version, a source count and a timer
+frequency it read out of the hardware. Kernel initialisation is complete.
+
+It stops inside `init_all_threads`, after `init_interrupt_threads` and before
+or during `init_root_servers`, with no diagnostic -- so sigma0 and the root
+task do not start. Two smaller faults are visible above and untouched: the cpu
+and bus speeds are not found in the device tree, so the decrementer runs off a
+1MHz fallback.
+
+The position, once more: **boots, initialises its address space, activates its
+page hash, builds its mapping database, reaches and runs the idle thread, and
+brings up its interrupt controller.** What is left is starting the root
+servers.
