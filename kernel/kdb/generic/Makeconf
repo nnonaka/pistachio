@@ -52,5 +52,5 @@ SOURCES+=	kdb/generic/vrt.c
 endif
 
 ifeq ("$(CONFIG_ACPI)","y")
-SOURCES+=	kdb/generic/acpi.cc
+SOURCES+=	kdb/generic/acpi.c
 endif

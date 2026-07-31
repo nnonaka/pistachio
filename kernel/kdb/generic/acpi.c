@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002, 2003,  Karlsruhe University
  *                
- * File path:     kdb/generic/acpi.cc
+ * File path:     kdb/generic/acpi.c
  * Description:   Kernel deubgger ACPI acccess
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@
 #include <acpi.h>
 
 #include INC_GLUE(hwspace.h)
+#include INC_PLAT(acpi.h)
 
 
 /**
@@ -57,15 +58,47 @@ static acpi_xsdt_t * xsdt = NULL;
 
 void SECTION (SEC_KDEBUG) dump_apic (acpi_madt_t * madt);
 
+/* Was a reference parameter with a defaulted prefix; C takes the pointer and
+   every caller passes the prefix.
+
+   The phys_to_virt on the two strings is gone with it.  Callers used to hand
+   this a physical pointer; they now hand it one already through the remap
+   window, so translating again pointed at mapped-but-unrelated memory and both
+   strings printed empty -- while the integer fields beside them, read straight
+   off the same header, came out right. */
 static void SECTION (SEC_KDEBUG)
-dump_acpi_header (acpi_thead_t & h, char * prefix = "")
+dump_acpi_header (acpi_thead_t * h, const char * prefix)
 {
     printf ("%sOEM:    [\"%.6s\", tid: \"%.8s\", rev: %d]\n"
 	    "%sVendor: [id: 0x%x, rev: 0x%x]\n",
-	    prefix, phys_to_virt (&h.oem_id), phys_to_virt (&h.oem_tid),
-	    h.oem_rev,
-	    prefix, h.creator_id, h.creator_rev);
+	    prefix, h->oem_id, h->oem_tid, h->oem_rev,
+	    prefix, h->creator_id, h->creator_rev);
 }
+
+
+/* The two description tables differ only in the width of their pointers, so
+   the dump is one macro rather than two near-identical loops. */
+#define DUMP_SDT(name, sdt)						\
+    do {								\
+	word_t num_entries = ((sdt)->header.len - sizeof (acpi_thead_t)) / \
+	    sizeof ((sdt)->ptrs[0]);					\
+									\
+	printf (name " @ %p\n", (sdt));					\
+	dump_acpi_header (&(sdt)->header, "  ");			\
+	printf ("\n");							\
+									\
+	for (word_t i = 0; i < num_entries; i++)			\
+	{								\
+	    acpi_thead_t * t =						\
+		(acpi_thead_t *) acpi_remap ((addr_t) (word_t) (sdt)->ptrs[i]); \
+	    printf ("  %.4s @ %p\n", t->sig, t);			\
+	    dump_acpi_header (t, "    ");				\
+									\
+	    if (t->sig[0] == 'A' && t->sig[1] == 'P' &&			\
+		t->sig[2] == 'I' && t->sig[3] == 'C')			\
+		dump_apic ((acpi_madt_t *) t);				\
+	}								\
+    } while (0)
 
 
 /*
@@ -80,18 +113,28 @@ CMD (cmd_acpi, cg)
 {
     if (rsdp == NULL)
     {
-	rsdp = acpi_rsdp_t::locate ();
+	/* The C++ declaration defaulted the argument to NULL, so this scanned
+	   128K from virtual zero and faulted before it could find anything.
+	   Scan where the spec says the RSDP is (ACPI 2.0, 5.2.4.1), through
+	   the same remap window platform/generic/intctrl-apic.c uses -- the
+	   one caller in the tree that locates it successfully. */
+	rsdp = acpi_rsdp_locate (acpi_remap ((addr_t) ACPI20_PC99_RSDP_START));
 	if (rsdp == NULL)
 	{
 	    printf ("Could not locate ACPI info.\n");
 	    return CMD_NOQUIT;
 	}
 
-	rsdt = rsdp->rsdt ();
-	xsdt = rsdp->xsdt ();
+	/* Both accessors hand back physical pointers. */
+	{
+	    acpi_rsdt_t * r = acpi_rsdp_rsdt (rsdp);
+	    acpi_xsdt_t * x = acpi_rsdp_xsdt (rsdp);
+	    rsdt = r ? (acpi_rsdt_t *) acpi_remap ((addr_t) r) : NULL;
+	    xsdt = x ? (acpi_xsdt_t *) acpi_remap ((addr_t) x) : NULL;
+	}
     }
 
-    return acpi.interact (cg, "acpi");
+    return cmd_group_interact (&acpi, cg, "acpi");
 }
 
 
@@ -101,47 +144,12 @@ DECLARE_CMD (cmd_acpi_dump, acpi, 'd', "dump",
 CMD (cmd_acpi_dump, cg)
 {
     printf ("ACPI rev: %d, OEM: \"%.6s\"\n", rsdp->rev, rsdp->oemid);
+
     if (rsdt)
-    {
-	printf ("RSDT @ %p\n", rsdt);
-	dump_acpi_header (rsdt->header, "  ");
-	printf ("\n");
-
-	word_t num_entries = (xsdt->header.len - sizeof (acpi_thead_t)) /
-	    sizeof (xsdt->ptrs[0]);
-
-	for (word_t i = 0; i < num_entries; i++)
-	{
-	    acpi_thead_t * t = (acpi_thead_t *) ((word_t) xsdt->ptrs[i]);
-	    printf ("  %.4s @ %p\n", t->sig, t);
-	    dump_acpi_header (*t, "    ");
-
-	    if (t->sig[0] == 'A' && t->sig[1] == 'P' &&
-		t->sig[2] == 'I' && t->sig[3] == 'C')
-		dump_apic ((acpi_madt_t *) t);
-	}
-    }
+	DUMP_SDT ("RSDT", rsdt);
 
     if (xsdt)
-    {
-	printf ("XSDT @ %p\n", xsdt);
-	dump_acpi_header (xsdt->header, "  ");
-	printf ("\n");
-
-	word_t num_entries = (xsdt->header.len - sizeof (acpi_thead_t)) /
-	    sizeof (xsdt->ptrs[0]);
-
-	for (word_t i = 0; i < num_entries; i++)
-	{
-	    acpi_thead_t * t = (acpi_thead_t *) ((word_t) xsdt->ptrs[i]);
-	    printf ("  %.4s @ %p\n", t->sig, t);
-	    dump_acpi_header (*t, "    ");
-
-	    if (t->sig[0] == 'A' && t->sig[1] == 'P' &&
-		t->sig[2] == 'I' && t->sig[3] == 'C')
-		dump_apic ((acpi_madt_t *) t);
-	}
-    }
+	DUMP_SDT ("XSDT", xsdt);
 
     return CMD_NOQUIT;
 }
@@ -177,35 +185,35 @@ void dump_apic (acpi_madt_t * madt)
 	{
 	    // Interrupt Source Override
 	    acpi_madt_irq_t * irq = (acpi_madt_irq_t *) h;
-	    acpi_madt_irq_t::polarity_t p = irq->get_polarity ();
-	    acpi_madt_irq_t::trigger_mode_t t = irq->get_trigger_mode ();
+	    word_t p = acpi_madt_irq_get_polarity (irq);
+	    word_t t = acpi_madt_irq_get_trigger_mode (irq);
 	    printf ("      Interrupt Override  ");
 	    printf ("[%s, Bus IRQ: %d, Glob IRQ: %d, Pol: %s, Trigger: %s]\n",
 		    irq->src_bus == 0 ? "ISA" : "unknown bus",
 		    irq->src_irq, irq->dest,
-		    p == acpi_madt_irq_t::conform_polarity ? "conform" :
-		    p == acpi_madt_irq_t::active_high ? "active high" :
-		    p == acpi_madt_irq_t::active_low ? "active low" : "?",
-		    t == acpi_madt_irq_t::conform_trigger ? "conform" :
-		    t == acpi_madt_irq_t::edge ? "edge" :
-		    t == acpi_madt_irq_t::level ? "level" : "?");
+		    p == ACPI_MADT_CONFORM_POLARITY ? "conform" :
+		    p == ACPI_MADT_ACTIVE_HIGH ? "active high" :
+		    p == ACPI_MADT_ACTIVE_LOW ? "active low" : "?",
+		    t == ACPI_MADT_CONFORM_TRIGGER ? "conform" :
+		    t == ACPI_MADT_EDGE ? "edge" :
+		    t == ACPI_MADT_LEVEL ? "level" : "?");
 	    break;
 	}
 	case 3:
 	{
 	    // NMI Source
 	    acpi_madt_nmi_t * nmi = (acpi_madt_nmi_t *) h;
-	    acpi_madt_nmi_t::polarity_t p = nmi->get_polarity ();
-	    acpi_madt_nmi_t::trigger_mode_t t = nmi->get_trigger_mode ();
+	    word_t p = acpi_madt_nmi_get_polarity (nmi);
+	    word_t t = acpi_madt_nmi_get_trigger_mode (nmi);
 	    printf ("      NMI Source  ");
 	    printf ("[Glob IRQ: %d, Pol: %s, Trigger: %s]\n",
 		    nmi->irq,
-		    p == acpi_madt_nmi_t::conform_polarity ? "conform" :
-		    p == acpi_madt_nmi_t::active_high ? "active high" :
-		    p == acpi_madt_nmi_t::active_low ? "active low" : "?",
-		    t == acpi_madt_nmi_t::conform_trigger ? "conform" :
-		    t == acpi_madt_nmi_t::edge ? "edge" :
-		    t == acpi_madt_nmi_t::level ? "level" : "?");
+		    p == ACPI_MADT_CONFORM_POLARITY ? "conform" :
+		    p == ACPI_MADT_ACTIVE_HIGH ? "active high" :
+		    p == ACPI_MADT_ACTIVE_LOW ? "active low" : "?",
+		    t == ACPI_MADT_CONFORM_TRIGGER ? "conform" :
+		    t == ACPI_MADT_EDGE ? "edge" :
+		    t == ACPI_MADT_LEVEL ? "level" : "?");
 	    break;
 	}
 	case 4:

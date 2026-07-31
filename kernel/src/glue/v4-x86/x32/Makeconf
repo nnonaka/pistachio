@@ -47,8 +47,14 @@ CFLAGS_src/glue/$(API)-$(ARCH)/$(SUBARCH)/pagefault = -fomit-frame-pointer
 CFLAGS_src/glue/$(API)-$(ARCH)/$(SUBARCH)/exception = -fomit-frame-pointer
 
 
+# CONFIG_ACPI adds this too (src/generic/Makeconf); with both set the object
+# lands on the link line twice and every non-static function in it collides
+# with itself.  Latent upstream -- nothing linked a config with both until
+# kdb/generic/acpi was converted and CONFIG_ACPI could build at all.
 ifeq ("$(CONFIG_IOAPIC)","y")
+ifneq ("$(CONFIG_ACPI)","y")
 SOURCES += src/generic/acpi.c
+endif
 endif
 
 

@@ -8822,3 +8822,80 @@ exact symbol; §144's dropped function was silent and took a boot-time
 investigation to find. The difference is that the rename list is a place where
 the invariant is written down and checked by the compiler. There is no such
 place for "this header declares a function nobody currently calls".
+
+
+## §162 — `kdb/generic/acpi.cc`, and the config nobody could select
+
+Converting this file was straightforward; what it uncovered was not.
+
+### The conversion
+
+`generic/acpi.h` was converted on 2026-07-28 (`f3d2a88`) and its one C++ consumer
+was not, so `CONFIG_ACPI` had not compiled since. The mapping is mechanical:
+
+    acpi_rsdp_t::locate()          -> acpi_rsdp_locate()      (platform/pc99/acpi.h)
+    rsdp->rsdt() / ->xsdt()        -> acpi_rsdp_rsdt/xsdt()
+    acpi.interact (cg, "acpi")     -> cmd_group_interact (&acpi, cg, "acpi")
+    acpi_madt_irq_t::polarity_t    -> ACPI_MADT_* defines, via the get_* helpers
+    dump_acpi_header (h, prefix="") -> pointer parameter, prefix at every call
+
+The RSDT and XSDT dumps were two near-identical loops differing only in pointer
+width; they are one macro now, which is also how `generic/acpi.h` renders the
+`find`/`list` template pair.
+
+### Three defects that only appear once it runs
+
+**The RSDT loop walked the XSDT.** Inside `if (rsdt)` every reference after the
+header was to `xsdt` -- its length, its pointer array. On ACPI 1.0
+`acpi_rsdp_xsdt` returns NULL, so the branch guarded by a non-null `rsdt`
+dereferenced a null `xsdt`. Collapsing both loops into one macro removes the
+possibility rather than patching the instance.
+
+**`locate()` was declared `locate(addr_t addr = NULL)`** and kdb called it with
+no argument -- a 128K scan from virtual zero. It never found anything and on x64
+it faults. The scan now starts at `ACPI20_PC99_RSDP_START` through
+`acpi_remap`, matching `platform/generic/intctrl-apic.c`, the one caller in the
+tree that locates the RSDP successfully.
+
+**`phys_to_virt` on the header strings.** Once the pointers come through the
+remap window, translating again lands on mapped-but-unrelated memory. The tell
+was precise: both `%.6s` strings printed empty while the integer fields beside
+them, read off the same header, came out right.
+
+Driven under QEMU it now produces the machine's real tables:
+
+    /arch/acpi> dump
+    ACPI rev: 0, OEM: "BOCHS "
+    RSDT @ fffffffecffe1c52
+      OEM:    ["BOCHS ", tid: "BXPC    ", rev: 1]
+      APIC @ fffffffecffe1b7a
+        Local APIC @ 00000000fee00000
+          Local APIC  [Id: 0x0, CPU Id: 0x0, enabled]
+          I/O APIC  [Id: 0x0, IRQ base: 0, Addr: 00000000fec00000]
+          Interrupt Override  [ISA, Bus IRQ: 0, Glob IRQ: 2, ...]
+
+### The object was on the link line twice
+
+With the compile fixed, the link failed: every non-static function in
+`src/generic/acpi.o` collided with itself. `CONFIG_ACPI` adds that source in
+`src/generic/Makeconf` and `CONFIG_IOAPIC` adds it again in the x64 and x32 glue
+Makeconfs. Master has the identical pair, so this is upstream -- latent, because
+nothing had ever linked a configuration with both set. The IOAPIC adds are now
+skipped when ACPI already contributed it, which keeps the link order the `sort`
+that would also dedupe it would disturb.
+
+### And the thing worth knowing
+
+**`CONFIG_ACPI` is not a configuration symbol.** It appears nowhere in
+`kernel/config/`, no shipped config tar sets it, and only three Makeconf guards
+mention it. The `build/scratch-acpi` directory has it because it was written into
+`.config` by hand during this work.
+
+So §160's description of it as "a real, selectable option" was wrong. Nothing
+distinguishes it from the EFI and simics files except that a hand-edited
+`.config` reaches it, which is exactly how it was reached here. What that means
+in practice: this file could rot for years without any sweep, boot test or
+shipped configuration noticing -- and it did.
+
+    tools/configsweep 'x86-x*'   31 OK, 0 FAIL
+    kernel .cc remaining          40 -> 39
