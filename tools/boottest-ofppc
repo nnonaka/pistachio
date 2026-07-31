@@ -30,10 +30,9 @@
 #     defined, lib/io/powerpc.cc drives a UART it finds through a flattened
 #     device tree, which a PowerMac does not have.  Undefined, it uses
 #     L4_KDB_PrintChar, and user output goes out through the kernel's console.
-#   * l4test must be built -DL4TEST_AUTORUN, because nothing here can type at
-#     it: OpenBIOS's client-interface read() returns no data on this console,
-#     so the menu cannot be driven.  Its own Forth prompt reads fine -- that
-#     uses an internal word rather than the CI method.
+#   * l4test must be built -DL4TEST_AUTORUN.  The console can be typed at --
+#     see the 'g' feeding below -- but driving a menu by timing is fragile,
+#     and the x86 harness does not do it either.
 #
 # See doc/notes/cpp-to-c-migration.md §150.
 
@@ -91,7 +90,13 @@ echo "boottest-ofppc: booting (timeout ${TIMEOUT}s) ..."
 # auto-boot? is off and the path typed in, because the boot-device property
 # needs the same backslash and it is clearer here.  Open Firmware separates
 # device from path with a backslash, not a slash: hd:\ofppc, not hd:,/ofppc.
-( sleep 12; printf 'boot hd:\\ofppc\n'; sleep "$TIMEOUT" ) | \
+# The kernel enters kdb on an unhandled user exception, which l4test provokes
+# deliberately (its "Unhandled exception test" checks the kernel halts a thread
+# with no exception handler).  kdb then blocks reading a command, so a
+# write-only console stops there.  Feed 'g' the way tools/boottest does on x86;
+# l4test ignores the keystrokes it does not want.
+( sleep 12; printf 'boot hd:\\ofppc\n'
+  while :; do printf 'g\n'; sleep 1; done ) | \
     timeout -k 2 $((12 + TIMEOUT + 5)) \
     qemu-system-ppc -M mac99 -cpu g3 -m 128 -nographic \
 	-drive file="$DISK",format=raw,if=ide,index=0,media=disk \

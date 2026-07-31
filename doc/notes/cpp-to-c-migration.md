@@ -8041,11 +8041,16 @@ Nothing typed at it arrives. Instrumenting the read shows why:
     GETC: read -> 0
     GETC: read -> 0
 
-The ihandle is right -- it matches `/chosen`'s `stdin` -- and OpenBIOS's own
-Forth prompt reads typed input perfectly well, which is how every diagnostic in
-§146 onwards was issued. But its **client-interface `read` returns no data**;
-the prompt uses an internal word, not the CI method. Output through the same
-mechanism works, so this is not the conversion and not the kernel.
+The ihandle is right -- it matches `/chosen`'s `stdin`.
+
+**Corrected by §152.** The conclusion drawn from this -- that OpenBIOS's
+client-interface `read` returns no data -- is wrong, and the measurement did
+not support it. The trace prints only the first five reads, and all five happen
+at the first `getc` call, before anything has been typed. Reads return 0
+because there is nothing to read yet, which is what a poll is supposed to do.
+Instrumented to print reads that return *non-zero*, the same console delivers
+keystrokes: `[GETC ret=1 c=67]`. Input works. What §152 does with it is drive
+the kernel debugger.
 
 `l4test` already has the answer: `main.cc` runs `all_tests()` without the menu
 when built `-DL4TEST_AUTORUN`. The x86 harness cannot type either.
