@@ -8097,3 +8097,80 @@ Eight sections ago this configuration did not compile, and §142 recorded the
 segment MMU and OFPPC as "unconverted by design". Fifteen upstream defects and
 three of the migration's own separate that from a system running its own test
 suite.
+
+
+## §151 — Two exception tests, and a page size that changes what a test may assume
+
+§150 left `l4test` reporting
+
+      Generic exception test:                             FAILED
+      Legacy system call exception test:                  FAILED
+      Generic exception unwind:                           OK
+      Legacy system call unwind:                          OK
+
+The asymmetry is the clue, and it is not about exceptions at all. The unwind
+variants run *second*.
+
+`exception_tests` creates a handler thread and a subject thread; the unwind
+variants create only the subject and make the controller its own handler. In
+the failing runs the subject's first `dprintf` never appeared -- so it never
+executed a line -- and yet the controller received a message *from* it. Asking
+what that message was settles it:
+
+    W1: from 1a0001 label ffe1 u=2 mr1=610a50 mr2=610a50
+
+Label `0xffe1` is `0xffe0 | x`, the pagefault protocol, with two untyped words
+-- not the six-word exception message the test waits for. Both words are
+`0x610a50`: fault address equals faulting IP, an **execute fault on the
+subject's own entry point**, in the root task's text.
+
+`create_thread` makes the creating thread the new thread's pager:
+
+    L4_ThreadControl (tid, me, me, me, (void *) utcb_location);
+
+and the controller does not serve faults -- it goes on to `L4_Wait` for
+results. So a created thread that faults delivers into a wait expecting
+something else, and the test reports failure. The unwind variants pass because
+the two failures ahead of them have already faulted that page in.
+
+### Why it passes elsewhere
+
+The test assumes a created thread never faults. That holds where sigma0 can
+hand out large pages: one fault brings in a superpage and the image is
+resident. **The PowerPC page hash maps 4K and nothing else** --
+`pgent-pghash.h` sets `HW_VALID_PGSIZES` to `(1 << 12)`, and §145 showed the
+KIP advertising the same `size_mask` of 4 -- so every new code page faults on
+first execution, and the assumption fails.
+
+This is worth separating from the other forty-odd defects in these sections. It
+is not upstream's mistake and not the conversion's: it is a test written
+against one page-size regime meeting another. The hardware is behaving
+correctly, the kernel is behaving correctly, and the test is wrong only on a
+machine nobody had run it on.
+
+### The fix
+
+`start_thread` already covers the stack -- `get_startup_values` asks
+`get_pages` to touch it. The entry point gets the same treatment: one word read
+through the creating thread's own pager, before the new thread runs. Reading
+suffices, since sigma0 maps rwx.
+
+      Generic exception test:                             OK
+      Legacy system call exception test:                  OK
+      Generic exception unwind:                           OK
+      Legacy system call unwind:                          OK
+
+`threads.cc` is shared with x86, where the read is a no-op against an
+already-mapped page; both x86 userlands still build it.
+
+### Where the platform stands
+
+    kernel      boots; page hash active; MPIC up; idle thread running
+    sigma0      created and running
+    root task   running its own test suite
+    l4test      KIP suite passes; all four PowerPC exception tests pass
+
+What is next: after the exception tests the suite reports "Kernel doesn't
+support hypervisor feature" and then halts a thread on an undelivered user
+exception at user IP 0x61009c -- a later test that installs no handler. That is
+one more never-run path, and it is where §152 would start.
