@@ -8251,3 +8251,81 @@ had never executed on nine sections ago.
 
 It stops in the string-copy IPC test, where a kernel path answers
 `unimplemented`, at user IP `0x604788`. That is the next thing.
+
+
+## §153 — The copy area: a number the tree already had, kept in two places
+
+§152 left the suite stopping in the string-copy IPC test, on a kernel path
+answering `unimplemented`. That path is one this migration wrote. §144 met
+
+    ppc_resource_bits_t *bits = (ppc_resource_bits_t *)&src->resource_bits;
+    ...
+    ppc_set_sr( COPY_AREA_SEGMENT,
+		partner_seg.raw | bits->get_copy_area_dst_seg() );
+
+in `tcb_resources_enable_copy_area`, found that neither `ppc_resource_bits_t`
+nor `get_copy_area_dst_seg` exists anywhere -- `master` included -- and left
+the function `UNIMPLEMENTED()` on the grounds that recovering the intent would
+be invention. That was the right call with the information available then, and
+wrong on the facts: **the value is determined by the two functions on either
+side of it.**
+
+`tcb_resources_setup_copy_area`, ten lines above, stores
+
+    self->copy_area_offset = (word_t)*daddr & ~(COPY_AREA_SIZE - 1);
+
+and `COPY_AREA_SIZE` is `0x10000000` on the segment MMU -- one PowerPC segment
+exactly. So `copy_area_offset` is the base of the segment the destination lives
+in, in the partner's space. `space_get_vsid` builds a VSID as
+
+    return seg.raw | ((word_t)addr >> 28);
+
+So the segment register wants the partner's segment id or'd with that segment's
+index, which is `copy_area_offset >> 28`. That is what the missing accessor
+returned. `ppc_resource_bits_t` was a second place to keep a number
+`copy_area_offset` already held, and losing it lost nothing.
+
+`tcb_resources_copy_area_real_address` -- the other side of the pair, which
+maps a copy-area address back to the partner's -- confirms the reading:
+
+    return addr_offset(addr, self->copy_area_offset - COPY_AREA_START);
+
+The function moves out of line into `resources.c`. It needs `tcb_get_partner`
+and `tcb_get_tcb`, and the header is reached from `api/v4/tcb.h` before either
+is declared -- which is the mechanical reason §144 found `UNIMPLEMENTED()`
+easier than a translation.
+
+### What it buys
+
+Cross-address-space string copy, pagefaults and all:
+
+    Intra address space string copy IPC test (no pagefaults)
+      Simple / substring / compound / multiple complex transfers   OK
+      Scatter / Gather / Complex Scatter-Gather                    OK
+      Too long, no, missing, too short receive buffer              OK
+      Complex cut message                                          OK
+
+    Inter addres space string copy IPC test (with pagefaults)
+      Simple string transfer (no page faults)                      OK
+      Single sender pagefault                                      OK
+      Single receiver pagefault                                    OK
+      Multiple sender and receiver pagefaults                      OK
+
+The pagefault lines are the ones worth reading: a fault taken *inside the copy
+area* is resolved through the partner's address space, which is the whole point
+of the segment register this section restored.
+
+The suite now reaches **fifty passes** and seven failures, all seven in
+territory it could not previously get to: transfer timeouts, transfer aborts,
+`ThreadControl+ExReg`, and priority change. The author's own warning about
+tunnelled pagefaults, in the same function, still stands and is untouched.
+
+### On the shape of this one
+
+This is the third defect of the migration's own making, after `asid.h` (§144)
+and `initial_switch_to_c` (§147) -- and like both, it is not a mistranslation.
+It is a place where the conversion, meeting something it could not compile,
+chose to stop rather than to look one function further. The three of them
+together say that the risk in a mechanical migration is not the mechanical
+part; it is the handful of places where the machinery stops and a judgement is
+made with less context than the codebase actually offers.
