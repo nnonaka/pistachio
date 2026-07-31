@@ -7633,3 +7633,126 @@ the difference between them was seven characters.
 The layout change of §144 item 1 remains verified only by the two assertions it
 was made to satisfy, and that is now the last untested thing on this
 architecture.
+
+
+## §146 — OFPPC boots: what running it found that reading it had not
+
+§144 converted the platform and closed on "verified to build and link, not to
+boot: there is no ofppc hardware or emulator here." That was wrong, and cheaply
+so. `qemu-system-ppc -M mac99 -cpu g3` is a Uninorth/KeyLargo PowerMac with an
+OpenBIOS Open Firmware and a `PowerPC,750` — an IEEE 1275 machine with an MPIC,
+which is the machine this platform is written for. The OPIC driver's own
+comment names a KeyLargo MPIC2 as its test bed.
+
+It boots.
+
+    [==== Pistachio PowerPC Open Firmware Boot Loader ====]
+    [ L4 PowerPC ]
+    Activated the Open Firmware console.
+    L4Ka::Pistachio - built on Jul 31 2026 ...
+    virtual memory layout:
+        user area            0 - c0000000
+        copy area     f0000000 - ffffffff
+        kernel area   c0000000 - d0000000
+    Initializing kernel memory (c0042000-c00c2000) [512K]
+    Initializing kernel space
+    Initializing TCBs
+    Initializing boot CPU
+    Initializing kernel debugger
+    Activated page hash at virtual address 0xd4000000,
+        physical address 0x100000, size 0x80000.
+    Initializing mapping database
+        Initializing threading (CPU 0)
+        Switching to idle thread (CPU 0)
+    Assertion tcb == get_sprg_tcb() failed  (thread.c:49)
+
+**The page hash line is the one worth reading twice.** It activates at
+`0xd4000000`, which is where §144 left it after moving `KERNEL_CPU_OFFSET` up to
+`0xd6000000` to clear the overlap that had blocked the build since 2010 — a
+change §144 could only justify by the two assertions it was made to satisfy.
+And it activates at all only because §145 corrected the misspelt guards. Two
+changes argued from static evidence, both doing what they were argued to do.
+
+### The verification method that was not one
+
+§144 said `CONFIG_KDB_CONS_OF1275`'s blocks were checked "by compiling each file
+with the option defined on the command line". They were not, and could not have
+been. `config.h` is force-included with `-imacros` and contains
+
+    #undef  CONFIG_KDB_CONS_OF1275
+
+which overrides a `-D` on the command line. Every such check compiled the
+blocks *disabled* and reported zero errors for it. Two files — `io.c` and
+`of1275.c` — still held C++ inside them, and a configuration that actually
+selects the option found it immediately.
+
+This does not touch §145's guard checks: `CONFIG_PPC_MMU_SEGMENT` is a
+misspelling no `.cml` knows, so `config.h` never mentions it and `-D` was real
+there. The rule to carry forward is narrower than "compile with `-D`": that is
+only a valid check for identifiers the configuration system has never heard of.
+For anything else, configure it.
+
+### Two bugs that cost the first boot
+
+**`.lcomm` does not advance the location counter.** `startup.S` wrote
+
+    _init_stack_bottom:
+    .lcomm  init_stack, INIT_STACK_SIZE, 16
+    _init_stack_top:
+
+`.lcomm` declares a local common symbol; it emits nothing where it appears. So
+both labels landed on the same address and the init stack had zero size.
+`_start` never noticed, because it computes its stack pointer from `init_stack`
+plus the size directly. `ofppc_stack_top()` returns the collapsed symbol, and
+the Open Firmware console runs OF on a stack derived from it —
+`execute_of1275` takes `stack_top - 16` and zeroes four words there before
+every call. With top == bottom == `_start_bss + 16`, that address is `kmem`.
+
+So **every `printf` through the OF console zeroed the kernel's memory
+allocator.** The symptom was that the free list read back empty at the first
+`kmem_alloc`, in `space_init_kernel_space`, having been written correctly three
+times. Raising the bootmem reservation from 512K to the 3584K the ppc44x
+variant uses changed nothing, which is what ruled under-provisioning out; a
+probe that wrote `0xdeadbeef` to the address, read it back intact, printed one
+line and read it back zero is what ruled it in.
+
+**A computed value thrown away.** Fixing the labels made things worse: OF's
+stack moved from `kmem` onto the kernel's own. `execute_of1275` computes `sp`,
+null when already running on the init stack — `kdb_switch_space` documents null
+as "reuse the current stack" — and then passes `of1275_stack_top-16` anyway,
+ignoring what it computed. It now passes `sp`.
+
+### Two on the user side
+
+`include/l4/powerpc/arch.h` declares sixteen flexible array members inside
+unions, which `g++` rejects, so no C++ user program has ever compiled for this
+architecture — `l4test` and `pingpong` both fail on it. The file already spells
+one of them `raw[0]` at line 383; the other sixteen now match.
+
+`piggybacker/ofppc/main.cc` called `update_kip(of1275_entry)` against a nullary
+`update_kip`. Dropping the argument is not the fix: `io.c` reads
+`get_kip()->boot_info` as the OF client-interface entry, and `update_kip`
+copies a `boot_info` field initialised to zero whose setter nothing calls. The
+argument belonged one line earlier, on `set_boot_info`.
+
+### One thing that was not the problem
+
+Open Firmware's `/memory` `available` property lists `0x4000-0x4000000` as
+free, and the loader never claims any of it — `prom_claim`'s only caller is
+`prom_map`, for devices. That looked like the answer, since "available" means
+free *to claim*, not that OF will leave it alone. Claiming the three module
+ranges succeeds, and changes nothing: the clobber was ours. The experiment is
+recorded and not kept, because adding unverified behaviour to fix a problem
+that turned out to be elsewhere is how the next section gets written.
+
+### Where it stops
+
+`notify_trampoline`, on `ASSERT(tcb == get_sprg_tcb())` — the TCB derived from
+the stack pointer does not match the one in SPRG at the first thread switch.
+That is a separate never-run defect and is not fixed here.
+
+The honest position is now three steps better than §144's. It was "compiles and
+links". It became "compiles, links, and its MMU is wired up". It is now
+**boots, brings up its address space, activates its page hash, builds its
+mapping database, and reaches the idle thread.** What remains is one assertion
+in the thread switch, and a machine to reproduce it on.
