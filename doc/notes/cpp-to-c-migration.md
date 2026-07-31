@@ -8179,3 +8179,75 @@ What is next: after the exception tests the suite reports "Kernel doesn't
 support hypervisor feature" and then halts a thread on an undelivered user
 exception at user IP 0x61009c -- a later test that installs no handler. That is
 one more never-run path, and it is where §152 would start.
+
+
+## §152 — The undelivered exception was the test working, and a claim of mine that was not
+
+§151 ended on the suite halting at
+
+    Unable to deliver user exception: no exception handler.
+    >> KD# unhandled user exception, halting thread
+
+That is not a fault. `l4test`'s next test is called **`unhandled_exception_test`**,
+and it exists to provoke exactly this: it creates a thread with no exception
+handler, lets it trap, and then checks -- through `L4_ExchangeRegisters` -- that
+the kernel halted the thread at the faulting instruction, restarts it past that
+instruction, and waits for it to finish. The kernel printing that line and
+halting the thread *is the behaviour under test*.
+
+What stopped the run was the line above it. `except_handlers.c` calls
+
+    enter_kdebug( "unhandled user exception, halting thread" );
+    halt_user_thread();
+
+and `enter_kdebug` blocks reading a command. `master` has the identical pair, so
+this is not the conversion's; and `tools/boottest` has dealt with it on x86
+since it was written, by feeding `g` at the console and saying so in its own
+comments. `boottest-ofppc` now does the same.
+
+    Unhandled exception test:                             OK
+    Unhandled exception resume:                           OK
+
+### A correction
+
+Doing that required retracting something §150 asserted: that OpenBIOS's
+client-interface `read` returns no data on this console, and therefore that the
+menu could not be driven at all.
+
+The measurement did not support the claim. The instrumentation printed the
+first five reads, and all five happen at the first `getc` call -- before
+anything has been typed. They return 0 because there is nothing to read yet,
+which is what a poll does. Printing reads that return *non-zero* instead shows
+keystrokes arriving intact:
+
+    [GETC ret=1 c=67]
+
+`0x67` is `g`, and kdb echoes `go` and continues. **Input works.** §150 is
+corrected in place.
+
+The mistake is worth naming precisely, because it is the same shape as the one
+§146 retracted about `-D` and `-imacros`: a check that could only have produced
+the answer it produced, read as though it had tested something. Five samples
+taken before the stimulus cannot say anything about the response.
+
+### Where the platform stands
+
+Seventeen named tests pass and none fails:
+
+    Generic exception test / unwind                       OK
+    Legacy system call exception test / unwind            OK
+    Unhandled exception test / resume                     OK
+    Page touch                                            OK
+    From parameter (global) / (local)                     OK
+    Send / ReplyWait Message transfer                     OK
+    Send / Receive timeout                                OK
+    Local destination Id                                  OK
+    Send / Receive / Pagefault cancelled                  OK
+
+-- the whole PowerPC exception suite, the memory touch test, and ten IPC tests
+including timeouts and cancellation. The kernel is delivering exception IPC,
+paging, switching address spaces, and running IPC with timeouts on hardware it
+had never executed on nine sections ago.
+
+It stops in the string-copy IPC test, where a kernel path answers
+`unimplemented`, at user IP `0x604788`. That is the next thing.
