@@ -142,6 +142,21 @@ start_thread (L4_ThreadId_t tid, void (*func)(void))
 
     get_startup_values (func, &ip, &sp);
 
+    /* Fault the entry page in before the new thread runs.
+     *
+     * create_thread makes this thread the new one's pager, and this thread
+     * does not serve faults -- it goes on to wait for results -- so a created
+     * thread that faults deadlocks the test, or worse delivers the fault to a
+     * wait that was expecting something else.  That never bites where sigma0
+     * can hand out large pages, because the whole image is resident after the
+     * first fault; on an architecture whose hardware only maps 4K, as the
+     * PowerPC page hash does, each new code page faults on first execution.
+     * The stack is already covered -- get_startup_values asks get_pages to
+     * touch it -- and this covers the entry point.  Reading is enough: sigma0
+     * maps rwx.
+     */
+    { volatile L4_Word_t *entry = (volatile L4_Word_t *) ip; (void) *entry; }
+
     L4_Clear (&msg);
     L4_Append (&msg, ip);
     L4_Append (&msg, sp);
