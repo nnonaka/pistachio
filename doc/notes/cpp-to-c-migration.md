@@ -8439,3 +8439,48 @@ The tests that this unblocked stand: `Zero xfer timeouts`, `Sender xfer
 timeout` and `Receiver xfer timeout` pass, and the suite has no failures where
 it reaches. It reaches less far in wall-clock terms than before §154, because
 transfers now genuinely block for the thirty-second periods the tests ask for.
+
+
+## §156 — The abort hang: the pager's flags are not shared with the sender
+
+§155 asked whether `ipc_pf_abort_address` is really visible to the pager, given
+that the sender runs in its own address space. Measured, the answer is no --
+and it is the other flag of the pair that wedges the run.
+
+`l4test`'s pager loop and the threads it pages share two globals,
+`ipc_pf_block_address` and `ipc_pf_abort_address`, and the sender writes them
+from a space created by `setup_ipc_threads (..., snd_same_space = false)`.
+Printing both sides of one write:
+
+    [PGR blocking 32d5000 (blk=32d5000)]     pager withholds the fault
+    [T2 cleared blk, readback=0]             sender writes 0, reads back 0
+    [PGR blocking 32d5000 (blk=32d5000)]     pager still sees the old value
+
+The sender's store lands somewhere the pager does not read. **They are not the
+same page.**
+
+That is the hang. After `Sender xfer timeout`, the sender clears
+`ipc_pf_block_address` so the pager will serve faults again; the pager never
+sees the clear, so it keeps withholding faults at that address. The next test
+begins with `setup_t2_mappings`, whose first act is to write over both pages of
+the send buffer -- the second of which is exactly the address the pager is
+still refusing. The sender faults, nobody serves it, and the run stops there,
+before it reaches the abort at all.
+
+Two corrections to §155, both mine. It said the pager never issues the abort --
+true, but not because the sender fails to reach that code: the sender does
+reach it, and stops a few statements earlier, inside `setup_t2_mappings`.
+§155's evidence for the stronger claim was a run whose instrumentation was
+printing forty lines through the Open Firmware console, which is slow enough
+that the run never got that far. Instrumentation that changes what it measures
+is worth remembering here: the same console made the timing of §150's input
+test misleading too.
+
+What is *not* yet established is why the pages differ. The pager serves a fault
+by touching the address in its own space and replying with
+`L4_MapItem (fp, faddr)`, which should hand the child the same physical page;
+`snd_same_space = false` is exactly the case where that map item is appended.
+Either the map item is not delivered, or it is delivered and does not share.
+That is the question to answer next, and it is a kernel question rather than a
+test one -- `L4_Flush` not working (§154) hid it, because before that fix the
+sender never faulted here at all.
