@@ -73,9 +73,8 @@ class mapnode_t;
 
 #endif
 
-class pgent_t
+struct pgent_t
 {
-public:
     union {
 	word_t raw;
 	struct {
@@ -100,104 +99,59 @@ public:
 	    word_t pp		: 2;
 	} map;
     };
-
-    enum pgsize_e {
-#if CONFIG_PLAT_OFPOWER4 || CONFIG_CPU_POWERPC64_PPC970
-	size_4k = 0,	// 12
-	size_256k = 1,	// 18
-	size_16m = 2,	// 24
-	size_8g = 3,	// 33
-	size_4t = 4,	// 42
-	size_1p = 5,	// 50
-	size_max = size_1p,
-	size_64p = 6,	// 56
-	size_16e = 7	// 64
-#elif CONFIG_PLAT_OFPOWER3
-	size_4k = 0,	// 12
-	size_1m = 1,	// 20
-	size_256m = 2,	// 28
-	size_64g = 3,	// 36
-	size_16t = 4,	// 44
-	size_2p = 5,	// 51
-	size_256p = 6,	// 58
-	size_max = size_256p,
-	size_16e = 7,	// 64
-#endif
-    };
-
-    enum permission_e {
-	kernel_only = 0,	// Kernel RW, User None
-	user_read_only = 1,	// Kernel RW, User Read Only
-	read_write = 2,		// Both RW
-	read_only = 3		// Both RO
-    };
-
-    enum wimg_e {
-	guarded = 1,
-	coherent = 2,
-	cache_inhibit = 4,
-	write_through = 8,
-	l4default = coherent
-    };
-
-private:
-
-    // Page hash synchronization
-
-    inline void update_from_pghash( space_t * s, addr_t vaddr, bool large );
-
-    // Linknode access 
-
-    inline word_t get_linknode( space_t * s, pgsize_e pgsize );
-    inline void set_linknode( space_t * s, pgsize_e pgsize, word_t val );
-
-public:
-
-    // Predicates
-
-    inline bool is_valid( space_t * s, pgsize_e pgsize );
-    inline bool is_writable( space_t * s, pgsize_e pgsize );
-    inline bool is_readable( space_t * s, pgsize_e pgsize );
-    inline bool is_executable( space_t * s, pgsize_e pgsize );
-    inline bool is_subtree( space_t * s, pgsize_e pgsize );
-    inline bool is_kernel( space_t * s, pgsize_e pgsize );
-    /* inline bool is_kernel_writeable( space_t * s, pgsize_e pgsize ); */
-
-    // Retrieval
-
-    inline addr_t address( space_t * s, pgsize_e pgsize );
-    inline pgent_t * subtree( space_t * s, pgsize_e pgsize );
-    inline mapnode_t * mapnode( space_t * s, pgsize_e pgsize, addr_t vaddr );
-    inline addr_t vaddr( space_t * s, pgsize_e pgsize, mapnode_t * map );
-    inline word_t reference_bits( space_t *s, pgsize_e pgsize, addr_t vaddr );
-    inline word_t get_pte( space_t *s );
-    inline word_t attributes( space_t * s, pgsize_e pgsize );
-
-    // Modification
-
-    inline void flush( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    inline void clear( space_t * s, pgsize_e pgsize, bool kernel, addr_t vaddr);
-    inline void make_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    inline void remove_subtree( space_t * s, pgsize_e pgsize, bool kernel );
-    inline void set_entry( space_t * s, pgsize_e pgsize, addr_t paddr,
-			   word_t attrib, bool kernel = false );
-    inline void update_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    inline void revoke_rights( space_t *s, pgsize_e pgsize, word_t rwx );
-    inline void reset_reference_bits( space_t *s, pgsize_e pgsize );
-    inline void update_reference_bits( space_t *s, pgsize_e pgsz, word_t rwx );
-    inline void set_accessed( space_t *s, pgsize_e pgsize, word_t flag );
-    inline void set_dirty( space_t *s, pgsize_e pgsize, word_t flag );
-    inline void set_linknode( space_t * s, pgsize_e pgsize,
-	    mapnode_t * map, addr_t vaddr );
-    inline void set_attributes( space_t *s, pgsize_e pgsize, word_t attrib );
-
-    // Movement
-
-    inline pgent_t * next( space_t * s, pgsize_e pgsize, word_t num );
-
-    // Debug
-
-    void dump_misc (space_t * s, pgsize_e pgsize);
 };
+typedef struct pgent_t pgent_t;
+
+/* The neutral spelling kdb/generic/linear_ptab_dump.c asks every port for. */
+#define PGENT_SIZE_MAX	size_max
+
+enum pgsize_e {
+#if CONFIG_PLAT_OFPOWER4 || CONFIG_CPU_POWERPC64_PPC970
+    size_4k = 0,	// 12
+    size_256k = 1,	// 18
+    size_16m = 2,	// 24
+    size_8g = 3,	// 33
+    size_4t = 4,	// 42
+    size_1p = 5,	// 50
+    size_max = size_1p,
+    size_64p = 6,	// 56
+    size_16e = 7	// 64
+#elif CONFIG_PLAT_OFPOWER3
+    size_4k = 0,	// 12
+    size_1m = 1,	// 20
+    size_256m = 2,	// 28
+    size_64g = 3,	// 36
+    size_16t = 4,	// 44
+    size_2p = 5,	// 51
+    size_256p = 6,	// 58
+    size_max = size_256p,
+    size_16e = 7,	// 64
+#endif
+};
+typedef enum pgsize_e pgsize_e;
+
+enum permission_e {
+    kernel_only = 0,	// Kernel RW, User None
+    user_read_only = 1,	// Kernel RW, User Read Only
+    read_write = 2,	// Both RW
+    read_only = 3	// Both RO
+};
+
+enum wimg_e {
+    guarded = 1,
+    coherent = 2,
+    cache_inhibit = 4,
+    write_through = 8,
+    l4default = coherent
+};
+
+/* The operations on pgent_t are INLINE definitions in
+   glue/v4-powerpc64/pgent_inline.h, reached through this header by every
+   consumer; as in the 32-bit port they are deliberately not prototyped here,
+   a non-static declaration ahead of a static-inline definition being a
+   conflict in C.  dump_misc is the one real out-of-line function. */
+BEGIN_DECLS
+void pgent_dump_misc (pgent_t *self, space_t * s, pgsize_e pgsize);
+END_DECLS
 
 #endif	/* __GLUE__V4_POWERPC64__PGENT_H__ */

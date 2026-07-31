@@ -118,7 +118,7 @@
     word_t SYSCALL_ATTR ("rtas_call")				\
 	sys_rtas_call (token, nargs, nret, ptr)
     
-extern "C" SYS_RTAS_CALL( word_t token, word_t nargs, word_t nret, word_t ptr );
+SYS_RTAS_CALL( word_t token, word_t nargs, word_t nret, word_t ptr );
 
 
 /* The instruction executed in user mode which requests the kernel interface

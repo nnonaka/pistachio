@@ -180,11 +180,10 @@
 
 #if !defined(ASSEMBLY)
 
-extern "C" char powerpc64_do_notify[];
+extern char powerpc64_do_notify[];
 
 /* This must be a multiple of 16 bytes */
-class powerpc64_switch_stack_t {
-public:
+struct powerpc64_switch_stack_t {
     word_t	back_chain;
     word_t	cr_save;
     word_t	lr_save;    /* Return address		*/
@@ -194,6 +193,7 @@ public:
     word_t	temp3;	    /* Parameter save area	*/
     word_t	temp4;	    /* Local variable		*/
 };
+typedef struct powerpc64_switch_stack_t powerpc64_switch_stack_t;
 
 /* PowerPC64 Stack format
           +-> Back chain
@@ -210,9 +210,8 @@ SP  --->  +-- Back chain             (SP + 0)
 */
 
 /* must match #defines above */
-class powerpc64_irq_context_t
+struct powerpc64_irq_context_t
 {
-public:
     char	room[OF_BASE];
     word_t	dsisr;	/* 0  */
     word_t	dar;	/* 8  */ 
@@ -255,6 +254,7 @@ public:
     word_t	srr0;	/* 304 */
     word_t	srr1;	/* 312 */
 };
+typedef struct powerpc64_irq_context_t powerpc64_irq_context_t;
 
 
 #endif /* !defined(ASSEMBLY) */

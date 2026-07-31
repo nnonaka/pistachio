@@ -45,12 +45,12 @@
 
 #if defined(CONFIG_DEBUG)
 
-INLINE void spin_forever(int pos = 0)
+INLINE void spin_forever(int pos)
 {
     while(1);
 }
 
-INLINE void spin(int pos = 0, int cpu = 0)
+INLINE void spin(int pos, int cpu)
 {
 }
 

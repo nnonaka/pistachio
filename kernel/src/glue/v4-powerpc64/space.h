@@ -61,147 +61,31 @@ extern struct transTable_t {
 	word_t size;
 } transTable[TRANSLATION_TABLE_ENTRIES];
 
-class utcb_t;
-class tcb_t;
+struct utcb_t;
+typedef struct utcb_t utcb_t;
+struct tcb_t;
+typedef struct tcb_t tcb_t;
 
-class space_t
+/* space_t::access_e */
+#define SPACE_ACCESS_READ	0
+#define SPACE_ACCESS_WRITE	1
+#define SPACE_ACCESS_READWRITE	(-1)
+#define SPACE_ACCESS_EXECUTE	2
+
+struct space_t
 {
-public:
-    enum access_e {
-	read		= 0,
-	write		= 1,
-	readwrite	= -1,
-	execute		= 2
-    };
-
-    void init(fpage_t utcb_area, fpage_t kip_area);		// glue
-    void free();
-#if defined(HAVE_ARCH_FREE_SPACE)
-    void arch_free();
-#endif
-    bool sync_kernel_space (addr_t addr) { return false; }	// glue
-    void handle_pagefault(addr_t addr, addr_t ip, access_e access, bool kernel); // api
-    bool is_initialized();
-
-    /* sigma0 handling */
-    void map_sigma0(addr_t addr);				// glue
-    void map_fpage(fpage_t snd_fp, word_t base, space_t * t_space,
-		    fpage_t rcv_fp, bool grant);
-    fpage_t unmap_fpage(fpage_t fpage, bool flush, bool unmap_all );
-    fpage_t mapctrl (fpage_t fpage, mdb_t::ctrl_t ctrl,
-		     word_t attribute, bool unmap_all);
-    
-    /* tcb management */
-    void allocate_tcb(addr_t addr);				// glue
-    void map_dummy_tcb(addr_t addr);				// glue
-    utcb_t * allocate_utcb(tcb_t * tcb);
-
-    /* address ranges */
-    static bool is_user_area(addr_t addr);
-    static bool is_user_area(fpage_t fpage);
-    static bool is_kernel_area(addr_t addr);
-    static bool is_tcb_area(addr_t addr);
-    static  bool is_copy_area (addr_t addr);
-
-    bool is_mappable(addr_t addr);
-    bool is_mappable(fpage_t fpage);
-    static const bool is_arch_mappable(addr_t addr, size_t size) { return true; }
-    static const addr_t sign_extend(addr_t addr) { return addr; }
-
-    static bool is_cpu_area(addr_t addr);
-
-    /* Copy area related methods */
-    word_t get_copy_limit (addr_t addr, word_t limit);
-
-    /* kip and utcb handling */
-    fpage_t get_kip_page_area();
-    fpage_t get_utcb_page_area();
-
-    /* reference counting */
-    void add_tcb(tcb_t * tcb);
-    bool remove_tcb(tcb_t * tcb);
-
-    /* space control */
-    word_t space_t::space_control (word_t ctrl, fpage_t kip_area, fpage_t utcb_area, threadid_t redirector_tid) { return 0; }
-
-    /* sigma0 translation hooks */
-    static paddr_t sigma0_translate(addr_t addr, pgent_t::pgsize_e size) { return (paddr_t)addr; }
-    static word_t sigma0_attributes(pgent_t *pg, addr_t addr, pgent_t::pgsize_e size) { return 0; };
-
-    /* tlb */
-    void flush_tlb( space_t *curspace );
-    void flush_tlbent( space_t *curspace, addr_t addr, word_t log2size );
-    static bool does_tlbflush_pay( word_t log2size )
-	{ return log2size != POWERPC64_PAGE_BITS; }
-
-    /* update hooks */
-    static void begin_update() {}
-    static void end_update() {}
-
-public:
-    /* powerpc64 specific functions */
-    void init_kernel_mappings();
-
-    bool handle_hash_miss( addr_t vaddr );
-    bool handle_protection_fault( addr_t vaddr, bool dsi );
-    bool handle_segment_miss( addr_t vaddr );
-
-    inline pgent_t * get_pdir() { return this->pdir; }
-    inline word_t get_vsid_asid() { return x.vsid_asid.get( this ); }
-    word_t get_vsid( addr_t vaddr );
-    inline static space_t *lookup_space( word_t vsid )
-    {
-	return get_vsid_asid_cache()->lookup( vsid );
-    }
-
-    word_t get_from_user( addr_t );
-
-    /* Methods needed by linear page table walker. */
-    pgent_t *pgent( word_t num, word_t cpu=0 );
-    bool lookup_mapping( addr_t vaddr, pgent_t ** r_pg,
-			 pgent_t::pgsize_e *r_size, cpuid_t cpu=0);
-    bool readmem (addr_t vaddr, word_t * contents);
-    static word_t readmem_phys (addr_t paddr)
-	{ return *phys_to_virt((word_t*)paddr); }
-    void release_kernel_mapping (addr_t vaddr, addr_t paddr, word_t log2size);
-
-#if CONFIG_POWERPC64_STAB
-    ppc64_stab_t *get_seg_table() { return &x.segment_table; }
-#endif
-#if CONFIG_POWERPC64_SLB
-    word_t  get_segment(int i) { return x.segments[i]; }
-    void set_segment(int i, word_t val) { x.segments[i] = val; }
-#endif
-private:
-    // TODO: when we create a new mapping that disables the cache,
-    // we must flush the cache for that page to avoid cache paradoxes.
-
-    void space_t::add_mapping( addr_t vaddr, addr_t paddr,
-		    bool writable, bool executable,
-		    bool kernel, pgent_t::pgsize_e size );
-
-    void add_4k_mapping( addr_t vaddr, addr_t paddr, 
-	    bool writable, bool kernel );
-
-    void add_4k_mapping_noexecute( addr_t vaddr, addr_t paddr, 
-	    bool writable, bool kernel );
-
-    /* Power4 Large Mappings - 16MB */
-    void add_large_mapping( addr_t vaddr, addr_t paddr, 
-	    bool writable, bool kernel );
-
-    /* In order to provide an almost full 64-bit user address space.
-     * space_t is 1024 bytes (minimum kalloc size) */
+    /* In order to provide an almost full 64-bit user address space,
+     * space_t is 1024 bytes (minimum kalloc size). */
     union {
-    	pgent_t pdir[64];	/* 6-bits of top level page table */
+	pgent_t pdir[64];	/* 6-bits of top level page table */
 	struct {
 	    pgent_t user[64];
 	} map;
     };
     union {
-	word_t general[64];	/* 64 general pupose locations */
+	word_t general[64];	/* 64 general purpose locations */
 	struct {
-	    /* If you add variables to this area, subtract corresponding 
+	    /* If you add variables to this area, subtract corresponding
 	     * space from the resv[] region.
 	     */
 	    fpage_t kip_area;
@@ -211,7 +95,7 @@ private:
 
 #if CONFIG_POWERPC64_SLB
 	    /* XXX - we don't use this yet, we just do random replacement */
-	    u64_t   slb_bitmap;	    /* Segement lookaside buffer usage bitmap */
+	    u64_t   slb_bitmap;	    /* Segment lookaside buffer usage bitmap */
 	    word_t  segments[48];
 	    word_t  resv[64-48-5];
 #elif CONFIG_POWERPC64_STAB
@@ -222,19 +106,82 @@ private:
 	} x;
     };
 };
+typedef struct space_t space_t;
 
-/**********************************************************************
- *
- *                 global declarations
- *
- ***********************************************************************/
 
-extern void init_kernel_space();
+BEGIN_DECLS
 
-INLINE space_t *get_kernel_space()
+/* glue -- out of line in glue/v4-powerpc64/space.c */
+void	 space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
+void	 space_free (space_t *self);
+void	 space_handle_pagefault (space_t *self, addr_t addr, addr_t ip,
+				 word_t access, bool kernel);
+bool	 space_is_initialized (space_t *self);
+void	 space_map_sigma0 (space_t *self, addr_t addr);
+void	 space_map_fpage (space_t *self, fpage_t snd_fp, word_t base,
+			  space_t *t_space, fpage_t rcv_fp, bool grant);
+fpage_t	 space_unmap_fpage (space_t *self, fpage_t fpage, bool flush,
+			    bool unmap_all);
+fpage_t	 space_mapctrl (space_t *self, fpage_t fpage, mdb_ctrl_t ctrl,
+			word_t attribute, bool unmap_all);
+void	 space_allocate_tcb (space_t *self, addr_t addr);
+void	 space_map_dummy_tcb (space_t *self, addr_t addr);
+utcb_t * space_allocate_utcb (space_t *self, tcb_t *tcb);
+
+bool	 space_is_user_area (addr_t addr);
+bool	 space_is_user_area_fpage (fpage_t fpage);
+bool	 space_is_kernel_area (addr_t addr);
+bool	 space_is_tcb_area (addr_t addr);
+bool	 space_is_copy_area (addr_t addr);
+bool	 space_is_mappable (space_t *self, addr_t addr);
+bool	 space_is_mappable_fpage (space_t *self, fpage_t fpage);
+
+/* powerpc64 specific */
+void	 space_init_kernel_mappings (space_t *self);
+bool	 space_handle_hash_miss (space_t *self, addr_t vaddr);
+bool	 space_handle_protection_fault (space_t *self, addr_t vaddr, bool dsi);
+bool	 space_handle_segment_miss (space_t *self, addr_t vaddr);
+bool	 space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg,
+			       pgsize_e *r_size, cpuid_t cpu);
+bool	 space_readmem (space_t *self, addr_t vaddr, word_t *contents);
+void	 space_release_kernel_mapping (space_t *self, addr_t vaddr,
+				       addr_t paddr, word_t log2size);
+void	 space_add_mapping (space_t *self, addr_t vaddr, addr_t paddr,
+			    bool writable, bool executable, bool kernel,
+			    pgsize_e size);
+
+extern void init_kernel_space (void);
+
+END_DECLS
+
+/* Bodies that were inline in the class and depend on nothing but their
+   arguments. */
+INLINE bool   space_sync_kernel_space (space_t *self, addr_t addr)	{ return false; }
+INLINE bool   space_is_arch_mappable (addr_t addr, size_t size)		{ return true; }
+INLINE addr_t space_sign_extend (addr_t addr)				{ return addr; }
+INLINE bool   space_does_tlbflush_pay (word_t log2size)
+{ return log2size != POWERPC64_PAGE_BITS; }
+INLINE void   space_begin_update (void)					{ }
+INLINE void   space_end_update (void)					{ }
+INLINE word_t space_space_control (space_t *self, word_t ctrl, fpage_t kip_area,
+				   fpage_t utcb_area, threadid_t redirector_tid)
+{ return 0; }
+INLINE paddr_t space_sigma0_translate (addr_t addr, pgsize_e size)
+{ return (paddr_t) (word_t) addr; }
+INLINE word_t space_sigma0_attributes (pgent_t *pg, addr_t addr, pgsize_e size)
+{ return 0; }
+INLINE word_t space_readmem_phys (addr_t paddr)
+{ return *phys_to_virt((word_t*)paddr); }
+
+INLINE space_t *get_kernel_space(void)
 {
     extern space_t *kernel_space;
     return kernel_space;
+}
+
+INLINE space_t *space_lookup_space (word_t vsid)
+{
+    return vsid_asid_cache_lookup (get_vsid_asid_cache(), vsid);
 }
 
 /**********************************************************************
@@ -243,54 +190,67 @@ INLINE space_t *get_kernel_space()
  *
  ***********************************************************************/
 
-INLINE pgent_t * space_t::pgent( word_t num, word_t cpu )
+INLINE pgent_t * space_get_pdir (space_t *self) { return self->pdir; }
+
+INLINE pgent_t * space_pgent_cpu (space_t *self, word_t num, word_t cpu)
 {
-    return (get_pdir())->next( this, pgent_t::size_max, num );
+    return pgent_next (space_get_pdir (self), self, size_max, num);
 }
 
+INLINE pgent_t * space_pgent (space_t *self, word_t num)
+{
+    return space_pgent_cpu (self, num, 0);
+}
 
-INLINE bool space_t::is_cpu_area(addr_t addr)
+INLINE bool space_is_cpu_area (addr_t addr)
 {
     return (addr >= (addr_t)CPU_AREA_START &&
 	    addr < (addr_t)CPU_AREA_END);
 }
 
-INLINE word_t space_t::get_copy_limit (addr_t addr, word_t len)
+INLINE word_t space_get_copy_limit (space_t *self, addr_t addr, word_t len)
 {
     word_t end = (word_t)addr + len;
 
-    if( is_user_area(addr) )
+    if( space_is_user_area (addr) )
     {
 	if( end >= USER_AREA_END )
 	    return (USER_AREA_END - (word_t)addr);
     }
     else
     {
-	ASSERT( is_copy_area(addr) );
-	word_t max = COPY_AREA_SIZE - ((word_t)addr - COPY_AREA_START);
-	if( len > max )
-	    return max;
+	ASSERT( space_is_copy_area (addr) );
+	{
+	    word_t max = COPY_AREA_SIZE - ((word_t)addr - COPY_AREA_START);
+	    if( len > max )
+		return max;
+	}
     }
 
     return len;
 }
 
-INLINE fpage_t space_t::get_kip_page_area()
+INLINE fpage_t space_get_kip_page_area (space_t *self)
 {
-    return this->x.kip_area;
+    return self->x.kip_area;
 }
 
-INLINE fpage_t space_t::get_utcb_page_area()
+INLINE fpage_t space_get_utcb_page_area (space_t *self)
 {
-    return this->x.utcb_area;
+    return self->x.utcb_area;
 }
 
-INLINE word_t space_t::get_from_user(addr_t addr)
+INLINE word_t space_get_from_user (space_t *self, addr_t addr)
 {
     return *(word_t *)(addr);
 }
 
-INLINE word_t space_t::get_vsid( addr_t addr )
+INLINE word_t space_get_vsid_asid (space_t *self)
+{
+    return vsid_asid_get (&self->x.vsid_asid, self);
+}
+
+INLINE word_t space_get_vsid (space_t *self, addr_t addr)
 {
     word_t vsid;
 
@@ -298,7 +258,7 @@ INLINE word_t space_t::get_vsid( addr_t addr )
     if( (word_t)addr >= USER_AREA_END)
 	vsid = 0;
     else
-	vsid = this->x.vsid_asid.get( this ) >> 12;
+	vsid = vsid_asid_get (&self->x.vsid_asid, self) >> 12;
 
     /* Add VSID and ASID */
     return vsid | (((word_t)addr >> POWERPC64_SEGMENT_BITS) & ((1ul << CONFIG_POWERPC64_ESID_BITS)-1));
@@ -308,9 +268,9 @@ INLINE word_t space_t::get_vsid( addr_t addr )
  * adds a thread to the space
  * @param tcb pointer to thread control block
  */
-INLINE void space_t::add_tcb(tcb_t * tcb, cpuid_t cpu)
+INLINE void space_add_tcb (space_t *self, tcb_t * tcb, cpuid_t cpu)
 {
-    x.thread_count ++;
+    self->x.thread_count ++;
 }
 
 /**
@@ -318,53 +278,63 @@ INLINE void space_t::add_tcb(tcb_t * tcb, cpuid_t cpu)
  * @param tcb_t thread control block
  * @return true if it was the last thread
  */
-INLINE bool space_t::remove_tcb(tcb_t * tcb, cpuid_t cpu)
+INLINE bool space_remove_tcb (space_t *self, tcb_t * tcb, cpuid_t cpu)
 {
-    ASSERT(x.thread_count != 0);
-    x.thread_count --;
-    return (x.thread_count == 0);
+    ASSERT(self->x.thread_count != 0);
+    self->x.thread_count --;
+    return (self->x.thread_count == 0);
 }
 
-INLINE void space_t::flush_tlb( space_t *curspace )
+INLINE void space_flush_tlb (space_t *self, space_t *curspace)
 {
     // TODO: flush the tlb for a given address space.
     ppc64_invalidate_tlb();
 }
 
-INLINE void space_t::flush_tlbent( space_t *curspace, addr_t addr, 
-	word_t log2size )
+INLINE void space_flush_tlbent (space_t *self, space_t *curspace, addr_t addr,
+				word_t log2size)
 {
     ppc64_invalidate_tlbe( addr, (log2size == POWERPC64_PAGE_BITS) ? 0 : 1 );
 }
 
-INLINE void space_t::add_4k_mapping( addr_t vaddr, addr_t paddr, 
-	bool writable, bool kernel )
+INLINE void space_add_4k_mapping (space_t *self, addr_t vaddr, addr_t paddr,
+				  bool writable, bool kernel)
 {
-    add_mapping( vaddr, paddr, writable, true, kernel, pgent_t::size_4k );
+    space_add_mapping( self, vaddr, paddr, writable, true, kernel, size_4k );
 }
 
-INLINE void space_t::add_4k_mapping_noexecute( addr_t vaddr, addr_t paddr, 
-	bool writable, bool kernel )
+INLINE void space_add_4k_mapping_noexecute (space_t *self, addr_t vaddr,
+					    addr_t paddr, bool writable,
+					    bool kernel)
 {
-    add_mapping( vaddr, paddr, writable, false, kernel, pgent_t::size_4k );
+    space_add_mapping( self, vaddr, paddr, writable, false, kernel, size_4k );
 }
 
-INLINE void space_t::add_large_mapping( addr_t vaddr, addr_t paddr, 
-	bool writable, bool kernel )
+INLINE void space_add_large_mapping (space_t *self, addr_t vaddr, addr_t paddr,
+				     bool writable, bool kernel)
 {
 #ifdef CONFIG_POWERPC64_LARGE_PAGES
-    add_mapping( vaddr, paddr, writable, true, kernel, pgent_t::size_16m );
+    space_add_mapping( self, vaddr, paddr, writable, true, kernel, size_16m );
 #else
     ASSERT(!"No large page support");
 #endif
 }
 
+#if CONFIG_POWERPC64_STAB
+INLINE ppc64_stab_t *space_get_seg_table (space_t *self)
+{ return &self->x.segment_table; }
+#endif
+#if CONFIG_POWERPC64_SLB
+INLINE word_t space_get_segment (space_t *self, int i) { return self->x.segments[i]; }
+INLINE void space_set_segment (space_t *self, int i, word_t val) { self->x.segments[i] = val; }
+#endif
+
 #if defined(HAVE_ARCH_FREE_SPACE)
 
-INLINE void space_t::arch_free()
+INLINE void space_arch_free (space_t *self)
 {
 #if CONFIG_POWERPC64_STAB
-    this->x.segment_table.free();
+    ppc64_stab_free (&self->x.segment_table);
 #endif
 }
 

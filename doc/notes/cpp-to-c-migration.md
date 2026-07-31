@@ -8899,3 +8899,84 @@ shipped configuration noticing -- and it did.
 
     tools/configsweep 'x86-x*'   31 OK, 0 FAIL
     kernel .cc remaining          40 -> 39
+
+
+## §163 — powerpc64: a configuration, and the first six headers
+
+powerpc64 is the last unconverted architecture: 32 `.cc` files (~4,400 lines)
+across `arch/powerpc64`, `glue/v4-powerpc64`, three platforms and the kdb tree,
+plus 25 headers (~3,600 lines) still holding classes. It has never been built in
+this migration.
+
+### It is not blocked on a toolchain
+
+§162's listing said powerpc64 was untestable for want of a cross compiler. That
+was wrong -- `powerpc64-linux-gnu-gcc 13.3.0` is installed. What is genuinely
+missing is a shipped config tar, so a build directory has to be made by hand.
+The recipe, which is not obvious:
+
+    mkdir -p build/scratch-ofg5/kernel/config
+    cp build/scratch-ofppc/kernel/{Makefile,Makeconf.local} build/scratch-ofg5/kernel/
+    # fix SRCDIR; Makeconf.local must already carry ARCH=/SUBARCH=/CPU=/
+    # PLATFORM=/SCHED= lines, because config/Makefile rewrites them in place
+    # rather than generating the file
+    cd build/scratch-ofg5/kernel
+    make batchconfig CMLBATCH_PARAMS="ARCH_POWERPC64=y PLAT_OFG5=y \
+                                      CPU_POWERPC64_PPC970=y SCHED_RR=y"
+
+`SCHED_RR=y` has to be spelled out. The awk that derives `SCHED` matches
+`^CONFIG_[_X]*SCHED_[^_]*=y`, and nothing in `powerpc64.cml` defaults the
+scheduler, so without it `SCHED=` comes out empty and the build looks for
+`src/api/v4/sched-/`.
+
+Of the three platforms, **OFG5** is the one to start from: it is the smallest
+(its own `intr.cc` plus `ofpower4/prom.cc` and the two Open Firmware files),
+and `qemu-system-ppc64 -M mac99 -cpu 970fx` is the same Uninorth/OPIC machine
+the ofppc harness already drives, so §150's boot method should carry over.
+
+### Six headers converted
+
+    arch/powerpc64/frame.h        two plain data classes -> structs
+    arch/powerpc64/vsid_asid.h    vce_t / vsid_asid_cache_t / vsid_asid_t
+    glue/v4-powerpc64/debug.h     spin/spin_forever default arguments
+    glue/v4-powerpc64/syscalls.h  extern "C" on the RTAS syscall declaration
+    glue/v4-powerpc64/pgent.h     pgent_t -> struct; pgsize_e, permission_e
+                                  and wimg_e out of class scope
+    glue/v4-powerpc64/space.h     the 373-line space_t
+
+`space.h` follows the 32-bit port's naming exactly -- `space_init`,
+`space_is_user_area`, `space_get_copy_limit` -- so the two ports read the same
+way. `pgent.h` follows `arch/powerpc/pgent-pghash.h`, including leaving the
+operations unprototyped: a non-static declaration ahead of a static-inline
+definition is a conflict in C, and every consumer reaches both headers through
+`pgent.h`.
+
+`pgent_inline.h`'s thirty methods converted cleanly because upstream wrote every
+member access as `this->`, so the rewrite was `this->` to `self->` plus the
+signature -- and the calls a method made on itself showed up as `self->name (`,
+a shape that is easy to find exhaustively rather than by eye. Nothing was left
+behind: no `pgent_t::`, no `inline`, no `->method(` anywhere in the file.
+
+### Where it stands
+
+    first build:   the cascade -- headers unparseable, nothing reached
+    now:           29 errors, in five named places
+
+    8  platform/ofpower4/prom.cc    .cc against converted generic headers
+    8  arch/powerpc64/pghash.h      ppc64_sdr1_t / ppc64_pte_t / ppc64_htab_t
+    4  glue/v4-powerpc64/space.h    residue from pgent/pghash not yet done
+    3  glue/v4-powerpc64/pghash.h
+    3  generic/types.h              _Bool seen by a .cc -- every remaining
+                                    .cc fails here, which is the whole point:
+                                    they cannot stay C++
+    2  glue/v4-powerpc64/pgent_inline.h
+    1  platform/ofg5/intctrl.h      inherits from a base that is now a struct
+
+The next header is `arch/powerpc64/pghash.h`, and it holds the one construct
+that needs a decision rather than a transcription: `ppc64_pte_t::create` is
+**overloaded three ways** and C cannot carry that. The signatures differ in
+arity and meaning, so the names should say which is which rather than being
+numbered.
+
+ofppc, ppc44x and x86-x64 all still build; these headers are reachable from
+powerpc64 configurations only.

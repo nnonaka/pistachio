@@ -40,44 +40,40 @@
 
 #define VSID_REVERSE_SHIFT  (POWERPC64_USER_BITS - POWERPC64_SEGMENT_BITS)
 
-class space_t;
+struct space_t;
+typedef struct space_t space_t;
 
-class vce_t
+struct vce_t
 {
-public:
-    inline bool is_valid() { return ( asid != ASID_INVALID ); };
-
     word_t  asid;
     space_t *space;
 };
+typedef struct vce_t vce_t;
+
+INLINE bool vce_is_valid (vce_t *self) { return self->asid != ASID_INVALID; }
 
 
-class vsid_asid_cache_t
+struct vsid_asid_cache_t
 {
-public:
-    void init( space_t *kernel_space );
-    word_t alloc( space_t *space );
-    void release( word_t asid );
-
-    space_t *lookup( word_t vsid );
-private:
     vce_t cache[ ASID_MAX ];
     s64_t first_free;
 };
+typedef struct vsid_asid_cache_t vsid_asid_cache_t;
 
-
-class vsid_asid_t
+struct vsid_asid_t
 {
-public:
-    inline void init( void ) { vsid_asid = ASID_INVALID; };
-
-    word_t get( space_t *space );
-    void free( void );
-
-private:
     word_t vsid_asid;
 };
+typedef struct vsid_asid_t vsid_asid_t;
 
+/* Out of line in arch/powerpc64/vsid_asid.c. */
+BEGIN_DECLS
+word_t vsid_asid_cache_alloc (vsid_asid_cache_t *self, space_t *space);
+void   vsid_asid_cache_release (vsid_asid_cache_t *self, word_t asid);
+void   vsid_asid_free (vsid_asid_t *self);
+END_DECLS
+
+INLINE void vsid_asid_init (vsid_asid_t *self) { self->vsid_asid = ASID_INVALID; }
 
 INLINE vsid_asid_cache_t *get_vsid_asid_cache(void)
 {
@@ -85,30 +81,30 @@ INLINE vsid_asid_cache_t *get_vsid_asid_cache(void)
     return &vsid_asid_cache;
 }
 
-INLINE void vsid_asid_cache_t::init( space_t *kernel_space )
+INLINE void vsid_asid_cache_init (vsid_asid_cache_t *self, space_t *kernel_space)
 {
     for ( word_t i = 0; i < ( ASID_MAX ); i++ )
     {
-	cache[i].asid = ASID_INVALID;
-	cache[i].space = NULL;
+	self->cache[i].asid = ASID_INVALID;
+	self->cache[i].space = NULL;
     }
-    cache[0].asid = 0;
-    cache[0].space = kernel_space;
+    self->cache[0].asid = 0;
+    self->cache[0].space = kernel_space;
 
-    first_free = 1;
+    self->first_free = 1;
 }
 
-INLINE space_t *vsid_asid_cache_t::lookup( word_t vsid )
+INLINE space_t *vsid_asid_cache_lookup (vsid_asid_cache_t *self, word_t vsid)
 {
-    return cache[ (vsid >> VSID_REVERSE_SHIFT) & (ASID_MAX-1) ].space;
+    return self->cache[ (vsid >> VSID_REVERSE_SHIFT) & (ASID_MAX-1) ].space;
 }
 
-INLINE word_t vsid_asid_t::get( space_t *space )
+INLINE word_t vsid_asid_get (vsid_asid_t *self, space_t *space)
 {
-    if ( vsid_asid == ASID_INVALID )
-	vsid_asid = get_vsid_asid_cache()->alloc( space );
+    if ( self->vsid_asid == ASID_INVALID )
+	self->vsid_asid = vsid_asid_cache_alloc (get_vsid_asid_cache(), space);
 
-    return vsid_asid;
+    return self->vsid_asid;
 }
 
 #endif /* __ARCH__POWERPC64__VSID_ASID_H__ */
