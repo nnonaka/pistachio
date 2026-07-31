@@ -195,6 +195,7 @@ extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
      */
 {
     prom_init( of1275_entry );
+
     puts( "[==== Pistachio PowerPC Open Firmware Boot Loader ====]" );
 
     map_ram();
@@ -223,7 +224,15 @@ extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
 
     kip_manager.dedicate_memory( devtree_start, devtree_end, 
 	    L4_BootLoaderSpecificMemoryType, 0xf );
-    kip_manager.update_kip(of1275_entry);	// Do this last!
+    /* update_kip has only ever taken no argument, so passing of1275_entry --
+       as upstream does -- never compiled.  Dropping it is not enough: the
+       value has to reach the KIP, because kdb/platform/ofppc/io.c reads
+       get_kip()->boot_info as the Open Firmware client-interface entry and
+       hands it to of1275_ci_init.  update_kip copies kip_manager's boot_info
+       field, which is initialised to zero and has a setter nothing called.
+       So the argument belonged one line earlier. */
+    kip_manager.set_boot_info( of1275_entry );
+    kip_manager.update_kip();	// Do this last!
 
     start_kernel(r3, r4, of1275_entry);
 }

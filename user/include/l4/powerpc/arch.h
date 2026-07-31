@@ -149,7 +149,7 @@ typedef union
     {
 	L4_Word_t r[16];
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_GPRegs_t;
 
 
@@ -158,7 +158,7 @@ typedef union
  */
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t  item;
 	L4_PPC_GPRegs_t   regs;
@@ -221,11 +221,11 @@ typedef union
 	L4_Word_t lr;
 	L4_Word_t ip;
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_GPRegsX_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t  item;
 	L4_PPC_GPRegsX_t   regs;
@@ -297,14 +297,14 @@ typedef union
 	    L4_Word_t pid : 8;
 	    L4_Word_t	  : 24;
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_TLB_t;
 
 /*
  * PPC TLB Regs CtrlXfer Item
  */
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
     	L4_CtrlXferItem_t  item;
     	L4_PPC_TLB_t	   regs[4];
@@ -428,11 +428,11 @@ typedef union
     {
 	L4_Word_t ivor[16];
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_Ivor_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t item;
 	L4_PPC_Ivor_t regs;
@@ -485,11 +485,11 @@ typedef union
 	L4_Word_t dec;
 	L4_Word_t decar;
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_Timer_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t item;
 	L4_PPC_Ivor_t   regs;
@@ -537,11 +537,11 @@ typedef union
 	L4_Word_t pir;
 	L4_Word_t pvr;
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_Config_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t item;
 	L4_PPC_Config_t   regs;
@@ -598,11 +598,11 @@ typedef union
 	L4_Word_t icdbt[2];
 	L4_Word_t dcdbt[2];
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_Debug_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t item;
 	L4_PPC_Debug_t   regs;
@@ -647,11 +647,11 @@ typedef union
 	L4_Word_t normal_victim[4];
 	L4_Word_t transient_victim[4];
     };
-    L4_Word_t reg[];
+    L4_Word_t reg[0];
 } L4_PPC_Cache_t;
 
 typedef union {
-    L4_Word_t	raw[];
+    L4_Word_t	raw[0];
     struct {
 	L4_CtrlXferItem_t item;
 	L4_PPC_Cache_t   regs;
