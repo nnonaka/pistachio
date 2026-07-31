@@ -8775,3 +8775,50 @@ fails with four `conflicting types for 'mem_region_is_intersection'` errors in
 `generic/memregion.h` -- the function §144 restored, against an
 `x32_mem_region_t`. It fails identically with these changes stashed, so it
 predates them and is not touched here.
+
+
+## §161 — `x86-x64-p4-cm`: a name missing from the x32 rename list
+
+The sweep failure §160 noted was one line of omission.
+
+Compatibility mode needs a second copy of the V4 API types built with a 32-bit
+word. In C++ that was a re-include inside `namespace x32`; C has no namespaces,
+so `glue/v4-x86/x64/x32comp/x32-names.h` does it with the preprocessor -- a list
+renaming every name the re-included headers declare to an `x32_`-prefixed one,
+and a matching list undoing it afterwards. Its own header comment states the
+invariant:
+
+    The two lists below must stay in step.  They do so under pressure: a name
+    missing from the rename list collides on the second include, and one missing
+    from the unrename list leaves the 64-bit code compiling against x32_ names.
+    Both are compile errors, immediately.
+
+Which is precisely what happened. The list covers `mem_region_t`,
+`mem_region_get_size`, `mem_region_set` and `mem_region_is_empty` -- everything
+`generic/memregion.h` declared *when the list was written*. §144 then restored
+`mem_region_is_intersection` to that header, having found it dropped because its
+only caller was in a configuration that did not build. Nothing connected the two:
+the restored function was not renamed, so on the second include it was redeclared
+with `x32_mem_region_t` parameters against the first copy's `mem_region_t`, four
+times over.
+
+Only `x86-x64-p4-cm` sets `CONFIG_X86_COMPATIBILITY_MODE`, so it was the only
+configuration that could see it.
+
+Adding the name to both lists is the whole fix. The block is realigned because
+the new name is longer than the column the other four shared.
+
+    tools/configsweep 'x86-x*'    before: 30 OK, 1 FAIL
+                                  after:  31 OK
+
+The cm kernel had never been run in this migration, only built, so it was worth
+booting rather than trusting the compile: it reaches the l4test menu, passes both
+schedule tests, and its full run ends at `Local destination Id` -- the same
+pre-existing failure `x86-x64-p4-smp` stops at, so nothing here is specific to
+compatibility mode.
+
+Worth noting what made this cheap. The failure is loud, immediate, and names the
+exact symbol; §144's dropped function was silent and took a boot-time
+investigation to find. The difference is that the rename list is a place where
+the invariant is written down and checked by the compiler. There is no such
+place for "this header declares a function nobody currently calls".

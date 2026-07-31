@@ -77,10 +77,11 @@
 #define threadid_not_equals        x32_threadid_not_equals
 
 /* generic/memregion.h */
-#define mem_region_t        x32_mem_region_t
-#define mem_region_get_size x32_mem_region_get_size
-#define mem_region_set      x32_mem_region_set
-#define mem_region_is_empty x32_mem_region_is_empty
+#define mem_region_t               x32_mem_region_t
+#define mem_region_get_size        x32_mem_region_get_size
+#define mem_region_set             x32_mem_region_set
+#define mem_region_is_empty        x32_mem_region_is_empty
+#define mem_region_is_intersection x32_mem_region_is_intersection
 
 /* api/v4/memdesc.h */
 #define memdesc_t          x32_memdesc_t
@@ -208,6 +209,7 @@
 #undef mem_region_get_size
 #undef mem_region_set
 #undef mem_region_is_empty
+#undef mem_region_is_intersection
 
 /* api/v4/memdesc.h */
 #undef memdesc_t
