@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#
+# boottest-ofppc -- boot the OFPPC kernel under QEMU and capture the console.
+#
+# The x86 harness (tools/boottest) cannot be reused: OFPPC is an IEEE 1275
+# machine, so there is no multiboot and no -kernel.  The kernel, sigma0 and the
+# root task are bundled by util/piggybacker/ofppc into a single ELF that Open
+# Firmware loads as a client program.
+#
+# QEMU's -kernel is not that path and cannot be made into it: for PowerPC Mac
+# machines it relocates the image (translate_kernel_address maps addresses into
+# KERNEL_LOAD_ADDR), and the loader is not position-independent, so it runs
+# from the wrong place and dies silently.  Open Firmware has to load it, which
+# means presenting it on a filesystem OpenBIOS can read.  ext2 is the least
+# trouble: its names are exact, where ISO9660 mangles them.
+#
+# Usage:
+#   tools/boottest-ofppc [-b BUILDDIR] [-u USERDIR] [-p PASS_REGEX] [-t SECONDS]
+#
+#   -b BUILDDIR    kernel build dir   (default: build/scratch-ofppc/kernel)
+#   -u USERDIR     userland build dir (default: build/scratch-ofppc/user)
+#   -p PASS_REGEX  egrep pattern marking success
+#   -t SECONDS     QEMU timeout                            (default: 90)
+#
+# Exit status: 0 = PASS_REGEX seen, 1 = not seen / boot failed, 2 = setup failed.
+#
+# Two build settings this expects, neither of them a source change:
+#
+#   * the userland must be configured --with-comport=no.  With CONFIG_COMPORT
+#     defined, lib/io/powerpc.cc drives a UART it finds through a flattened
+#     device tree, which a PowerMac does not have.  Undefined, it uses
+#     L4_KDB_PrintChar, and user output goes out through the kernel's console.
+#   * l4test must be built -DL4TEST_AUTORUN, because nothing here can type at
+#     it: OpenBIOS's client-interface read() returns no data on this console,
+#     so the menu cannot be driven.  Its own Forth prompt reads fine -- that
+#     uses an internal word rather than the CI method.
+#
+# See doc/notes/cpp-to-c-migration.md §150.
+
+set -u
+
+TOP=$(cd "$(dirname "$0")/.." && pwd)
+
+BUILDDIR="$TOP/build/scratch-ofppc/kernel"
+USERDIR="$TOP/build/scratch-ofppc/user"
+PASS_RE='test suite ready to go|Idle thread started'
+TIMEOUT=90
+
+while getopts "b:u:p:t:h" opt; do
+    case "$opt" in
+	b) BUILDDIR=$OPTARG ;;
+	u) USERDIR=$OPTARG ;;
+	p) PASS_RE=$OPTARG ;;
+	t) TIMEOUT=$OPTARG ;;
+	h) sed -n '2,40p' "$0"; exit 0 ;;
+	*) echo "try: $0 -h" >&2; exit 2 ;;
+    esac
+done
+
+die () { echo "boottest-ofppc: $*" >&2; exit 2; }
+
+command -v qemu-system-ppc >/dev/null || die "qemu-system-ppc not found"
+command -v mke2fs          >/dev/null || die "mke2fs not found"
+command -v debugfs         >/dev/null || die "debugfs not found"
+
+LOADER="$USERDIR/util/piggybacker/ofppc/ofppc-loader"
+
+echo "boottest-ofppc: building ..."
+( cd "$BUILDDIR" && make -j"$(nproc)" ) >/dev/null 2>&1 || die "kernel build failed"
+# The piggybacker restamps the modules; force it so a stale kernel is not shipped.
+rm -f "$USERDIR/util/piggybacker/ofppc/kernel.mod" \
+      "$USERDIR/util/piggybacker/ofppc/kernel.bin" "$LOADER"
+( cd "$USERDIR/util/piggybacker/ofppc" && make -j"$(nproc)" ) >/dev/null 2>&1 \
+    || die "loader build failed"
+[ -f "$LOADER" ] || die "missing boot image: $LOADER"
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+DISK="$WORK/disk.img"
+CONSOLE="$WORK/console.log"
+
+# 16M is ample; OpenBIOS reads ext2 rev0 without trouble.
+dd if=/dev/zero of="$DISK" bs=1M count=16 status=none
+mke2fs -q -t ext2 -b 1024 "$DISK" 2>/dev/null || die "mke2fs failed"
+debugfs -w -R "write $LOADER ofppc" "$DISK" >/dev/null 2>&1 || die "debugfs write failed"
+
+echo "boottest-ofppc: booting (timeout ${TIMEOUT}s) ..."
+
+# mac99 is Uninorth/KeyLargo: an OpenBIOS Open Firmware, and an MPIC for the
+# OPIC driver.  -cpu g3 gives the PowerPC,750 the platform is written for.
+# auto-boot? is off and the path typed in, because the boot-device property
+# needs the same backslash and it is clearer here.  Open Firmware separates
+# device from path with a backslash, not a slash: hd:\ofppc, not hd:,/ofppc.
+( sleep 12; printf 'boot hd:\\ofppc\n'; sleep "$TIMEOUT" ) | \
+    timeout -k 2 $((12 + TIMEOUT + 5)) \
+    qemu-system-ppc -M mac99 -cpu g3 -m 128 -nographic \
+	-drive file="$DISK",format=raw,if=ide,index=0,media=disk \
+	-prom-env 'auto-boot?=false' > "$CONSOLE" 2>&1
+
+echo "----- console log -----"
+cat "$CONSOLE" 2>/dev/null
+echo "-----------------------"
+
+if grep -aqE "$PASS_RE" "$CONSOLE"; then
+    echo "boottest-ofppc: PASS"
+    exit 0
+fi
+
+echo "boottest-ofppc: FAIL (pattern not seen: $PASS_RE)"
+exit 1
