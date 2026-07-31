@@ -458,7 +458,28 @@ static SECTION(SEC_INIT) void cpu_init( cpuid_t cpu )
 #if (CACHE_LINE_SIZE < 32)
 # error "Expecting a cache line size of 32-bytes or larger."
 #endif
+    /* The two MMU variants mean different things by this call, and only one of
+     * them wants it here.
+     *
+     * On BookE it writes the IVOR/IVPR registers, which are per-processor, so
+     * every cpu must run it -- that is what this call site is for.
+     *
+     * On the segment MMU it is a one-time memcpy of the vector code down to
+     * PHYS_EXCEPT_START, and startup_system already did it, before
+     * init_bootmem.  init_bootmem then hands the .except source region to the
+     * kernel memory allocator -- "Claim the memory used by the exception
+     * vector code" -- which is only safe because the copy has happened.  By
+     * the time cpu_init runs that source has been handed out and written over,
+     * so running it again copied what was there now over the working vectors:
+     * measured as zeroes.  The first page fault afterwards -- the read of the
+     * TCB area in init_kernel_threads -- branched to an empty vector, and the
+     * machine stopped with no diagnostic.  That version also returns
+     * immediately unless cpu == 0, so no secondary processor loses anything.
+     * master has the same unguarded pair of calls.  Notes §148.
+     */
+#if defined(CONFIG_PPC_MMU_TLB)
     install_exception_handlers(cpu);
+#endif
 
     space_init_cpu_mappings (get_kernel_space(), cpu);
 

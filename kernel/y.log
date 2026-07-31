@@ -1,0 +1,10 @@
+
+Aieeee, this is the SOURCE directory!
+-------------------------------------
+
+1. Run make BUILDDIR=<absolute path of nonexisting directory>
+2. Chdir to the build directory!
+3. Verify the settings in Makeconf.local!
+4. Run make menuconfig or make xconfig!
+5. Run make again!
+
