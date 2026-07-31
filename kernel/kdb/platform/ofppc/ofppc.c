@@ -233,10 +233,17 @@ word_t of1275_space_execute_of1275 (of1275_space_t *self, word_t (*func)(void *)
     self->current_ptab_loc = of1275_space_get_ptab_loc (self);
     of1275_space_get_segments (self, self->current_segments);
 
+    /* Pass sp, not of1275_stack_top-16.  kdb_switch_space treats a null stack
+     * as "keep the current one", which is what the branch above computes: when
+     * we are already running on the init stack there is nothing to switch to.
+     * Upstream computes sp, zeroes four words through it, and then passes the
+     * recomputed top anyway -- so Open Firmware always got a stack at the top
+     * of init_stack, on top of whatever the kernel had there.  Notes §146.
+     */
     // Execute the function within the 1275 address space.
     result = kdb_switch_space( self->of1275_ptab_loc, self->of1275_segments,
 	    self->current_ptab_loc, self->current_segments,
-	    self->of1275_stack_top-16, func, param );
+	    (word_t)sp, func, param );
 
     spinlock_unlock (&self->lock);
 

@@ -44,8 +44,8 @@ DECLARE_CMD( cmd_dump_ci, platform, 'c', "of1275", "Open Firmware client interfa
 
 CMD(cmd_dump_ci, cg)
 {
-    printf( "stdout phandle %x\n", get_of1275_ci()->get_stdout() );
-    printf( "stdin  phandle %x\n", get_of1275_ci()->get_stdin() );
+    printf( "stdout phandle %x\n", of1275_ci_get_stdout (get_of1275_ci()) );
+    printf( "stdin  phandle %x\n", of1275_ci_get_stdin (get_of1275_ci()) );
 
     return CMD_NOQUIT;
 }   
@@ -78,7 +78,7 @@ static word_t of1275_ci_call (of1275_client_interface_t *self, void *params)
     if( self->entry == NULL )
 	return (word_t)-1;
 
-    return get_of1275_space()->execute_of1275( self->entry, params );
+    return of1275_space_execute_of1275 (get_of1275_space(), self->entry, params);
 }
 
 of1275_phandle_t of1275_ci_find_device (of1275_client_interface_t *self, const char *name)

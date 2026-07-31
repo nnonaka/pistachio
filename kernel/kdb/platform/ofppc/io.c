@@ -67,9 +67,9 @@ void init_of1275_console( )
 {
     word_t entry = get_kip()->boot_info;
     
-    get_of1275_space()->init( 
+    of1275_space_init( get_of1275_space(),
 	    (word_t)ofppc_stack_top(), (word_t)ofppc_stack_bottom() );
-    get_of1275_ci()->init( entry );
+    of1275_ci_init( get_of1275_ci(), entry );
 
     switch_console( PROM_NAME );
     printf( "Activated the Open Firmware console.\n" );
@@ -80,10 +80,12 @@ static void putc_of1275( char c )
     if( c == '\n' )
     {
 	char nl[] = "\r\n";
-	get_of1275_ci()->write( get_of1275_ci()->get_stdout(), nl, sizeof(nl) );
+	of1275_ci_write( get_of1275_ci(), of1275_ci_get_stdout (get_of1275_ci()),
+			 nl, sizeof(nl) );
     }
     else
-	get_of1275_ci()->write( get_of1275_ci()->get_stdout(), &c, 1 );
+	of1275_ci_write( get_of1275_ci(), of1275_ci_get_stdout (get_of1275_ci()),
+			 &c, 1 );
 }
 
 static char getc_of1275( bool block )
@@ -92,7 +94,8 @@ static char getc_of1275( bool block )
     int cnt;
 
     do {
-	cnt = get_of1275_ci()->read( get_of1275_ci()->get_stdin(), &c, 1 );
+	cnt = of1275_ci_read( get_of1275_ci(), of1275_ci_get_stdin (get_of1275_ci()),
+			      &c, 1 );
     } while( cnt == 0 );
 
     if( cnt != 1 )

@@ -46,8 +46,24 @@
 	.globl	_init_stack_top
 
 #define INIT_STACK_SIZE (4096*3)
+
+/* Upstream brackets the storage with the two labels but allocates it with
+ * .lcomm, which declares a local common symbol rather than emitting anything
+ * here -- so the location counter does not advance and _init_stack_bottom and
+ * _init_stack_top come out equal.  _start survives that, because it builds its
+ * stack pointer from `init_stack' plus INIT_STACK_SIZE directly, but
+ * ofppc_stack_top() returns the collapsed symbol, and the kdb Open Firmware
+ * console runs OF on a stack derived from it: execute_of1275 takes
+ * of1275_stack_top - 16 and zeroes four words there before every call.  With
+ * top == bottom == _start_bss + 16 that address is `kmem', so every printf
+ * through the OF console wiped the kernel's memory allocator -- its free list
+ * read back empty at the first allocation.  Reserving the space in place gives
+ * the labels the extent they claim to have.  Notes §146.
+ */
+	.align	4
 _init_stack_bottom:
-.lcomm	init_stack, INIT_STACK_SIZE, 16
+init_stack:
+	.space	INIT_STACK_SIZE
 _init_stack_top:
 
 
