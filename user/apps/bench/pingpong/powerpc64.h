@@ -38,19 +38,19 @@ L4_INLINE L4_Word64_t read_cycles (void)
 {
     L4_Word_t ret;
 
-    asm volatile ("mftb %0;" : "=r" (ret)); 
+    __asm__ __volatile__ ("mftb %0;" : "=r" (ret)); 
 
     return (L4_Word64_t) (ret * 8);
 }
 
 L4_INLINE L4_Word_t pingpong_ipc (L4_ThreadId_t dest, L4_Word_t untyped)
 {
-    register L4_Word_t r3 asm("r3") = dest.raw;
-    register L4_Word_t r4 asm("r4") = dest.raw;
-    register L4_Word_t r5 asm("r5") = 0;
-    register L4_Word_t tag asm("r14") = untyped;
+    register L4_Word_t r3 __asm__("r3") = dest.raw;
+    register L4_Word_t r4 __asm__("r4") = dest.raw;
+    register L4_Word_t r5 __asm__("r5") = 0;
+    register L4_Word_t tag __asm__("r14") = untyped;
 
-    asm volatile (
+    __asm__ __volatile__ (
 	"li	0, -32000;	"
 	"sc;			"
 
@@ -64,7 +64,7 @@ L4_INLINE L4_Word_t pingpong_ipc (L4_ThreadId_t dest, L4_Word_t untyped)
     /* Trash the rest. This allows the compiler to choose which
      * inputs to use in the asm code above
      */
-    asm volatile (
+    __asm__ __volatile__ (
 	"" :::
 	 "r0", "r6", "r7", "r8", "r9", "r10", "r11", "r12",
 	 "r15", "r16", "r17", "r18", "r19", "r20", "r21",

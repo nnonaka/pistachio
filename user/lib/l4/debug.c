@@ -51,7 +51,7 @@ L4_TraceBuffer_t *L4_GetTraceBuffer()
             {
 
                 L4_MemoryDesc_t *mdesc = L4_MemoryDesc( kip, i );
-                if( L4_MemoryDescType(mdesc) == L4_ReservedMemoryType && L4_IsVirtual(mdesc))
+                if( L4_MemoryDescType(mdesc) == L4_ReservedMemoryType && L4_IsMemoryDescVirtual (mdesc))
                 {
                     __L4_Tracebuffer = (L4_TraceBuffer_t*) L4_MemoryDescLow(mdesc);
                     

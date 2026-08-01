@@ -80,7 +80,7 @@ L4_Word_t utcb_size;
 
 static L4_Word_t page_bits;
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
 	*(p++)=c;
@@ -106,7 +106,15 @@ void pong_thread (void);
 #endif
 #include <l4/tracebuffer.h>
 
-#define debug_printf(x...) L4_Tbuf_RecordEvent (1, x)
+/* L4_Tbuf_RecordEvent was overloaded on how many words follow the string; the
+   C binding numbers them _0.._4, so the macro has to count its arguments and
+   pick.  debug_printf is called here with none through three trailing words. */
+#define __TB_NARG(_1,_2,_3,_4,_5,N,...)	N
+#define __TB_COUNT(...)		__TB_NARG(__VA_ARGS__,4,3,2,1,0)
+#define __TB_CAT2(a,b)		a##b
+#define __TB_CAT(a,b)		__TB_CAT2(a,b)
+#define debug_printf(...) \
+    __TB_CAT(L4_Tbuf_RecordEvent_, __TB_COUNT(__VA_ARGS__)) (1, __VA_ARGS__)
 
 static inline void rdpmc (int no, L4_Word64_t* res)
 { 
@@ -172,7 +180,7 @@ L4_INLINE L4_Word_t pingpong_ipc (L4_ThreadId_t dest, L4_Word_t untyped)
 #if !defined(HAVE_ARCH_LIPC)
 L4_INLINE L4_Word_t pingpong_lipc (L4_ThreadId_t dest, L4_Word_t untyped)
 {
-    L4_MsgTag_t tag (L4_Niltag);
+    L4_MsgTag_t tag = L4_Niltag;
     tag.X.u = untyped;
     L4_Set_MsgTag (tag);
     return L4_UntypedWords (L4_Lcall (dest));
@@ -186,7 +194,7 @@ void pong_thread (void)
     
     if (LIPC)
     {
-	L4_ThreadId_t ping_ltid = L4_LocalId (ping_tid);
+	L4_ThreadId_t ping_ltid = L4_LocalIdOf (ping_tid);
 	for (;;)
 	    untyped = pingpong_lipc (ping_ltid, untyped);
     }
@@ -215,7 +223,7 @@ void ping_thread (void)
 
     // Wait for pong thread to come up
     L4_Receive (pong_tid);
-    L4_ThreadId_t pong_ltid = L4_LocalId (pong_tid);
+    L4_ThreadId_t pong_ltid = L4_LocalIdOf (pong_tid);
 
     while (go)
     {
@@ -268,14 +276,14 @@ void ping_thread (void)
                 printf( "%u|%lu.%02lu|%lu.%02lu\n", j,
                        ((unsigned long)(cycles2-cycles1))/(ROUNDS*2),
                        (((unsigned long)(cycles2-cycles1))*100/(ROUNDS*2))%100,
-                       ((unsigned long)(usec2-usec1).raw)/(ROUNDS*2),
-                       (((unsigned long)(usec2-usec1).raw)*100/(ROUNDS*2))%100);
+                       ((unsigned long)(usec2.raw - usec1.raw))/(ROUNDS*2),
+                       (((unsigned long)(usec2.raw - usec1.raw))*100/(ROUNDS*2))%100);
             else
                 printf ("IPC (%2u MRs): %lu.%02lu cycles, %lu.%02luus, %lu.%02lu instrs\n", j,
                        ((unsigned long)(cycles2-cycles1))/(ROUNDS*2),
                        (((unsigned long)(cycles2-cycles1))*100/(ROUNDS*2))%100,
-                       ((unsigned long)(usec2-usec1).raw)/(ROUNDS*2),
-                       (((unsigned long)(usec2-usec1).raw)*100/(ROUNDS*2))%100,
+                       ((unsigned long)(usec2.raw - usec1.raw))/(ROUNDS*2),
+                       (((unsigned long)(usec2.raw - usec1.raw))*100/(ROUNDS*2))%100,
                        ((unsigned long)(instrs2-instrs1))/(ROUNDS*2),
                        (((unsigned long)(instrs2-instrs1))*100/(ROUNDS*2))%100);
 	}
@@ -314,10 +322,10 @@ static void send_startup_ipc (L4_ThreadId_t tid, L4_Word_t ip, L4_Word_t sp)
 	    (long) tid.raw, (long) ip, (long) sp);
 #endif
     L4_Msg_t msg;
-    L4_Clear (&msg);
-    L4_Append (&msg, ip);
-    L4_Append (&msg, sp);
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendWord (&msg, ip);
+    L4_MsgAppendWord (&msg, sp);
+    L4_MsgLoad (&msg);
     L4_Send (tid);
 }
 
@@ -334,23 +342,23 @@ void pager (void)
 
 	for (;;)
 	{
-	    L4_Store (tag, &msg);
+	    L4_MsgStore (tag, &msg);
             
             debug_printf( "Pager got msg from %p\n", (L4_Word_t) tid.raw);
             debug_printf( "\tmsg  (%p, %p, %p, %p)\n",                             
                              (L4_Word_t) tag.raw, 
-                             (L4_Word_t) L4_Get (&msg, 0), 
-                             (L4_Word_t) L4_Get (&msg, 1),
-                             (L4_Word_t) L4_Get (&msg, 2));
+                             (L4_Word_t) L4_MsgWord (&msg, 0), 
+                             (L4_Word_t) L4_MsgWord (&msg, 1),
+                             (L4_Word_t) L4_MsgWord (&msg, 2));
 
 
-	    if (L4_GlobalId (tid) == roottid)
+	    if (L4_IsThreadEqual (L4_GlobalIdOf (tid), roottid))
 	    {
 		// Startup notification, start ping and pong thread
-		send_startup_ipc (ping_tid, L4_Get (&msg, 0),
+		send_startup_ipc (ping_tid, L4_MsgWord (&msg, 0),
 				  (L4_Word_t) ping_stack +
 				  sizeof (ping_stack) - 32);
-		send_startup_ipc (pong_tid, L4_Get (&msg, 1),
+		send_startup_ipc (pong_tid, L4_MsgWord (&msg, 1),
 				  (L4_Word_t) pong_stack +
 				  sizeof (pong_stack) - 32);
 		break;
@@ -366,14 +374,14 @@ void pager (void)
 		break;
 	    }
 
-	    L4_Word_t faddr = L4_Get (&msg, 0);
-	    L4_Word_t fip   = L4_Get (&msg, 1);
+	    L4_Word_t faddr = L4_MsgWord (&msg, 0);
+	    L4_Word_t fip   = L4_MsgWord (&msg, 1);
 
 	    L4_Fpage_t fpage = handle_arch_pagefault (tag, faddr, fip, page_bits);
 	    
-	    L4_Clear (&msg);
-	    L4_Append (&msg, L4_MapItem (fpage + L4_FullyAccessible, faddr));
-	    L4_Load (&msg);
+	    L4_MsgClear (&msg);
+	    L4_MsgAppendMapItem (&msg, L4_MapItem (L4_FpageAddRights (fpage, L4_FullyAccessible), faddr));
+	    L4_MsgLoad (&msg);
 	    tag = L4_ReplyWait (tid, &tid);
 	}
     }
@@ -384,7 +392,7 @@ int main (void)
     L4_Word_t control;
     L4_Msg_t msg;
 
-    kip = (L4_KernelInterfacePage_t *) L4_KernelInterface ();
+    kip = (L4_KernelInterfacePage_t *) L4_GetKernelInterface ();
 
     /* Me and sigma0 */
     roottid = L4_Myself();
@@ -444,8 +452,7 @@ int main (void)
     L4_ThreadControl (pager_tid, L4_Myself (), scheduler_tid[0], L4_Myself (), (void*)pager_utcb);
     
 
-    L4_Start (pager_tid, (L4_Word_t) pager_stack + sizeof(pager_stack) - 32,
-	      START_ADDR (pager));
+    L4_Start_SpIp (pager_tid, (L4_Word_t) pager_stack + sizeof(pager_stack) - 32, START_ADDR (pager));
 
     if (hsched)
     {
@@ -572,10 +579,10 @@ int main (void)
 	}
 
 	// Send message to notify pager to startup both threads
-	L4_Clear (&msg);
-	L4_Append (&msg, START_ADDR (ping_thread));
-	L4_Append (&msg, START_ADDR (pong_thread));
-	L4_Load (&msg);
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, START_ADDR (ping_thread));
+	L4_MsgAppendWord (&msg, START_ADDR (pong_thread));
+	L4_MsgLoad (&msg);
 	L4_Send (pager_tid);
 
 	L4_Receive (ping_tid);

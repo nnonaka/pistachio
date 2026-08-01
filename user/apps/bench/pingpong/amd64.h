@@ -123,10 +123,10 @@ void arch_specific (void)
 	L4_ThreadControl (pong_tid, pong_tid, roottid, pager_tid, 
 			  NOUTCB);
 
-	L4_Clear (&msg);
-	L4_Append (&msg, START_ADDR (ping_thread));
-	L4_Append (&msg, START_ADDR (pong_32_thread));
-	L4_Load (&msg);
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, START_ADDR (ping_thread));
+	L4_MsgAppendWord (&msg, START_ADDR (pong_32_thread));
+	L4_MsgLoad (&msg);
 	L4_Send (pager_tid);
 
 	L4_Receive (ping_tid);

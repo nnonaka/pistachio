@@ -42,7 +42,7 @@ L4_INLINE L4_Word64_t read_cycles (void)
 {
     L4_Word_t ret;
     /* We assume that the kernel configured pmc1 for cycle counting. */
-    asm volatile ("mfspr %0, %1" : "=r" (ret) : "i" (937 /* upmc1 */));
+    __asm__ __volatile__ ("mfspr %0, %1" : "=r" (ret) : "i" (937 /* upmc1 */));
     return (L4_Word64_t) ret;
 }
 
@@ -50,18 +50,18 @@ L4_INLINE L4_Word_t read_instrs (void)
 {
     L4_Word_t ret;
     /* We assume that the kernel configured pmc2 for cycle counting. */
-    asm volatile ("mfspr %0, %1" : "=r" (ret) : "i" (938 /* upmc2 */));
+    __asm__ __volatile__ ("mfspr %0, %1" : "=r" (ret) : "i" (938 /* upmc2 */));
     return ret;
 }
 
 L4_INLINE L4_Word_t pingpong_ipc (L4_ThreadId_t dest, L4_Word_t untyped)
 {
-    register L4_Word_t tag asm("r14") = untyped;
-    register L4_Word_t to asm("r15") = dest.raw;
-    register L4_Word_t from asm("r16") = dest.raw;
-    register L4_Word_t timeouts asm("r17") = 0;
+    register L4_Word_t tag __asm__("r14") = untyped;
+    register L4_Word_t to __asm__("r15") = dest.raw;
+    register L4_Word_t from __asm__("r16") = dest.raw;
+    register L4_Word_t timeouts __asm__("r17") = 0;
 
-    asm volatile (
+    __asm__ __volatile__ (
 	    "mtctr %4 ;"
 	    "bctrl ;"
 	    : /* outputs */
@@ -81,12 +81,12 @@ L4_INLINE L4_Word_t pingpong_ipc (L4_ThreadId_t dest, L4_Word_t untyped)
 
 L4_INLINE L4_Word_t pingpong_lipc (L4_ThreadId_t dest, L4_Word_t untyped)
 {
-    register L4_Word_t tag asm("r14") = untyped;
-    register L4_Word_t to asm("r15") = dest.raw;
-    register L4_Word_t from asm("r16") = dest.raw;
-    register L4_Word_t timeouts asm("r17") = 0;
+    register L4_Word_t tag __asm__("r14") = untyped;
+    register L4_Word_t to __asm__("r15") = dest.raw;
+    register L4_Word_t from __asm__("r16") = dest.raw;
+    register L4_Word_t timeouts __asm__("r17") = 0;
 
-    asm volatile (
+    __asm__ __volatile__ (
 	    "mtctr %4 ;"
 	    "bctrl ;"
 	    : /* outputs */
@@ -114,7 +114,7 @@ void arch_specific (void)
     cycles1 = read_cycles();
     instrs1 = read_instrs();
 
-    asm volatile ( 
+    __asm__ __volatile__ ( 
 	    "mr %%r3, %0 ;"
 	    "mtctr %1 ;"
 

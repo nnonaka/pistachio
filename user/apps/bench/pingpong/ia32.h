@@ -47,7 +47,7 @@
 
 extern L4_Word_t __L4_syscalls_start;
 extern L4_Word_t __L4_syscalls_end;
-extern "C" void __L4_copy_syscalls_in (L4_Word_t dest);
+void __L4_copy_syscalls_in (L4_Word_t dest);
 
 char syscall_stubs[4096] __attribute__ ((aligned (4096)));
 

@@ -40,8 +40,8 @@ PROGRAM=	pingpong
 PROGRAM_DEPS=	$(top_builddir)/lib/l4/libl4.a \
 		$(top_builddir)/lib/io/libio.a
 
-amd64_SRCS=	pingpong-amd64-32.cc
-SRCS=		crt0-$(ARCH).S pingpong.cc $($(ARCH)_SRCS)
+amd64_SRCS=	pingpong-amd64-32.c
+SRCS=		crt0-$(ARCH).S pingpong.c $($(ARCH)_SRCS)
 
 LIBS+=		-ll4 -lio
 LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE)
@@ -52,10 +52,10 @@ CXXFLAGS_powerpc+=	-fno-rtti
 # CCFLAGS is not a variable this build system defines, so the substitution
 # used to expand to nothing and this object was built without the project
 # flags -- notably -fno-stack-protector.
-CCFLAGS_pingpong-amd64-32 = $(subst -m64,-m32,$(CXXFLAGS)) -m32 -fno-exceptions
+CCFLAGS_pingpong-amd64-32 = $(subst -m64,-m32,$(CFLAGS)) -m32 -std=c99
 
-pingpong-amd64-32.o: pingpong-amd64-32.cc
-	$(CC) $(CPPFLAGS) $(CCFLAGS_$*) -x c++ -c $< -o $(notdir $@)
+pingpong-amd64-32.o: pingpong-amd64-32.c
+	$(CC) $(CPPFLAGS) $(CCFLAGS_$*) -c $< -o $(notdir $@)
 	$(OBJCOPY) -g -O elf64-x86-64 $(notdir $@) $(notdir $@)
 
 include $(top_srcdir)/Mk/l4.prog.mk

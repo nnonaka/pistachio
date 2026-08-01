@@ -81,7 +81,7 @@ _stack_top:
 
 	.section ".text"
 BEGIN_PROC(_start_pager)
-	LD_ADDR(%r3, _Z5pagerv)
+	LD_ADDR(%r3, pager)
 
 	ld	%r0, 0(%r3)
 	ld	%r2, 8(%r3)
@@ -93,7 +93,7 @@ END_PROC(_start_pager)
 	
 
 BEGIN_PROC(_start_ping_thread)
-	LD_ADDR(%r3, _Z11ping_threadv)
+	LD_ADDR(%r3, ping_thread)
 
 	ld	%r0, 0(%r3)
 	ld	%r2, 8(%r3)
@@ -105,7 +105,7 @@ END_PROC(_start_ping_thread)
 
 	
 BEGIN_PROC(_start_pong_thread)
-	LD_ADDR(%r3, _Z11pong_threadv)
+	LD_ADDR(%r3, pong_thread)
 
 	ld	%r0, 0(%r3)
 	ld	%r2, 8(%r3)

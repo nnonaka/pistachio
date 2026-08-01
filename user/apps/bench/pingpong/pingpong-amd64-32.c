@@ -60,7 +60,7 @@ void pong_32_thread (void)
     L4_Word_t untyped = 0;
 
     L4_KernelInterfacePage_t * kip =
-	(L4_KernelInterfacePage_t *) L4_KernelInterface ();
+	(L4_KernelInterfacePage_t *) L4_GetKernelInterface ();
     ipc_32 = ((char *) kip) + kip->Ipc;
 
     for (;;)
