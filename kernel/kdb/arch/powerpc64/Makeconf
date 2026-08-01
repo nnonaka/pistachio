@@ -29,11 +29,11 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/arch/powerpc64/, prepost.cc frame.cc spr.cc dabr.cc \
-		single_step.cc )
+SOURCES += $(addprefix kdb/arch/powerpc64/, prepost.c frame.c spr.c dabr.c \
+		single_step.c )
 
 ifeq ("$(CONFIG_KDB_DISAS)","y")
-SOURCES+=	kdb/arch/powerpc64/disas.cc 
+SOURCES+=	kdb/arch/powerpc64/disas.c 
 endif
 
 SOURCES +=	kdb/generic/linear_ptab_dump.c \

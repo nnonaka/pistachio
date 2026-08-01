@@ -29,4 +29,4 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/arch/powerpc64/, ofio.cc stab.cc reboot.cc )
+SOURCES += $(addprefix kdb/arch/powerpc64/, ofio.c stab.c reboot.c )

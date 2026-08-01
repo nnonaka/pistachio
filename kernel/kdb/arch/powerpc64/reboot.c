@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/reboot.cc
+ * File path:     kdb/arch/powerpc64/reboot.c
  * Description:   PowerPC64 system reset
  *                
  * Redistribution and use in source and binary forms, with or without

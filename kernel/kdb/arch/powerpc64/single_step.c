@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/single_step.cc
+ * File path:     kdb/arch/powerpc64/single_step.c
  * Description:   User Single Step Support
  *                
  * Redistribution and use in source and binary forms, with or without

@@ -46,6 +46,33 @@ EXTERN_C void powerpc64_initial_to_user( void );
    glue/v4-powerpc/thread.c.  Notes §165. */
 
 /**
+ * Setup TCB to execute a function when switched to
+ * @param func pointer to function
+ *
+ * The old stack state of the TCB does not matter.
+ */
+void tcb_create_startup_stack (tcb_t *self, void (*func)(void))
+{
+    powerpc64_irq_context_t *context;
+
+    /* Re-init the stack */
+    tcb_init_stack (self);
+
+    tcb_notify (self, powerpc64_initial_to_user);
+
+    tcb_notify (self, func);
+
+    context = tcb_irq_context (self);
+
+    /* Set user mode */
+    context->srr1 = MSR_USER_MODE;
+    context->r13 = tcb_get_utcb_location (self);
+
+    //TRACEF( "done %p\n", self );
+}
+
+
+/**
  * read value of message register
  * @param index number of message register
  */
@@ -210,7 +237,7 @@ void tcb_switch_to (tcb_t *self, tcb_t * dest)
 	"lis	%%r3, 1f@highest;	"	/* Load return address			*/
 	"ori	%%r3, %%r3, 1f@higher;	"
 	"rldicr	%%r3, %%r3, 32, 31;	"
-	"oris	%%r3, %%r3, 1f@h;	"
+	"oris	%%r3, %%r3, 1f@high;	"	/* @h: see arch/powerpc64/asm.h */
 	"ori	%%r3, %%r3, 1f@l;	"
 	"std	%%r3, 16+64(%%r1);		"	/* Save the return address		*/
 

@@ -70,11 +70,18 @@ GLUE(.,name):
  * LD_ADDR ( reg, symbol )
  *   loads the address of symbol into reg
  */
+/* `@h' below was `@h' upstream everywhere these five-instruction 64-bit
+   address loads appear.  Current binutils makes R_PPC64_ADDR16_HI an
+   overflow-checked relocation -- it is the `lis/addi' idiom's relocation and
+   assumes the value sign-extends from bit 31 -- so every kernel symbol at
+   KERNEL_OFFSET (0xFFFE000000000000) makes it "truncated to fit".  `@high'
+   is R_PPC64_ADDR16_HIGH, the unchecked bits-16..31 form added for exactly
+   this sequence.  Notes §169. */
 #define	LD_ADDR(reg, symbol)		\
     lis	    reg, symbol##@highest;	\
     ori	    reg, reg, symbol##@higher;	\
     rldicr  reg, reg, 32,31;		\
-    oris    reg, reg, symbol##@h;	\
+    oris    reg, reg, symbol##@high;	\
     ori	    reg, reg, symbol##@l
 
 #define LD_CONST(reg, value)			\
@@ -88,7 +95,7 @@ GLUE(.,name):
     lis     reg,(label)@highest;        \
     ori     reg,reg,(label)@higher;     \
     rldicr  reg,reg,32,31;              \
-    oris    reg,reg,(label)@h;          \
+    oris    reg,reg,(label)@high;        \
     ori     reg,reg,(label)@l;
 
 /* Condition Register Bit Fields */

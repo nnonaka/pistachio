@@ -29,6 +29,6 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix kdb/arch/powerpc64/, macio.cc slb.cc )
+SOURCES += $(addprefix kdb/arch/powerpc64/, macio.c slb.c )
 
-SOURCES += kdb/platform/ofg5/reboot.cc
+SOURCES += kdb/platform/ofg5/reboot.c

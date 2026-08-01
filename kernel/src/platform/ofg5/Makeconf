@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/platform/ofpower4/, prom.cc )
+SOURCES += $(addprefix src/platform/ofpower4/, prom.c )
 
 SOURCES += $(addprefix src/platform/ofg5/, head.S intr.c )
 

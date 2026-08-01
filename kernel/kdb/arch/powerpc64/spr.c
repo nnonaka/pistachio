@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/spr.cc
+ * File path:     kdb/arch/powerpc64/spr.c
  * Description:   Special Purpose Register Commands
  *                
  * Redistribution and use in source and binary forms, with or without

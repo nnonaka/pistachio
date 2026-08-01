@@ -65,7 +65,13 @@ _start:
 	sub	r10,	r10,	r6
 	sub	r11,	r11,	r6
 	li	r12,	0
-1:	cmp	0,	r10,	r11
+	/* was `cmp 0, r10, r11'.  On powerpc64 cmp takes a leading L field
+	   (cmp BF, L, RA, RB); the three-operand spelling is the 32-bit form
+	   and current binutils rejects it here.  cmpw is that encoding
+	   exactly -- L=0 -- and the two operands are physical addresses
+	   within one image, so a 32-bit compare decides equality the same way
+	   a 64-bit one would.  Notes §169. */
+1:	cmpw	0,	r10,	r11
 	beq	2f
 	stwu	r12,	4(r10)
 	b	1b

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/slb.cc
+ * File path:     kdb/arch/powerpc64/slb.c
  * Description:   SLB management commands
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ DECLARE_CMD (cmd_powerpc64_slb, arch, 's', "slb", "SLB management");
 
 CMD(cmd_powerpc64_slb, cg)
 {
-    return powerpc64_slb.interact (cg, "slb");
+    return cmd_group_interact (&powerpc64_slb, cg, "slb");
 }
 
 /**

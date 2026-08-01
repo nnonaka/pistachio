@@ -158,7 +158,7 @@ mfasr	r1
 std	r1, RESET_R3(r20);	/* Save old ASR			*/
 	li	r1, (kernel_space_segment_table)@higher
 	sldi	r1, r1, 32
-	oris	r1, r1, (kernel_space_segment_table)@h
+	oris	r1, r1, (kernel_space_segment_table)@high	/* @h: see arch/powerpc64/asm.h */
 	ori	r1, r1, (kernel_space_segment_table+1)@l
 	isync
 	mtasr	r1

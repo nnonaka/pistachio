@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
+ * Copyright (C) 2003, 2007,  National ICT Australia (NICTA)
  *                
- * File path:     glue/v4-powerpc64/rtas.cc
- * Description:   User-level interface to RTAS procedures
+ * File path:     kdb/arch/powerpc64/prepost.c
+ * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,43 +26,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: rtas.cc,v 1.3 2004/06/04 06:38:41 cvansch Exp $
+ * $Id: prepost.cc,v 1.3 2004/06/04 06:49:14 cvansch Exp $
  *                
  ********************************************************************/
 
-#include INC_API(tcb.h)
-#include INC_GLUE(syscalls.h)
-#include INC_ARCH(rtas.h)
-#include <kdb/tracepoints.h>
+#include <kdb/kdb.h>
+#include <sync.h>
 
+static spinlock_t powerpc64_kdb_lock;
 
-DECLARE_TRACEPOINT (SYSCALL_RTAS_CALL);
-
-
-SYS_RTAS_CALL( word_t token, word_t nargs, word_t nret, word_t ptr )
-{
-    TRACEPOINT( SYSCALL_RTAS_CALL,
-		printf( "SYS_RTAS_CALL: (token %d) (%d in, %d out) data: %p\n",
-			token, nargs, nret, ptr ) );
-
-    pgent_t * pg;
-    pgent_t::pgsize_e pgsize;
-    space_t * space = get_current_space();
-
-    // invalid request - thread not privileged
-    if ( !is_privileged_space( space ) )
-	return -1ul;
-
-    /* Check for valid data */
-    if (! space->lookup_mapping( (addr_t)ptr, &pg, &pgsize) )
-	return -1ul;
-    if (! space->lookup_mapping( (addr_t)(ptr+16*8), &pg, &pgsize) )
-	return -1ul;
-
-    /* bounds check arguments */
-    if ( (nargs > 16) ||  (nret > 16) || (nargs + nret > 16) )
-	return -1ul;
-
-    return get_rtas()->rtas_call( (word_t *)ptr, token, nargs, nret );
-}
-
+bool kdb_pre (void)  { spinlock_lock (&powerpc64_kdb_lock); return true; }
+void kdb_post (void) { spinlock_unlock (&powerpc64_kdb_lock); }

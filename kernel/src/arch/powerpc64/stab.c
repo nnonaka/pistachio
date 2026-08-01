@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     arch/powerpc64/stab.cc
+ * File path:     arch/powerpc64/stab.c
  * Description:   segment table management
  *                
  * Redistribution and use in source and binary forms, with or without

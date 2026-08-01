@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002,   University of New South Wales
  *                
- * File path:     kdb/arch/powerpc64/frame.cc
+ * File path:     kdb/arch/powerpc64/frame.c
  * Description:   Exception frame dumping
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -113,7 +113,7 @@ CMD (cmd_dump_fprs, cg)
     tcb_t * tcb = kdb_get_tcb();
 
     if (tcb) {
-	tcb->resources.powerpc64_fpu_spill( tcb );
+	tcb_resources_powerpc64_fpu_spill (&tcb->resources, tcb);
 	dump_fprs( tcb );
     }
 

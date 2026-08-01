@@ -58,6 +58,14 @@ INLINE of1275_item_t * of1275_item_next (of1275_item_t *self)
 }
 
 
+/* The boot loader marks its copy of the device tree with these in a KIP memory
+   descriptor; platform/ofpower4/prom.c reads them back.  Upstream never
+   defined them for powerpc64 -- only platform/ofppc/1275tree.h, the 32-bit
+   port's copy, has them -- so this file compiled but prom.cc did not.  Same
+   values: type 0xe is MEMDESC_BOOT_SPECIFIC.  Notes §169. */
+#define OF1275_KIP_TYPE		0xe
+#define OF1275_KIP_SUBTYPE	0xf
+
 struct of1275_device_t
 {
     u32_t handle;

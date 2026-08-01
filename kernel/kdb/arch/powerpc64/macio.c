@@ -93,40 +93,40 @@ void init_serial_console()
     u32_t len;
     u64_t scca_phys;
 
-    if (!(aliases = get_of1275_tree()->find( "/aliases" )))
+    if (!(aliases = of1275_tree_find( get_of1275_tree(), "/aliases" )))
 	goto error;
 
-    if (!aliases->get_prop( "scca", &path, &len ))
+    if (!of1275_device_get_prop( aliases, "scca", &path, &len ))
 	goto error;
 
-    if (!(serial_dev = get_of1275_tree()->find( path )))
+    if (!(serial_dev = of1275_tree_find( get_of1275_tree(), path )))
 	goto error;
 
 
-    if (!(escc_dev = get_of1275_tree()->get_parent( serial_dev )))
+    if (!(escc_dev = of1275_tree_get_parent( get_of1275_tree(), serial_dev )))
 	goto error;
 
-    if (!escc_dev->get_prop( "device_type", (char**)&type, &len ))
+    if (!of1275_device_get_prop( escc_dev, "device_type", (char**)&type, &len ))
 	goto error;
 
     if (strncmp(type, "escc", 4)) {
 	goto error;
     }
 
-    if (!(macio_dev = get_of1275_tree()->get_parent( escc_dev )))
+    if (!(macio_dev = of1275_tree_get_parent( get_of1275_tree(), escc_dev )))
 	goto error;
 
-    if (!macio_dev->get_prop( "device_type", (char**)&type, &len ))
+    if (!of1275_device_get_prop( macio_dev, "device_type", (char**)&type, &len ))
 	goto error;
 
     if (strncmp(type, "mac-io", 6)) {
 	goto error;
     }
 
-    if (!macio_dev->get_prop( "assigned-addresses", (char**)&macio_ranges, &len ))
+    if (!of1275_device_get_prop( macio_dev, "assigned-addresses", (char**)&macio_ranges, &len ))
 	goto error;
 
-    if (!serial_dev->get_prop( "reg", (char**)&scca_ranges, &len ))
+    if (!of1275_device_get_prop( serial_dev, "reg", (char**)&scca_ranges, &len ))
 	goto error;
 
     scca_phys = ((u64_t)macio_ranges[0].pci.addr.a_mid << 32) |
@@ -135,17 +135,17 @@ void init_serial_console()
 
     {
 	pgent_t pg;
-	pgent_t::pgsize_e size = pgent_t::size_4k;
+	pgsize_e size = size_4k;
 
 	/* Create a page table entry, noexecute, nocache */
-	pg.set_entry( get_kernel_space(), size, (addr_t)(scca_phys & ~(0xfff)),
-		      6, pgent_t::cache_inhibit, true );
+	pgent_set_entry( &pg, get_kernel_space(), size, (addr_t)(scca_phys & ~(0xfff)),
+		      6, cache_inhibit, true );
     
 	scca_control = (u8_t *)((word_t)scca_phys | DEVICE_AREA_START);
 	scca_data = scca_control + 0x10;
 
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)((word_t)scca_control & ~(0xfff)), &pg, size, true );
     }
 

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *
- * File path:	glue/v4-powerpc64/asmsyms.cc
+ * File path:	glue/v4-powerpc64/asmsyms.c
  * Description:	Various C++ constants converted into assembler compatible 
  * 		symbols.
  *
@@ -37,8 +37,8 @@
 #include INC_API(tcb.h)
 
 #if 0
-MKASMSYM( TSTATE_RUNNING, (word_t) thread_state_t::running );
-MKASMSYM( TSTATE_WAITING_FOREVER, (word_t) thread_state_t::waiting_forever );
+MKASMSYM( TSTATE_RUNNING, (word_t) THREAD_STATE_RUNNING );
+MKASMSYM( TSTATE_WAITING_FOREVER, (word_t) THREAD_STATE_WAITING_FOREVER );
 
 MKASMSYM( OFS_TSWITCH_FRAME_IP, offsetof(tswitch_frame_t, ip) );
 MKASMSYM( OFS_TSWITCH_FRAME_R30, offsetof(tswitch_frame_t, r30) );

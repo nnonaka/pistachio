@@ -71,7 +71,7 @@ static word_t attrib_fpage (tcb_t *current, fpage_t fpage, word_t attrib)
     space_t *space = tcb_get_space (current);
 
     num = fpage_get_size_log2 (&fpage);
-    vaddr = address (fpage, num);
+    vaddr = fpage_address (fpage, num);
 
     if (num < hw_pgshifts[0])
     {
@@ -215,7 +215,7 @@ SYS_MEMORY_CONTROL (word_t control, word_t attribute0, word_t attribute1,
 	    default: att = attribute3; break;
 	}
 
-	addr = address (fpage, fpage_get_size_log2 (&fpage));
+	addr = fpage_address (fpage, fpage_get_size_log2 (&fpage));
 	// Check if mapping exist in page table
 	if (!space_lookup_mapping_c (space, addr, &pg, &pgsize))
 	{

@@ -54,63 +54,61 @@
 typedef u32_t rtas_arg_t;
                                                                                                                                                        
 
-class rtas_args_t
+/* protected/private members are just members now; rtas.c is still the only
+   file that touches them. */
+struct rtas_args_t
 {
-protected:
     u32_t token;	    /* Pointer32 to string token    */
     u32_t nargs;	    /* Number of arguments	    */
     u32_t nret;		    /* Number of return values	    */
     rtas_arg_t args[16];    /* Arguments and return values buffer	*/
 
     rtas_arg_t *rets;	    /* Pointer to return value in args[] above	*/
-public:
-    void setup( u32_t token, u32_t nargs, u32_t nret );
-    void set_arg( u32_t num, rtas_arg_t value );
-    rtas_arg_t get_ret( u32_t num );
 };
+typedef struct rtas_args_t rtas_args_t;
 
 
-class rtas_t
+struct rtas_t
 {
-public:
     word_t entry;	/* physical address pointer */
     word_t base;	/* physical address pointer */
     word_t size;	/* rtas area size */
 
-protected:
     spinlock_t lock;
     of1275_device_t *rtas_dev;
-	
-public:
-    void init_arch( void );
-    void init_cpu( void ) { /* dummy */ };	// XXX fixme for SMP
-
-public:
-    bool get_token( const char *service, u32_t *token );
-    word_t rtas_call( u32_t token, u32_t nargs, u32_t nret, word_t *outputs, ... );
-    word_t rtas_call( word_t *data, u32_t token, u32_t nargs, u32_t nret );
-
-    /* Convience functions */
-    void machine_restart( void );	/* Restart the system */
-    void machine_power_off( void );	/* Turn off the power */
-    void machine_halt( void );		/* Halt the system */
-
-private:
-    bool try_location( word_t phys_start, word_t size );
 };
+typedef struct rtas_t rtas_t;
+
+BEGIN_DECLS
+/* Out of line in arch/powerpc64/rtas.c.  setup/set_arg/get_ret and
+   try_location were protected or private and are file-static there. */
+void rtas_init_arch( rtas_t *self );
+
+bool rtas_get_token( rtas_t *self, const char *service, u32_t *token );
+/* Two overloads of rtas_call: the variadic one takes the arguments inline,
+   the other reads them from an array.  Distinct names in C. */
+word_t rtas_call( rtas_t *self, u32_t token, u32_t nargs, u32_t nret, word_t *outputs, ... );
+word_t rtas_call_data( rtas_t *self, word_t *data, u32_t token, u32_t nargs, u32_t nret );
+
+/* Convience functions */
+void rtas_machine_restart( rtas_t *self );	/* Restart the system */
+void rtas_machine_power_off( rtas_t *self );	/* Turn off the power */
+void rtas_machine_halt( rtas_t *self );		/* Halt the system */
+END_DECLS
+
+INLINE void rtas_init_cpu( rtas_t *self ) { /* dummy */ }	// XXX fixme for SMP
 
 /* RTAS structure
- * Must be initialised in init.cc
+ * Must be initialised in init.c
  */
-INLINE rtas_t *get_rtas()
+INLINE rtas_t *get_rtas(void)
 {
     extern rtas_t rtas;
     return &rtas;
 }
 
-class rtas_error_log
+struct rtas_error_log
 {
-public:
     word_t version:8;			/* Architectural version    */
     word_t severity:3;			/* Severity level of error  */
     word_t disposition:2;		/* Degree of recovery	    */
@@ -122,5 +120,6 @@ public:
     word_t extended_log_length:32;	/* length in bytes	    */
     word_t buffer[1];			/* allocated by klimit bump */
 };
+typedef struct rtas_error_log rtas_error_log;
 
 #endif /* __ARCH__POWERPC64__RTAS_H__ */

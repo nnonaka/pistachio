@@ -381,3 +381,126 @@ void space_map_sigma0(space_t *self, addr_t addr)
     space_add_4k_mapping( self, addr, addr, true, false );
 }
 
+
+
+/**********************************************************************
+ *
+ *   C entry points that api/v4 and generic code call.  The C++ class
+ *   declared most of these and defined none of them -- space_t::is_user_area
+ *   and friends have no definition anywhere in the tree's history, which is
+ *   one reason this port has never linked.  They are written here against the
+ *   address-space constants in glue/v4-powerpc64/offsets.h, matching what
+ *   glue/v4-powerpc/space.c and glue/v4-x86/space.c already do.  Notes §169.
+ *
+ **********************************************************************/
+
+space_t * space_allocate_space (void)
+{
+    space_t * space = (space_t*)kmem_alloc (&kmem, kmem_space, sizeof(space_t));
+    ASSERT(space);
+    return space;
+}
+
+void space_free_space (space_t *space)
+{
+    kmem_free (&kmem, kmem_space, (addr_t)space, sizeof(space_t));
+}
+
+bool space_is_user_area (addr_t addr)
+{ return (word_t) addr < USER_AREA_END; }
+
+/* space_is_user_area_addr / _fpage are architecture-neutral wrappers over the
+   space_is_user_area above; they live in api/v4/accessors.c. */
+
+bool space_is_kernel_area (addr_t addr)
+{ return (word_t) addr >= KERNEL_AREA_START && (word_t) addr < KERNEL_AREA_END; }
+
+bool space_is_tcb_area (addr_t addr)
+{ return (word_t) addr >= KTCB_AREA_START && (word_t) addr < KTCB_AREA_END; }
+
+bool space_is_copy_area (addr_t addr)
+{ return (word_t) addr >= COPY_AREA_START && (word_t) addr < COPY_AREA_END; }
+
+bool space_is_initialized (space_t *self)
+{ fpage_t kip = self->x.kip_area; return !fpage_is_nil_fpage (&kip); }
+
+bool space_is_mappable (space_t *self, addr_t addr)
+{
+    fpage_t kip = self->x.kip_area, utcb = self->x.utcb_area;
+
+    return space_is_user_area (addr) &&
+	!fpage_is_addr_in_fpage (&kip, addr) &&
+	!fpage_is_addr_in_fpage (&utcb, addr);
+}
+
+/* api/v4 spells this one _addr; the powerpc64 glue header spells it
+   space_is_mappable.  Both names, one body. */
+bool space_is_mappable_addr (space_t *self, addr_t addr)
+{ return space_is_mappable (self, addr); }
+
+bool space_is_mappable_fpage (space_t *self, fpage_t fp)
+{
+    fpage_t kip = self->x.kip_area, utcb = self->x.utcb_area;
+
+    return space_is_user_area_fpage (fp) &&
+	!fpage_is_overlapping (&kip, fp) &&
+	!fpage_is_overlapping (&utcb, fp);
+}
+
+space_t * get_current_space (void)			{ return tcb_get_space (get_current_tcb ()); }
+space_t * get_current_space_c (void)			{ return get_current_space (); }
+space_t * get_kernel_space_c (void)			{ return get_kernel_space (); }
+bool      is_privileged_space_c (space_t *space)	{ return is_privileged_space (space); }
+
+/* Walk the page table for vaddr, as glue/v4-powerpc/space.c does. */
+bool space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg,
+			   pgsize_e *r_size, cpuid_t cpu)
+{
+    pgent_t *pg = space_pgent_cpu (self, page_table_index (size_max, vaddr), cpu);
+    pgsize_e pgsize = size_max;
+
+    for (;;)
+    {
+	if (!pg)
+	    return false;
+
+	if (pgent_is_valid (pg, self, pgsize))
+	{
+	    if (pgent_is_subtree (pg, self, pgsize))
+	    {
+		if (pgsize == 0)
+		    return false;
+		pg = pgent_next (pgent_subtree (pg, self, pgsize), self, pgsize - 1,
+				 page_table_index (pgsize - 1, vaddr));
+		pgsize--;
+		continue;
+	    }
+	    if (r_pg)   *r_pg = pg;
+	    if (r_size) *r_size = pgsize;
+	    return true;
+	}
+	return false;
+    }
+}
+
+bool space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg, pgsize_e *r_size)
+{ return space_lookup_mapping (self, vaddr, r_pg, r_size, 0); }
+
+fpage_t space_unmap_fpage (space_t *self, fpage_t fpage, bool flush, bool unmap_all)
+{
+    mdb_ctrl_t ctrl;
+
+    ctrl.raw = 0;
+    ctrl.mapctrl_self	= flush;
+    ctrl.unmap		= fpage_is_rwx (&fpage);
+    ctrl.set_rights	= !fpage_is_rwx (&fpage);
+    ctrl.reset_status	= 1;
+    ctrl.deliver_status	= 1;
+    fpage_set_rwx (&fpage, ~fpage_get_rwx (&fpage));
+    return space_mapctrl (self, fpage, ctrl, 0, unmap_all);
+}
+
+void initial_switch_to_c (tcb_t *tcb)
+{
+    initial_switch_to (tcb);
+}

@@ -9233,3 +9233,62 @@ declaration was when it read a value computed above it.
 
     §167:  11 `.cc` files
     now:   10 -- `asmsyms.cc`, `ofpower4/prom.cc`, and the eight kdb files
+
+## §169 -- powerpc64 links
+
+`build/scratch-ofg5/kernel/powerpc64-kernel` exists. As far as I can tell from
+the tree's history this is the first time the powerpc64 port has produced a
+binary: every generation of it has been carried forward, edited against APIs
+that moved underneath it, and never compiled. That is why this section is
+mostly a list of things that were already broken.
+
+The conversion itself, for the record, was the last four sources
+(`ofpower4/prom.cc`, `asmsyms.cc`, `glue/rtas.cc`, `arch/rtas.cc`) plus
+`rtas.h`, and the eight kdb files. Nothing new in shape: overloads split by
+name, `this` becomes `self`, defaulted arguments become second entry points.
+
+### What linking found
+
+**`space_t`'s predicates have no definitions anywhere.** `is_user_area`,
+`is_kernel_area`, `is_tcb_area`, `is_copy_area`, `is_mappable`,
+`is_initialized`, `lookup_mapping`, `unmap_fpage`, `allocate_space`,
+`free_space` -- declared in the class, defined in no file, in no revision.
+The 32-bit port had the same hole (§154 wrote its versions); powerpc64's are
+written here against `glue/v4-powerpc64/offsets.h` the same way. `cpu_count`
+and `get_kdebug_tcb` were likewise declared and never defined.
+
+**`OF1275_KIP_TYPE` / `OF1275_KIP_SUBTYPE`** exist only in
+`platform/ofppc/1275tree.h`, the *32-bit* port's copy, but
+`platform/ofpower4/prom.cc` reads them. Added to
+`arch/powerpc64/1275tree.h` with the same values.
+
+**`kdb/platform/ofg5/reboot.cc`** calls `pg.set_entry()` with eight arguments
+against a six-argument member -- an older signature, from before rwx was
+packed into one word. `kdb/arch/powerpc64/macio.cc` does the same mapping
+correctly two files away, so the translation (`rwx == 6`, read|write, no
+execute) is not a guess.
+
+**`cmp 0, r10, r11`** in all three platforms' `head.S`. On powerpc64 `cmp`
+takes a leading L field; the three-operand spelling is the 32-bit form.
+`cmpw` is that encoding exactly, and the operands are physical addresses
+inside one image, so equality decides the same either way.
+
+**`@h` in the 64-bit address-load sequence.** `LD_ADDR`/`LD_LABEL` in
+`arch/powerpc64/asm.h`, plus one site each in `except.S` and the thread-switch
+asm, build a 64-bit address as highest/higher/shift/h/l. Current binutils
+makes `R_PPC64_ADDR16_HI` overflow-checked -- it belongs to the 32-bit
+`lis`/`addi` idiom and assumes the value sign-extends from bit 31 -- so every
+symbol at KERNEL_OFFSET (0xFFFE000000000000) is "truncated to fit". `@high`
+is the unchecked bits-16..31 relocation added for exactly this sequence.
+This one is a toolchain change, not a defect: the code was correct when it
+was written.
+
+### Where it stands
+
+    kernel .cc:  8, of which 3 are powerpc64 (ofpower3 x2, ofpower4 xics)
+    the other 5 are the unreachable set from §162
+
+ofppc, ppc44x and x86-x64-p4 all still build. The ofg5 kernel links; whether
+it *runs* is a separate question and a separate section -- the interrupt
+controller for this platform is entirely `UNIMPLEMENTED()` (§164), so the
+answer is probably not yet.

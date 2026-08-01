@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:	platform/ofpower4/prom.cc
+ * File path:	platform/ofpower4/prom.c
  * Description:	OpenFirmware Power4 Setup.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@ SECTION(".init") void of1275_tree_map( addr_t low, addr_t high )
     prom_print_hex( "1275 tree found at", (word_t)vaddr );
     prom_puts( "\n\r" );
 
-    PTRRELOC(get_of1275_tree())->init( (char *)vaddr );
+    of1275_tree_init( PTRRELOC(get_of1275_tree()), (char *)vaddr );
 }
 
 
@@ -61,17 +61,21 @@ SECTION(".init") void of1275_tree_map( addr_t low, addr_t high )
  * Finds and installs the position-independent copy of the
  * OpenFirmware device tree.
  */
-SECTION(".init") void of1275_tree_init( kernel_interface_page_t *kip )
+/* Renamed: of1275_tree_init is now the C entry point for the device tree
+   object itself (arch/powerpc64/1275tree.h), which this used to shadow. */
+SECTION(".init") static void install_of1275_tree( kernel_interface_page_t *kip )
 {
+    word_t i;
+
     // Look for the position-independent copy of the OpenFirmware device tree
     // in the kip's memory descriptors.
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ ) 
+    for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	if( (mdesc->type() == OF1275_KIP_TYPE) && 
-		(mdesc->subtype() == OF1275_KIP_SUBTYPE) )
+	memdesc_t *mdesc = memory_info_get_memdesc( &kip->memory_info, i );
+	if( (memdesc_type (mdesc) == OF1275_KIP_TYPE) &&
+		(memdesc_subtype (mdesc) == OF1275_KIP_SUBTYPE) )
 	{
-	    of1275_tree_map( mdesc->low(), mdesc->high() );
+	    of1275_tree_map( memdesc_low (mdesc), memdesc_high (mdesc) );
 	    return;
 	}
     }
@@ -79,7 +83,7 @@ SECTION(".init") void of1275_tree_init( kernel_interface_page_t *kip )
     // Not found.  Things won't work, but ...
     prom_puts( "*** Error: the boot loader didn't supply a copy of the\n\r"
 	       "*** Open Firmware device tree!\n\r" );
-    PTRRELOC(get_of1275_tree())->init( NULL );
+    of1275_tree_init( PTRRELOC(get_of1275_tree()), NULL );
 }
 
 
@@ -92,19 +96,23 @@ void SECTION(".init") init_plat( word_t ofentry )
     /* Initialise the Open Firmware interface used to setup the RTAS */
     of1275_client_interface_t *of = PTRRELOC(get_of1275());
     kernel_interface_page_t *kip = PTRRELOC(get_kip());
+    word_t pvr, cpu;
+    u32_t *prop_val, len, cpuid, cpu_hz, bus_hz;
+    of1275_device_t *chosen;
+    of1275_phandle_t cpu_pkg;
 
-    of->init(ofentry);
+    of1275_init( of, ofentry );
 
     /* Initialise position independant the device tree */
-    of1275_tree_init( kip );
+    install_of1275_tree( kip );
 
 #ifndef CONFIG_PLAT_OFG5
     /* Initialise the RTAS */
-    get_rtas()->init_arch();
+    rtas_init_arch( get_rtas() );
 #endif
 
-    word_t pvr = ppc64_get_pvr();
-    word_t cpu = (pvr>>16) & 0xffff;
+    pvr = ppc64_get_pvr();
+    cpu = (pvr>>16) & 0xffff;
 
     if (cpu == 0x35) prom_puts( "Detected Power4 (Spinnaker) " );
     else if (cpu == 0x38) prom_puts( "Detected Power4+	" );
@@ -119,19 +127,18 @@ void SECTION(".init") init_plat( word_t ofentry )
     prom_print_hex( "Revision", (pvr & 0xffff) );
     prom_puts( "\n\r" );
 
-    u32_t *prop_val, len, cpuid, cpu_hz, bus_hz;
-    of1275_device_t *chosen = PTRRELOC(get_of1275_tree())->find( "/chosen" );
+    chosen = of1275_tree_find( PTRRELOC(get_of1275_tree()), "/chosen" );
 
-    if ( !chosen->get_prop( "cpu", (char **)&prop_val, &len ))
+    if ( !of1275_device_get_prop( chosen, "cpu", (char **)&prop_val, &len ))
     {
 	prom_exit( "Unable get property \"cpu\" in /chosen\n\r" );
     }
-    of1275_phandle_t cpu_pkg = *prop_val;
-//    of1275_phandle_t cpu_pkg = of->instance_to_package( *prop_val );
-    of->get_prop( cpu_pkg, "reg", &cpuid, sizeof(cpu));
+    cpu_pkg = *prop_val;
+//    cpu_pkg = of1275_instance_to_package( of, *prop_val );
+    of1275_get_prop( of, cpu_pkg, "reg", &cpuid, sizeof(cpu));
 
-    of->get_prop( cpu_pkg, "clock-frequency", &cpu_hz, sizeof(cpu_hz));
-    of->get_prop( cpu_pkg, "bus-frequency", &bus_hz, sizeof(bus_hz));
+    of1275_get_prop( of, cpu_pkg, "clock-frequency", &cpu_hz, sizeof(cpu_hz));
+    of1275_get_prop( of, cpu_pkg, "bus-frequency", &bus_hz, sizeof(bus_hz));
     
     boot_cpuid = cpuid;
     boot_cpukhz = cpu_hz/1000;

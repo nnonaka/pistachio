@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2003, 2007,  National ICT Australia (NICTA)
+ * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/prepost.cc
- * Description:   
+ * File path:     glue/v4-powerpc64/rtas.c
+ * Description:   User-level interface to RTAS procedures
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,13 +26,44 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: prepost.cc,v 1.3 2004/06/04 06:49:14 cvansch Exp $
+ * $Id: rtas.cc,v 1.3 2004/06/04 06:38:41 cvansch Exp $
  *                
  ********************************************************************/
 
-#include <kdb/kdb.h>
+#include INC_API(tcb.h)
+#include INC_GLUE(syscalls.h)
+#include INC_ARCH(rtas.h)
+#include <kdb/tracepoints.h>
 
-static spinlock_t powerpc64_kdb_lock;
 
-bool kdb_t::pre() { powerpc64_kdb_lock.lock(); return true; }
-void kdb_t::post() { powerpc64_kdb_lock.unlock(); }
+DECLARE_TRACEPOINT (SYSCALL_RTAS_CALL);
+
+
+SYS_RTAS_CALL( word_t token, word_t nargs, word_t nret, word_t ptr )
+{
+    pgent_t * pg;
+    pgsize_e pgsize;
+    space_t * space = get_current_space();
+
+    /* See §167: the printf() was the macro's `str' argument. */
+    TRACEPOINT( SYSCALL_RTAS_CALL,
+		"SYS_RTAS_CALL: (token %d) (%d in, %d out) data: %p\n",
+			token, nargs, nret, ptr );
+
+    // invalid request - thread not privileged
+    if ( !is_privileged_space_c( space ) )
+	return -1ul;
+
+    /* Check for valid data */
+    if (! space_lookup_mapping_c( space, (addr_t)ptr, &pg, &pgsize) )
+	return -1ul;
+    if (! space_lookup_mapping_c( space, (addr_t)(ptr+16*8), &pg, &pgsize) )
+	return -1ul;
+
+    /* bounds check arguments */
+    if ( (nargs > 16) ||  (nret > 16) || (nargs + nret > 16) )
+	return -1ul;
+
+    return rtas_call_data( get_rtas(), (word_t *)ptr, token, nargs, nret );
+}
+

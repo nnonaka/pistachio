@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2005,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/platform/ofg5/reboot.cc
+ * File path:     kdb/platform/ofg5/reboot.c
  * Description:   G5 system reset
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -93,14 +93,14 @@ CMD (cmd_reboot, cg)
     u32_t len;
     u64_t pmu_phys;
 
-    if (!(pmu_dev = get_of1275_tree()->find_device_type( "via-pmu" )))
+    if (!(pmu_dev = of1275_tree_find_device_type( get_of1275_tree(), "via-pmu" )))
 	goto error;
 printf("pmu is %p\n", pmu_dev);
 
-    if (!(macio_dev = get_of1275_tree()->get_parent( pmu_dev )))
+    if (!(macio_dev = of1275_tree_get_parent( get_of1275_tree(), pmu_dev )))
 	goto error;
 
-    if (!macio_dev->get_prop( "device_type", (char**)&type, &len ))
+    if (!of1275_device_get_prop( macio_dev, "device_type", (char**)&type, &len ))
 	goto error;
 printf("mac-io is %p\n", macio_dev);
 
@@ -109,10 +109,10 @@ printf("invalid parent\n\r");
 	goto error;
     }
 
-    if (!macio_dev->get_prop( "assigned-addresses", (char**)&macio_ranges, &len ))
+    if (!of1275_device_get_prop( macio_dev, "assigned-addresses", (char**)&macio_ranges, &len ))
 	goto error;
 
-    if (!pmu_dev->get_prop( "reg", (char**)&pmu_ranges, &len ))
+    if (!of1275_device_get_prop( pmu_dev, "reg", (char**)&pmu_ranges, &len ))
 	goto error;
 
     pmu_phys = ((u64_t)macio_ranges[0].pci.addr.a_mid << 32) |
@@ -121,20 +121,27 @@ printf("invalid parent\n\r");
 
     {
 	pgent_t pg1, pg2;
-	pgent_t::pgsize_e size = pgent_t::size_4k;
+	pgsize_e size = size_4k;
 
 	/* Create a page table entry, noexecute, nocache */
-	pg1.set_entry( get_kernel_space(), size, (addr_t)(pmu_phys & ~(0xfff)),
-			true, true, false, true, pgent_t::cache_inhibit );
-	pg2.set_entry( get_kernel_space(), size, (addr_t)(((word_t)pmu_phys & ~(0xfff)) + 0x1000),
-			true, true, false, true, pgent_t::cache_inhibit );
+	/* Upstream passed eight arguments -- (space, size, paddr, readable,
+	   writable, executable, kernel, attrib) -- to a set_entry that has
+	   taken (space, size, paddr, rwx, attrib, kernel) for as long as
+	   pgent_inline.h has existed, so this call has never compiled.
+	   read|write and no execute is rwx == 6, which is exactly what
+	   kdb/arch/powerpc64/macio.c passes for the same kind of device
+	   mapping.  Notes §169. */
+	pgent_set_entry( &pg1, get_kernel_space(), size, (addr_t)(pmu_phys & ~(0xfff)),
+			6, cache_inhibit, true );
+	pgent_set_entry( &pg2, get_kernel_space(), size, (addr_t)(((word_t)pmu_phys & ~(0xfff)) + 0x1000),
+			6, cache_inhibit, true );
     
 	pmu_regs = (u8_t *)((word_t)pmu_phys | DEVICE_AREA_START);
 
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)((word_t)pmu_regs & ~(0xfff)), &pg1, size, true );
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)(((word_t)pmu_regs & ~(0xfff)) + 0x1000), &pg2, size, true );
 printf("pmu_regs = %p\n", pmu_regs);
     }

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *
- * File path:	kdb/arch/powerpc64/disas.cc
+ * File path:	kdb/arch/powerpc64/disas.c
  * Description:	Powerpc disassembler support.
  *
  * Redistribution and use in source and binary forms, with or without

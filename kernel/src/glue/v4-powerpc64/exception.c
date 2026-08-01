@@ -125,8 +125,12 @@ static void halt_user_thread( void )
     tcb_t *current = get_current_tcb();
 
     tcb_set_state (current, THREAD_STATE_HALTED);
-    sched_schedule (get_idle_tcb (), sched_handoff);
+    sched_schedule (get_idle_tcb_c (), sched_handoff);
 }
+
+/* Was tcb_t *get_kdebug_tcb() in the C++ header set; api/v4/smp.c compares
+   against it.  Same sentinel as glue/v4-powerpc/except_handlers.c. */
+tcb_t *get_kdebug_tcb (void) { return (tcb_t*)~0UL; }
 
 /* except_return() short circuits the C code return path.
  * We declare the exception handlers as noreturn, to avoid

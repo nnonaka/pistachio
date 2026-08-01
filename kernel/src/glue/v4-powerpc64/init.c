@@ -59,6 +59,11 @@ extern void init_serial_console(void);
 
 DECLARE_KMEM_GROUP(kmem_cpu);
 
+/* api/v4 refers to this; glue/v4-powerpc keeps it in cpu.c, which powerpc64
+   has no equivalent of.  Uniprocessor is the only configuration this port
+   has. */
+word_t cpu_count = 1;
+
 /*****************************************************************************
  *
  *                            Kip init
@@ -204,7 +209,7 @@ static SECTION(".init") void cpu_init( cpuid_t cpu )
 	spill_area[i] = 0;
 
     ppc64_set_sprg( SPRG_LOCAL, (word_t)cpu_spill );
-    ppc64_set_sprg( SPRG_TCB, (word_t)get_idle_tcb());
+    ppc64_set_sprg( SPRG_TCB, (word_t)get_idle_tcb_c ());
 }
 
 static SECTION(".init") void cpulocal_init( cpuid_t cpu )

@@ -160,7 +160,8 @@ do {									\
 } while(0)
 
 #define return_thread_control(result)	return_user_1param(result)
-#define return_ipc(from)		return_user_1param(from.get_raw())
+/* was from.get_raw(); threadid_t is a plain struct in C. */
+#define return_ipc(from)		return_user_1param((from).raw)
 #define return_memory_control(result)	return_user_1param (result)
 
 #define return_user_2param(param1, param2)				\

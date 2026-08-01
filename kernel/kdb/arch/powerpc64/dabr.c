@@ -2,8 +2,8 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     kdb/arch/powerpc64/stab.cc
- * Description:   Segment Table management commands
+ * File path:     kdb/arch/powerpc64/dabr.c
+ * Description:   Data Address Break Point Support
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,72 +26,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: stab.cc,v 1.3 2004/06/04 06:49:14 cvansch Exp $
+ * $Id: dabr.cc,v 1.3 2004/06/04 06:49:14 cvansch Exp $
  *                
  ********************************************************************/
 
 #include <debug.h>
 #include <kdb/cmd.h>
 #include <kdb/kdb.h>
+#include <kdb/input.h>
 
-#include INC_API(tcb.h)
-#include INC_ARCH(segment.h)
+#include INC_ARCH(ppc64_registers.h)
 
-
-DECLARE_CMD_GROUP (powerpc64_stab);
-
+static word_t last_dabr = 0;
 
 /**
- * cmd_powerpc64_stab: PowerPC64 Segemnt Table management.
+ * cmd_powerpc64_dabr_set: set powerpc64 dabr
  */
-DECLARE_CMD (cmd_powerpc64_stab, arch, 's', "stab", "segment table management");
+DECLARE_CMD (cmd_powerpc64_dabr_set, arch, 'b', "dabr", "set data address breakpoint");
 
-CMD(cmd_powerpc64_stab, cg)
+CMD(cmd_powerpc64_dabr_set, cg)
 {
-    return powerpc64_stab.interact (cg, "stab");
-}
+    word_t val = get_hex ("Address", last_dabr, "data address");
 
-extern tcb_t * kdb_get_tcb();
+    printf( "Setting break point to %p\n", val );
+    val = val & (~0x7ul);
+    last_dabr = val;
 
-/**
- * cmd_powerpc64_stab_dump: dump powerpc64 STAB
- */
-DECLARE_CMD (cmd_powerpc64_stab_dump, powerpc64_stab, 'd', "dump", "dump segment table");
+    val |= get_choice ("With translation", "y/n", 'y') == 'y' ? 0x4 : 0;
+    val |= get_choice ("Trap Writes", "y/n", 'y') == 'y' ? 0x2 : 0;
+    val |= get_choice ("Trap Reads", "y/n", 'y') == 'y' ? 0x1 : 0;
 
-CMD(cmd_powerpc64_stab_dump, cg)
-{
-    int i, j;
-    tcb_t * tcb = kdb_get_tcb();
-
-    if (tcb)
-    {
-	space_t *space = tcb->get_space();
-	if (!space) space = get_kernel_space();
-
-	ppc64_stab_t *stab = space->get_seg_table();
-
-	ppc64_ste_t *stegA, *stegB;
-
-	printf( "-------- Segment Table Dump --------\n" );
-	printf( "space = %p, segment table = %p\n\n", space, stab->get_stab() );
-
-	for( i = 0; i < 16; i ++ )
-	{
-	    j = (~i)&31;
-	    printf( "  ----- Segment Group %2d -----      |", i );
-	    printf( "  ----- Segment Group %2d -----\n", j );
-
-	    stegA = &((ppc64_ste_t *)stab->get_stab())[i*8];
-	    stegB = &((ppc64_ste_t *)stab->get_stab())[j*8];
-
-	    for( int k = 0; k < 8; k ++ )
-	    {
-		printf( "%p - %p | ", stegA[k].raw.word0, stegA[k].raw.word1 );
-		printf( "%p - %p\n", stegB[k].raw.word0, stegB[k].raw.word1 );
-	    }
-	}
-    }
-
+    ppc64_set_spr( SPR_DABR, val );
     printf( "\n" );
 
     return CMD_NOQUIT;

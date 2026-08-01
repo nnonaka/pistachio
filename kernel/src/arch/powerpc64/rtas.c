@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *
- * File path:	arch/powerpc64/rtas.cc
+ * File path:	arch/powerpc64/rtas.c
  * Description:	OpenFirmware Real Time Abstraction Service (RTAS) Interface.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,49 +44,54 @@ rtas_t rtas;
 extern addr_t kip_get_phys_mem( kernel_interface_page_t *kip );
 extern char _end_kernel_phys[];
 
-extern "C" void __call_rtas( void * arg );
+EXTERN_C void __call_rtas( void * arg );
 
-void rtas_args_t::setup( u32_t token, u32_t nargs, u32_t nret )
+/* were protected members of rtas_args_t */
+static void rtas_args_setup( rtas_args_t *self, u32_t token, u32_t nargs, u32_t nret )
 {
+    word_t i;
+
     ASSERT((nargs+nret) < 16);
 
-    this->token = token;
-    this->nargs = nargs;
-    this->nret  = nret;
-    this->rets  = (rtas_arg_t *)&(this->args[nargs]);
+    self->token = token;
+    self->nargs = nargs;
+    self->nret  = nret;
+    self->rets  = (rtas_arg_t *)&(self->args[nargs]);
 
-    for (word_t i = 0; i < nret; i++)
-	this->rets[i] = 0;
+    for (i = 0; i < nret; i++)
+	self->rets[i] = 0;
 }
 
-void rtas_args_t::set_arg( u32_t num, rtas_arg_t value )
+static void rtas_args_set_arg( rtas_args_t *self, u32_t num, rtas_arg_t value )
 {
-    this->args[num] = value;
+    self->args[num] = value;
 }
 
-rtas_arg_t rtas_args_t::get_ret( u32_t num )
+static rtas_arg_t rtas_args_get_ret( rtas_args_t *self, u32_t num )
 {
-    return this->rets[num];
+    return self->rets[num];
 }
+
+static bool rtas_try_location( rtas_t *self, word_t phys_start, word_t size );
 
 /* Initialise the RTAS
  * Note, we are running with relocation off.
  */
-void SECTION(".init") rtas_t::init_arch( void )
+void SECTION(".init") rtas_init_arch( rtas_t *self )
 {
     of1275_phandle_t prom_rtas;
 
-    this->base = 0;
-    this->entry = 0;
-    this->lock.init();
+    self->base = 0;
+    self->entry = 0;
+    spinlock_init (&self->lock, 0);
 
     prom_puts( "Initialising IBM RTAS extensions\n\r" );
 
-    rtas_dev = get_of1275_tree()->find( "/rtas" );
-    prom_rtas = get_of1275()->find_device( "/rtas" );
+    self->rtas_dev = of1275_tree_find( get_of1275_tree(), "/rtas" );
+    prom_rtas = of1275_find_device( get_of1275(), "/rtas" );
 
     // Sanity check 1275tree
-    ASSERT((u32_t)prom_rtas == rtas_dev->get_handle());
+    ASSERT((u32_t)prom_rtas == of1275_device_get_handle (self->rtas_dev));
 
     if (prom_rtas != OF1275_INVALID_PHANDLE)
     {
@@ -97,9 +102,9 @@ void SECTION(".init") rtas_t::init_arch( void )
 	kernel_interface_page_t * kip = get_kip();
 	bool found = false;
 
-	get_of1275()->get_prop( prom_rtas, "rtas-size", &rtas_size, sizeof(rtas_size));
+	of1275_get_prop( get_of1275(), prom_rtas, "rtas-size", &rtas_size, sizeof(rtas_size));
 
-	this->size = rtas_size;
+	self->size = rtas_size;
 
 	rtas_alloc_size = (word_t)addr_align_up ((addr_t)(word_t)rtas_size, POWERPC64_PAGE_SIZE);
 	
@@ -109,58 +114,58 @@ void SECTION(".init") rtas_t::init_arch( void )
 		phys_start < (total_mem - rtas_alloc_size); 
 		phys_start += KB(4))
 	{
-	    if( this->try_location(phys_start, rtas_alloc_size) )
+	    if( rtas_try_location(self, phys_start, rtas_alloc_size) )
 	    {
 		s32_t results[2];
 
 		found = true;
 		// Insert a KIP memory descriptor to protect the page hash.
-		kip->memory_info.insert( memdesc_t::reserved, false,
+		memory_info_insert( &kip->memory_info, MEMDESC_RESERVED, 0, false,
 		    (addr_t)phys_start, (addr_t)(phys_start + rtas_alloc_size) );
 
-		this->base = phys_start;
-		prom_rtas = get_of1275()->open( "/rtas" );
+		self->base = phys_start;
+		prom_rtas = of1275_open( get_of1275(), "/rtas" );
 
-		get_of1275()->call_method( prom_rtas, "instantiate-rtas",
-				    results, 2, 1, (u32_t)this->base);
+		of1275_call_method( get_of1275(), prom_rtas, "instantiate-rtas",
+				    results, 2, 1, (u32_t)self->base);
 
-		this->entry = results[1];
+		self->entry = results[1];
 		break;
 	    }
 	}
 	if (!found)
 	{
 	    prom_puts( "No physical area large enough for RTAS found\n\r" );
-	    get_of1275()->exit();
+	of1275_exit( get_of1275() );
 	}
     }
     else
     {
 	prom_puts( "RTAS extensions not found\n\r" );
-	get_of1275()->exit();
+	of1275_exit( get_of1275() );
     }
 
-    if (this->entry == 0)
+    if (self->entry == 0)
     {
 	prom_puts( "RTAS instatiate failed\n\r" );
-	get_of1275()->exit();
+	of1275_exit( get_of1275() );
     } else
     {
-	prom_print_hex( "RTAS installed at", this->base );
-	prom_print_hex( ", size", this->size );
+	prom_print_hex( "RTAS installed at", self->base );
+	prom_print_hex( ", size", self->size );
 	prom_puts( "\n\r" );
-	prom_print_hex( "RTAS entry", this->entry );
+	prom_print_hex( "RTAS entry", self->entry );
 	prom_puts( "\n\r" );
     }
 }
 
 
-bool rtas_t::get_token( const char *service, u32_t *token )
+bool rtas_get_token( rtas_t *self, const char *service, u32_t *token )
 {
     u32_t len;
     char *data;
 
-    if (rtas_dev->get_prop( service, &data, &len ))
+    if (of1275_device_get_prop( self->rtas_dev, service, &data, &len ))
     {
 	if (len == sizeof(u32_t))
 	{
@@ -174,86 +179,91 @@ bool rtas_t::get_token( const char *service, u32_t *token )
 /* These must be static global */
 static rtas_args_t rtas_args;
 
-word_t rtas_t::rtas_call( u32_t token, u32_t nargs, u32_t nret, word_t *outputs, ... )
+word_t rtas_call( rtas_t *self, u32_t token, u32_t nargs, u32_t nret, word_t *outputs, ... )
 {
     va_list list;
-    rtas_args.setup( token, nargs, nret );
+    word_t i;
+
+    rtas_args_setup( &rtas_args, token, nargs, nret );
 
     va_start(list, outputs);
-    for (word_t i = 0; i < nargs; i++)
-	rtas_args.set_arg( i, (rtas_arg_t)(va_arg(list, word_t) & 0xffffffff));
+    for (i = 0; i < nargs; i++)
+	rtas_args_set_arg( &rtas_args, i, (rtas_arg_t)(va_arg(list, word_t) & 0xffffffff));
     va_end(list);
 
-    this->lock.lock();
+    spinlock_lock (&self->lock);
 
     __call_rtas((void *)virt_to_phys(&rtas_args));
 
-    this->lock.unlock();
+    spinlock_unlock (&self->lock);
 
     if (nret > 1 && outputs != NULL)
-        for (word_t i = 0; i < nret-1; ++i)
-	    outputs[i] = rtas_args.get_ret(i+1);
+        for (i = 0; i < nret-1; ++i)
+	    outputs[i] = rtas_args_get_ret(&rtas_args, i+1);
 
-    return (word_t)((nret > 0) ? rtas_args.get_ret(0) : 0);
+    return (word_t)((nret > 0) ? rtas_args_get_ret(&rtas_args, 0) : 0);
 }
 
-word_t rtas_t::rtas_call( word_t *data, u32_t token, u32_t nargs, u32_t nret )
+word_t rtas_call_data( rtas_t *self, word_t *data, u32_t token, u32_t nargs, u32_t nret )
 {
-    rtas_args.setup( token, nargs, nret );
+    word_t i;
 
-    for (word_t i = 0; i < nargs; i++)
-	rtas_args.set_arg( i, data[i] & 0xffffffff );
+    rtas_args_setup( &rtas_args, token, nargs, nret );
 
-    this->lock.lock();
+    for (i = 0; i < nargs; i++)
+	rtas_args_set_arg( &rtas_args, i, data[i] & 0xffffffff );
+
+    spinlock_lock (&self->lock);
 
     __call_rtas((void *)virt_to_phys(&rtas_args));
 
-    this->lock.unlock();
+    spinlock_unlock (&self->lock);
 
     if (nret > 1 )
-        for (word_t i = 0; i < nret-1; ++i)
-	    data[nargs + i] = rtas_args.get_ret(i+1);
+        for (i = 0; i < nret-1; ++i)
+	    data[nargs + i] = rtas_args_get_ret(&rtas_args, i+1);
 
-    return (word_t)((nret > 0) ? rtas_args.get_ret(0) : 0);
+    return (word_t)((nret > 0) ? rtas_args_get_ret(&rtas_args, 0) : 0);
 }
 
-void rtas_t::machine_restart( void )
+void rtas_machine_restart( rtas_t *self )
 {
     u32_t reboot_token;
 
-    get_token( "system-reboot", &reboot_token );
-    rtas_call( reboot_token, 0, 1, NULL );
+    rtas_get_token( self, "system-reboot", &reboot_token );
+    rtas_call( self, reboot_token, 0, 1, NULL );
 
     /* We should never get here */
     asm volatile (".long 0x00000000;");
 }
 
-void rtas_t::machine_power_off( void )
+void rtas_machine_power_off( rtas_t *self )
 {
     u32_t poweroff_token;
 
-    get_token( "power-off", &poweroff_token );
-    rtas_call( poweroff_token, 0, 1, NULL );
+    rtas_get_token( self, "power-off", &poweroff_token );
+    rtas_call( self, poweroff_token, 0, 1, NULL );
 
     /* We should never get here */
     asm volatile (".long 0x00000000;");
 }
 
-void rtas_t::machine_halt( void )
+void rtas_machine_halt( rtas_t *self )
 {
     u32_t poweroff_token;
 
-    get_token( "power-off", &poweroff_token );
-    rtas_call( poweroff_token, 0, 1, NULL );
+    rtas_get_token( self, "power-off", &poweroff_token );
+    rtas_call( self, poweroff_token, 0, 1, NULL );
 
     /* We should never get here */
     asm volatile (".long 0x00000000;");
 }
 
-SECTION(".init") bool rtas_t::try_location( word_t phys_start, word_t size )
+static SECTION(".init") bool rtas_try_location( rtas_t *self, word_t phys_start, word_t size )
 {
     kernel_interface_page_t *kip = get_kip();
     word_t phys_end = phys_start + size;
+    word_t i;
 
     if ((word_t)get_kip()->sigma0.mem_region.high > phys_start)
 	return false;
@@ -266,14 +276,16 @@ SECTION(".init") bool rtas_t::try_location( word_t phys_start, word_t size )
     // Walk through the KIP's memory descriptors and search for any
     // reserved memory regions that collide with our intended memory
     // allocation.
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ )
+    for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	if( (mdesc->type() == memdesc_t::conventional) || mdesc->is_virtual() )
+	memdesc_t *mdesc = memory_info_get_memdesc( &kip->memory_info, i );
+	word_t low, high;
+
+	if( (memdesc_type (mdesc) == MEMDESC_CONVENTIONAL) || memdesc_is_virtual (mdesc) )
 	    continue;
 
-	word_t low = (word_t)mdesc->low();
-	word_t high = (word_t)mdesc->high();
+	low = (word_t)memdesc_low (mdesc);
+	high = (word_t)memdesc_high (mdesc);
 
 	if( (phys_start < low) && (phys_end > high) )
 	    return false;
