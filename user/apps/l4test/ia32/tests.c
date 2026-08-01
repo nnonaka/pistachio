@@ -29,21 +29,21 @@ volatile L4_Word_t zero = 0;
 
 void exc (void)
 {
-    L4_Set_ExceptionHandler(L4_Pager());
+    L4_Set_ExceptionHandler(L4_Pager ());
     __attribute__(( unused )) volatile int x = 1 / zero;
 }
 
 void exc2 (void)
 {
     print_result("IPC ctrlxfer handling", true);
-    L4_Send(L4_Pager());
+    L4_Send(L4_Pager ());
     __attribute__(( unused )) volatile int x = 1 / zero;
 }
 
 void exc3 (void)
 {
     print_result("ExRegs ctrlxfer write", true);
-    L4_Send(L4_Pager());
+    L4_Send(L4_Pager ());
     while (1);
 }
 
@@ -51,7 +51,7 @@ void exception_test(void)
 
 {
     L4_KernelInterfacePage_t * kip =
-	(L4_KernelInterfacePage_t *) L4_KernelInterface ();
+	(L4_KernelInterfacePage_t *) L4_GetKernelInterface ();
     
     L4_Word_t utcb_size = L4_UtcbSize (kip); 
     L4_MsgTag_t tag;
@@ -69,23 +69,22 @@ void exception_test(void)
 	q = *(volatile L4_Word_t*) x;
     }
 
-    exc_tid = create_thread();
+    exc_tid = create_thread (false, -1, 0);
 
     
-    L4_Start (exc_tid, (L4_Word_t) exc_stack + sizeof(exc_stack) - 32,
-	      START_ADDR (exc));
+    L4_Start_SpIp (exc_tid, (L4_Word_t) exc_stack + sizeof(exc_stack) - 32, START_ADDR (exc));
 
     /* Test Exception IPC */
 
     
     tag = L4_Receive (exc_tid);
-    L4_Store (tag, &exc_msg);
+    L4_MsgStore (tag, &exc_msg);
 
 
     //printf ("ExcHandler got msg from %p (%p, %p, %p, %p, %p)\n",
     //    (void *) tid.raw, (void *) tag.raw,
-    //    (void *) L4_Get (&exc_msg, 0), (void *) L4_Get (&exc_msg, 1),
-    //    (void *) L4_Get (&exc_msg, 2), (void *) L4_Get (&exc_msg, 3));;
+    //    (void *) L4_MsgWord (&exc_msg, 0), (void *) L4_MsgWord (&exc_msg, 1),
+    //    (void *) L4_MsgWord (&exc_msg, 2), (void *) L4_MsgWord (&exc_msg, 3));;
     
     print_result("IA32 exception IPC handling", true);
 
@@ -102,7 +101,7 @@ void ctrlxfer_test(void)
     }
 
     L4_KernelInterfacePage_t * kip =
-	(L4_KernelInterfacePage_t *) L4_KernelInterface ();
+	(L4_KernelInterfacePage_t *) L4_GetKernelInterface ();
     
     L4_Word_t utcb_size = L4_UtcbSize (kip); 
     L4_MsgTag_t tag;
@@ -126,23 +125,22 @@ void ctrlxfer_test(void)
 	q = *(volatile L4_Word_t*) x;
     }
 
-    exc_tid = create_thread();
+    exc_tid = create_thread (false, -1, 0);
     
     /* Set exception ctrlxfer mask */
     L4_Word64_t fault_id_mask = (1<<2) | (1<<3) | (1<<5);
     L4_Word_t fault_mask = L4_CTRLXFER_FAULT_MASK(L4_CTRLXFER_GPREGS_ID);
-    L4_Clear(&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
     L4_AppendFaultConfCtrlXferItems(&ctrlxfer_msg, fault_id_mask, fault_mask, 0);
-    L4_Load(&ctrlxfer_msg);
+    L4_MsgLoad (&ctrlxfer_msg);
     L4_ConfCtrlXferItems(exc_tid);
  
-    L4_Start (exc_tid, (L4_Word_t) exc_stack + sizeof(exc_stack) - 32,
-	      START_ADDR (exc));
+    L4_Start_SpIp (exc_tid, (L4_Word_t) exc_stack + sizeof(exc_stack) - 32, START_ADDR (exc));
 
     /* Test Exception IPC */
     
     tag = L4_Receive (exc_tid);
-    L4_Store (tag, &ctrlxfer_msg);
+    L4_MsgStore (tag, &ctrlxfer_msg);
 
     /* Test Exception IPC Reply */
     L4_GPRegsCtrlXferItemInit(&gpr_item); 
@@ -152,13 +150,13 @@ void ctrlxfer_test(void)
     L4_GPRegsCtrlXferItemSet(&gpr_item, L4_CTRLXFER_GPREGS_ESP,  esp);
 
 	
-    L4_Clear (&ctrlxfer_msg);
-    L4_Append(&ctrlxfer_msg, &gpr_item);
-    L4_Load (&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
+    L4_MsgAppendWord (&ctrlxfer_msg, &gpr_item);
+    L4_MsgLoad (&ctrlxfer_msg);
     tag = L4_ReplyWait (exc_tid, &tid);
     
     tag = L4_Receive (exc_tid);
-    L4_Store (tag, &ctrlxfer_msg);
+    L4_MsgStore (tag, &ctrlxfer_msg);
     /* Test Exregs Read */ 
     gpr_item_ptr = (L4_GPRegsCtrlXferItem_t *) &ctrlxfer_msg.msg[ctrlxfer_msg.tag.X.u + 1];
 	
@@ -170,14 +168,14 @@ void ctrlxfer_test(void)
     L4_GPRegsCtrlXferItemSet(&gpr_item, L4_CTRLXFER_GPREGS_EIP, 0);
     L4_GPRegsCtrlXferItemSet(&gpr_item, L4_CTRLXFER_GPREGS_ESP, 0);
 	
-    L4_Clear (&ctrlxfer_msg);
-    L4_Append(&ctrlxfer_msg, &gpr_item);
-    L4_Load (&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
+    L4_MsgAppendWord (&ctrlxfer_msg, &gpr_item);
+    L4_MsgLoad (&ctrlxfer_msg);
 	
     L4_ExchangeRegisters (exc_tid, (1<<12), 0, 0 , 0, 0, L4_nilthread,
 			  &old_control, &dummy, &dummy, &dummy, &dummy, &tid);
 	
-    L4_Store (tag, &ctrlxfer_msg);
+    L4_MsgStore (tag, &ctrlxfer_msg);
     gpr_item_ptr = (L4_GPRegsCtrlXferItem_t *) &ctrlxfer_msg.msg[ctrlxfer_msg.tag.X.u + 1];
 	
     item = gpr_item_ptr->item;
@@ -197,16 +195,16 @@ void ctrlxfer_test(void)
 
     L4_GPRegsCtrlXferItemSet(&gpr_item, L4_CTRLXFER_GPREGS_EIP, eip);
     L4_GPRegsCtrlXferItemSet(&gpr_item, L4_CTRLXFER_GPREGS_ESP, esp);
-    L4_Clear (&ctrlxfer_msg);
-    L4_Append(&ctrlxfer_msg, &gpr_item);
-    L4_Load (&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
+    L4_MsgAppendWord (&ctrlxfer_msg, &gpr_item);
+    L4_MsgLoad (&ctrlxfer_msg);
 	
     L4_ExchangeRegisters (exc_tid, L4_EXREGS_CTRLXFER_WRITE_FLAG, 0, 0 , 0, 0, L4_nilthread,
 			  &old_control, &dummy, &dummy, &dummy, &dummy, &tid);
 
     
-    L4_Clear (&ctrlxfer_msg);
-    L4_Load (&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
+    L4_MsgLoad (&ctrlxfer_msg);
     tag = L4_ReplyWait (exc_tid, &tid);
 
     kill_thread( exc_tid );

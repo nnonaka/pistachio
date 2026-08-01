@@ -106,11 +106,15 @@ void start_thread( L4_ThreadId_t tid, L4_Word_t ip, L4_Word_t sp );
 
 /* Thread/address space management */
 L4_ThreadId_t get_new_tid (void);
-L4_ThreadId_t create_thread (bool new_space = false, int cpu = -1, L4_Word_t spacectrl = 0);
-L4_ThreadId_t create_thread (void (*func)(void), bool new_space = false,
-			     int cpu = -1, L4_Word_t spacectrl = 0);
+/* create_thread was overloaded on whether a start function is given, and
+   defaulted new_space/cpu/spacectrl.  Distinct names in C, with the defaults
+   -- false, -1, 0 -- written out at the call sites that took them. */
+L4_ThreadId_t create_thread (bool new_space, int cpu, L4_Word_t spacectrl);
+L4_ThreadId_t create_thread_func (void (*func)(void), bool new_space,
+				  int cpu, L4_Word_t spacectrl);
 L4_Word_t kill_thread (L4_ThreadId_t tid);
-void start_thread (L4_ThreadId_t tid, void (*func)(void));
+/* start_thread was overloaded: by ip/sp above, and by start function. */
+void start_thread_func (L4_ThreadId_t tid, void (*func)(void));
 
 
 /* architecture helper functions */

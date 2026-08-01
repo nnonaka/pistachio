@@ -3,7 +3,7 @@
  * Copyright (C) 1999-2010,  Karlsruhe University
  * Copyright (C) 2008-2009,  Volkmar Uhlig, IBM Corporation
  *                
- * File path:     apps/l4test/powerpc/tests.cc
+ * File path:     apps/l4test/powerpc/tests.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -50,14 +50,14 @@
 #define GENERIC_EXC_MR_LOCAL_ID	5
 #define GENERIC_EXC_MR_MAX	6
 
-#define GENERIC_EXC_LABEL	(L4_Word_t(((-5 << 4) << 16)) >> 16)
+#define GENERIC_EXC_LABEL	(((L4_Word_t)(((-5 << 4) << 16))) >> 16)
 
 #define SC_EXC_MR_IP		9
 #define SC_EXC_MR_SP		10
 #define SC_EXC_MR_FLAGS		11
 #define SC_EXC_MR_MAX		12
 
-#define SC_EXC_LABEL		(L4_Word_t(((-5 << 4) << 16)) >> 16)
+#define SC_EXC_LABEL		(((L4_Word_t)(((-5 << 4) << 16))) >> 16)
 
 #define GENERIC_EXC_SUCCESS	1
 #define SYSCALL_EXC_SUCCESS	2
@@ -102,7 +102,7 @@ static void except_handler_thread( void )
 	    if( ipc_error(tag) )
 		break;
 
-    	    L4_Store( tag, &msg );
+    	    L4_MsgStore (tag, &msg);
 
     	    if( (L4_Label(tag) == GENERIC_EXC_LABEL) && 
     		    (L4_UntypedWords(tag) == GENERIC_EXC_MR_MAX) )
@@ -112,19 +112,19 @@ static void except_handler_thread( void )
 		int response = GENERIC_EXC_SUCCESS;
     		dprintf( "generic exception: ip %lx, sp %lx, flags %lx\n"
 			"                   no %lx, code %lx, local ID %lx\n",
-    			L4_Get(&msg, GENERIC_EXC_MR_IP),
-    			L4_Get(&msg, GENERIC_EXC_MR_SP),
-    			L4_Get(&msg, GENERIC_EXC_MR_FLAGS),
-    			L4_Get(&msg, GENERIC_EXC_MR_NO),
-    			L4_Get(&msg, GENERIC_EXC_MR_CODE),
-    			L4_Get(&msg, GENERIC_EXC_MR_LOCAL_ID)
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_IP),
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_SP),
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_FLAGS),
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_NO),
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_CODE),
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_LOCAL_ID)
     		      );
 
 		// Increment the instruction pointer and reply
 		// to the excepting thread.
     		L4_MsgPutWord( &msg, GENERIC_EXC_MR_IP,
-    			L4_Get(&msg, GENERIC_EXC_MR_IP) + 4 );
-		L4_Load( &msg );
+    			L4_MsgWord (&msg, GENERIC_EXC_MR_IP) + 4 );
+		L4_MsgLoad (&msg);
 
 		tot++;
 		if( tot >= TOT_EXCEPTIONS )
@@ -137,8 +137,8 @@ static void except_handler_thread( void )
 
 		    // Tell the controller thread that we finished the test.
 		    tag.raw = 0;
-		    L4_Set_Label( &tag, response );
-		    L4_Clear( &msg );
+		    L4_Set_MsgLabel (&tag, response);
+		    L4_MsgClear (&msg);
 		    L4_Set_MsgMsgTag( &msg, tag );
 		    tid = controller_tid;
 		}
@@ -150,15 +150,15 @@ static void except_handler_thread( void )
 		static L4_Word_t tot = 0;
 		int response = SYSCALL_EXC_SUCCESS;
     		dprintf( "syscall exception from %lx: ip %lx, sp %lx, flags %lx\n",
-    			L4_GlobalId(tid).raw,
-    			L4_Get(&msg, SC_EXC_MR_IP),
-    			L4_Get(&msg, SC_EXC_MR_SP),
-    			L4_Get(&msg, SC_EXC_MR_FLAGS)
+    			L4_GlobalIdOf (tid).raw,
+    			L4_MsgWord (&msg, SC_EXC_MR_IP),
+    			L4_MsgWord (&msg, SC_EXC_MR_SP),
+    			L4_MsgWord (&msg, SC_EXC_MR_FLAGS)
     		      );
 
 		// Reply to the faulting thread.  Don't touch the
 		// instruction pointer!!
-		L4_Load( &msg );
+		L4_MsgLoad (&msg);
 
 		tot++;
 		if( tot >= TOT_EXCEPTIONS )
@@ -171,8 +171,8 @@ static void except_handler_thread( void )
 
 		    // Tell the controller thread that we finished the test.
 		    tag.raw = 0;
-		    L4_Set_Label( &tag, response );
-		    L4_Clear( &msg );
+		    L4_Set_MsgLabel (&tag, response);
+		    L4_MsgClear (&msg);
 		    L4_Set_MsgMsgTag( &msg, tag );
 		    tid = controller_tid;
 		}
@@ -186,13 +186,13 @@ static void except_handler_thread( void )
 		// Tell the controller thread that we received an
 		// unexpected result.
 		tag.raw = 0;
-		L4_Set_Label( &tag, 0 );
-		L4_Clear( &msg );
+		L4_Set_MsgLabel (&tag, 0);
+		L4_MsgClear (&msg);
 		L4_Set_MsgMsgTag( &msg, tag );
 		tid = controller_tid;
     	    }
 
-    	    L4_Load( &msg );
+    	    L4_MsgLoad (&msg);
     	    tag = L4_ReplyWait( tid, &tid );
 	}
     }
@@ -204,9 +204,9 @@ static void subject_thread( void )
     L4_Msg_t msg;
 
     dprintf( "controller tid: %lx, handler tid: %lx\n",
-	    L4_GlobalId(controller_tid).raw, handler_tid.raw );
+	    L4_GlobalIdOf (controller_tid).raw, handler_tid.raw );
 
-    L4_Set_ExceptionHandler( L4_GlobalId(handler_tid) );
+    L4_Set_ExceptionHandler( L4_GlobalIdOf (handler_tid) );
 
     if( which_test == GENERIC_EXC_SUCCESS )
     {
@@ -230,10 +230,10 @@ static void subject_thread( void )
 
     // Tell the controller thread that we finished the exception test.
     tag.raw = 0;
-    L4_Set_Label( &tag, which_test );
-    L4_Clear( &msg );
+    L4_Set_MsgLabel (&tag, which_test);
+    L4_MsgClear (&msg);
     L4_Set_MsgMsgTag( &msg, tag );
-    L4_Load( &msg );
+    L4_MsgLoad (&msg);
     L4_Send( controller_tid );
 }
 
@@ -246,10 +246,10 @@ static void exception_tests( L4_Word_t test_choice, const char *test_msg )
     // Start tests and initialize global values.
     which_test = test_choice;
     controller_tid = L4_Myself();
-    tid = create_thread( except_handler_thread, false, -1 );
-    handler_tid = L4_GlobalId(tid);
-    tid = create_thread( subject_thread, false, -1 );
-    subject_tid = L4_GlobalId(tid);
+    tid = create_thread_func (except_handler_thread, false, -1, 0);
+    handler_tid = L4_GlobalIdOf (tid);
+    tid = create_thread_func (subject_thread, false, -1, 0);
+    subject_tid = L4_GlobalIdOf (tid);
 
     dprintf( "handler tid %lx, subject tid %lx, controller tid %lx\n",
 	    handler_tid.raw, subject_tid.raw, L4_Myself().raw );
@@ -260,21 +260,21 @@ static void exception_tests( L4_Word_t test_choice, const char *test_msg )
     L4_MsgTag_t tag;
 
     tag = L4_Wait( &tid );
-    tid = L4_GlobalId( tid );
-    if( ((tid != subject_tid) && (tid != handler_tid))
+    tid = L4_GlobalIdOf (tid);
+    if( ((! L4_IsThreadEqual (tid, subject_tid)) && (! L4_IsThreadEqual (tid, handler_tid)))
 	    || ipc_error(tag) || (L4_Label(tag) != which_test) )
     {
 	print_result( test_msg, false );
 	goto clean;
     }
-    else if( tid == handler_tid )
+    else if( L4_IsThreadEqual (tid, handler_tid) )
 	next_tid = subject_tid;
-    else if( tid == subject_tid )
+    else if( L4_IsThreadEqual (tid, subject_tid) )
 	next_tid = handler_tid;
 
     tag = L4_Wait( &tid );
-    tid = L4_GlobalId( tid );
-    if( (tid != next_tid)
+    tid = L4_GlobalIdOf (tid);
+    if( (! L4_IsThreadEqual (tid, next_tid))
 	    || ipc_error(tag) || (L4_Label(tag) != which_test) )
     {
 	print_result( test_msg, false );
@@ -297,8 +297,8 @@ static void exception_unwind_test( L4_Word_t test_choice, const char *test_msg)
     which_test = test_choice;
     controller_tid = L4_Myself();
     handler_tid = L4_Myself();
-    tid = create_thread( subject_thread, false, -1 );
-    subject_tid = L4_GlobalId(tid);
+    tid = create_thread_func (subject_thread, false, -1, 0);
+    subject_tid = L4_GlobalIdOf (tid);
 
     /*  Wait for results.
      */
@@ -307,8 +307,8 @@ static void exception_unwind_test( L4_Word_t test_choice, const char *test_msg)
 	(which_test == GENERIC_EXC_SUCCESS) ?  GENERIC_EXC_LABEL:SC_EXC_LABEL;
 
     tag = L4_Wait( &tid );
-    tid = L4_GlobalId( tid );
-    if( (tid != subject_tid) 
+    tid = L4_GlobalIdOf (tid);
+    if( (! L4_IsThreadEqual (tid, subject_tid)) 
 	    || ipc_error(tag) || (L4_Label(tag) != label) )
     {
 	print_result( test_msg, false );
@@ -337,9 +337,9 @@ static void unhandled_exception_thread( void )
 
     // Tell the controller that we have finished.
     L4_Msg_t msg;
-    L4_Clear( &msg );
-    L4_Set_Label( &msg.tag, 0 );
-    L4_Load( &msg );
+    L4_MsgClear (&msg);
+    L4_Set_MsgLabel (&msg.tag, 0);
+    L4_MsgLoad (&msg);
     L4_Send( controller_tid );
 }
 
@@ -347,8 +347,8 @@ static void unhandled_exception_test( void )
 {
     controller_tid = L4_Myself();
 
-    L4_ThreadId_t tid = create_thread( unhandled_exception_thread, false, -1 );
-    subject_tid = L4_GlobalId(tid);
+    L4_ThreadId_t tid = create_thread_func (unhandled_exception_thread, false, -1, 0);
+    subject_tid = L4_GlobalIdOf (tid);
 
     L4_ThreadSwitch( subject_tid );
 
@@ -365,20 +365,20 @@ static void unhandled_exception_test( void )
     else
     {
 	extern char __trigger[];
-	L4_Word_t trigger_ip = L4_Word_t(__trigger);
+	L4_Word_t trigger_ip = (L4_Word_t)(__trigger);
 	print_result( "Unhandled exception test", (trigger_ip == ip) );
     }
 
     // Restart the halted thread, after the faulting instruction.
     ip += 4;
-    L4_Start( L4_LocalId(subject_tid), sp, ip );
+    L4_Start_SpIp (L4_LocalIdOf (subject_tid), sp, ip);
 
     // Wait for the subject thread to finish.
     L4_MsgTag_t tag;
     tag = L4_Wait( &tid );
-    tid = L4_GlobalId( tid );
+    tid = L4_GlobalIdOf (tid);
     print_result( "Unhandled exception resume", 
-	    (tid == subject_tid) && (L4_Label(tag) == 0) );
+	    (L4_IsThreadEqual (tid, subject_tid)) && (L4_Label(tag) == 0) );
 
 clean:
     dprintf( "shutting down ...\n" );
@@ -432,7 +432,7 @@ static void syscall_unwind_test( void )
 #define SPR_PVR		287
 
 
-#define TEST_MFSPR(x)     asm volatile("mfspr 0, %0\n" : :"i"(x))
+#define TEST_MFSPR(x)     __asm__ __volatile__("mfspr 0, %0\n" : :"i"(x))
 
 inline L4_Word_t fault_id(L4_MsgTag_t tag)
 {
@@ -459,7 +459,7 @@ static void vmm_thread( void )
 	    continue;
 	}
 
-	L4_Store (tag, &msg);
+	L4_MsgStore (tag, &msg);
 
 	printf("got message from %lx (tag: %x, l: %x/%d, t:%d, u:%d)\n", 
 	       stid.raw, tag.raw, L4_Label(tag), fault_id(tag),
@@ -470,27 +470,27 @@ static void vmm_thread( void )
 	if (fault == 2 && L4_UntypedWords(tag) == 2 && L4_TypedWords (tag) == 0)
 	{
 	    /* pagefault */
-	    fp = L4_FpageLog2 (L4_Get (&msg, 0), PAGE_BITS) + L4_FullyAccessible;
-	    L4_Clear (&msg);
-	    L4_Append (&msg,  L4_MapItem (fp, L4_Address(fp)));
-	    L4_Load (&msg);
+	    fp = L4_FpageAddRights (L4_FpageLog2 (L4_MsgWord (&msg, 0), PAGE_BITS), L4_FullyAccessible);
+	    L4_MsgClear (&msg);
+	    L4_MsgAppendMapItem (&msg, L4_MapItem (fp, L4_Address(fp)));
+	    L4_MsgLoad (&msg);
 	    dtid = stid;
 	}
 	else if (fault >= 4 && fault < 20)
 	{
-	    L4_Word_t ip = L4_Get(&msg, 1);
+	    L4_Word_t ip = L4_MsgWord (&msg, 1);
 	    L4_GPRegsXCtrlXferItem_t gprx_item;
 
 	    /* virtualization fault */
 	    printf("virtualization fault %d\n", fault - 4);
 	    printf("ip: %08x, instr: %08x, msr: %08x\n",
-		   L4_Get(&msg, 0), ip, L4_Get(&msg, 2));
+		   L4_MsgWord (&msg, 0), ip, L4_MsgWord (&msg, 2));
 	    
-	    L4_Init(&gprx_item);
-	    L4_Set(&gprx_item, L4_CTRLXFER_GPREGS_IP, ip + 4);
-	    L4_Clear(&msg);
-	    L4_Append(&msg, &gprx_item);
-	    L4_Load (&msg);
+	    L4_GPRegsXCtrlXferItemInit(&gprx_item);
+	    L4_GPRegsXCtrlXferItemSet(&gprx_item, L4_CTRLXFER_GPREGS_IP, ip + 4);
+	    L4_MsgClear (&msg);
+	    L4_MsgAppendGPRegsXCtrlXferItem (&msg, &gprx_item);
+	    L4_MsgLoad (&msg);
 	    dtid = stid;
 	}
 	else
@@ -533,8 +533,8 @@ static void vm_test_thread( void )
 #endif
 
     while(1) {
-	asm("mtdcrx %0, %1\n" : : "r"(0xc00), "r"(0x1234));
-	asm("mfdcrx %0, %1\n" : : "r"(0xc00), "r"(0x1234));
+	__asm__("mtdcrx %0, %1\n" : : "r"(0xc00), "r"(0x1234));
+	__asm__("mfdcrx %0, %1\n" : : "r"(0xc00), "r"(0x1234));
     }
 }
 
@@ -558,13 +558,13 @@ static void hvm_test( void )
     L4_Word_t fault_mask = L4_CTRLXFER_FAULT_MASK(L4_CTRLXFER_GPREGS0) | 
 	L4_CTRLXFER_FAULT_MASK(L4_CTRLXFER_GPREGS1) | 
 	L4_CTRLXFER_FAULT_MASK(L4_CTRLXFER_GPREGSX);
-    L4_Clear(&ctrlxfer_msg);
+    L4_MsgClear (&ctrlxfer_msg);
     L4_AppendFaultConfCtrlXferItems(&ctrlxfer_msg, fault_id_mask, fault_mask, 0);
-    L4_Load(&ctrlxfer_msg);
+    L4_MsgLoad (&ctrlxfer_msg);
     L4_ConfCtrlXferItems(t1);
 
     printf("starting thread\n");
-    start_thread (t1, vm_test_thread);
+    start_thread_func (t1, vm_test_thread);
     vmm_thread();
     kill_thread(t1);
 }

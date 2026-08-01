@@ -3,7 +3,7 @@
  * Copyright (C) 1999-2010,  Karlsruhe University
  * Copyright (C) 2008-2009,  Volkmar Uhlig, IBM Corporation
  *                
- * File path:     apps/l4test/threads.cc
+ * File path:     apps/l4test/threads.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -63,7 +63,7 @@ create_thread (bool new_space, int cpu, L4_Word_t spacectrl)
 
     if (! initialized)
     {
-	kip = L4_KernelInterface ();
+	kip = L4_GetKernelInterface ();
 
 	// Put the kip at the same location in all address spaces
 	// to make sure we can reuse the syscall jump table.
@@ -119,10 +119,10 @@ create_thread (bool new_space, int cpu, L4_Word_t spacectrl)
 
 
 L4_ThreadId_t
-create_thread (void (*func)(void), bool new_space, int cpu, L4_Word_t spacectrl)
+create_thread_func (void (*func)(void), bool new_space, int cpu, L4_Word_t spacectrl)
 {
     L4_ThreadId_t tid = create_thread (new_space, cpu, spacectrl);
-    start_thread (tid, func);
+    start_thread_func (tid, func);
     return tid;
 }
 
@@ -135,7 +135,7 @@ kill_thread (L4_ThreadId_t tid)
 
 
 void
-start_thread (L4_ThreadId_t tid, void (*func)(void))
+start_thread_func (L4_ThreadId_t tid, void (*func)(void))
 {
     L4_Msg_t msg;
     L4_Word_t ip, sp;
@@ -157,10 +157,10 @@ start_thread (L4_ThreadId_t tid, void (*func)(void))
      */
     { volatile L4_Word_t *entry = (volatile L4_Word_t *) ip; (void) *entry; }
 
-    L4_Clear (&msg);
-    L4_Append (&msg, ip);
-    L4_Append (&msg, sp);
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendWord (&msg, ip);
+    L4_MsgAppendWord (&msg, sp);
+    L4_MsgLoad (&msg);
 
     L4_Send (tid);
 }

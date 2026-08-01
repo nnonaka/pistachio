@@ -74,7 +74,7 @@ run_a_thread(void)
 	setup_exreg( &ip, &sp, printy_thread );
 
 	/* get a TID */
-	tid = create_thread();
+	tid = create_thread (false, -1, 0);
 
 	/* touch the entry point */
 	safe_mem_touch( code_addr( (void*) printy_thread ) );
@@ -112,7 +112,7 @@ tc_then_exreg(void)
 	setup_exreg( &ip, &sp, print_ok_thread );
 
 	/* get a TID */
-	tid = create_thread();
+	tid = create_thread (false, -1, 0);
 
 	/* touch the entry point */
 	safe_mem_touch( code_addr( (void*) print_ok_thread  ) );

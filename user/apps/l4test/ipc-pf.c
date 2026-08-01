@@ -43,7 +43,7 @@
 
 void setup_ipc_threads (void (*f1)(void), void (*f2)(void),
 			bool rcv_same_space, bool snd_same_space,
-			bool xcpu = false);
+			bool xcpu);
 
 extern L4_ThreadId_t ipc_t1;
 extern L4_ThreadId_t ipc_t2;
@@ -73,15 +73,15 @@ enum fault_e {
 };
 
 #define NOINLINE __attribute__ ((noinline))
-static void setup_t1_mappings (access_e p1, access_e p2) NOINLINE;
-static void setup_t2_mappings (access_e p1, access_e p2) NOINLINE;
+static void setup_t1_mappings (enum access_e p1, enum access_e p2) NOINLINE;
+static void setup_t2_mappings (enum access_e p1, enum access_e p2) NOINLINE;
 static bool rcv_string_checks (L4_MsgTag_t tag,
 			       L4_Msg_t * msg,
-			       L4_Word_t cutpoint = PAGE_SIZE*2,
-			       fault_e fault = nofault) NOINLINE;
+			       L4_Word_t cutpoint,
+			       enum fault_e fault) NOINLINE;
 static bool snd_string_checks (L4_MsgTag_t tag,
-			       L4_Word_t cutpoint = PAGE_SIZE*2,
-			       fault_e fault = nofault) NOINLINE;
+			       L4_Word_t cutpoint,
+			       enum fault_e fault) NOINLINE;
 
 static void string_ipc_pf_t1_1 (void)
 { 
@@ -93,80 +93,80 @@ static void string_ipc_pf_t1_1 (void)
 
     // Simple string transfer (no page faults)
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
-    rcv_ok = rcv_string_checks (tag, &msg);
+    rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE*2, nofault);
     print_result ("Simple string transfer (no page faults)", rcv_ok && snd_ok);
 
     // Single sender pagefault
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
-    rcv_ok = rcv_string_checks (tag, &msg);
+    rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE*2, nofault);
     print_result ("Single sender pagefault", rcv_ok && snd_ok);
 
     // Single receiver pagefault
     setup_t1_mappings (no_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
-    rcv_ok = rcv_string_checks (tag, &msg);
+    rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE*2, nofault);
     print_result ("Single receiver pagefault", rcv_ok && snd_ok);
 
     // Multiple sender and receiver pagefaults
     setup_t1_mappings (no_access, no_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
-    rcv_ok = rcv_string_checks (tag, &msg);
+    rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE*2, nofault);
     print_result ("Multiple sender and receiver pagefaults", rcv_ok && snd_ok);
 
     // Long xfer timeouts
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_TimePeriod (1000*1000*30)));
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
-    rcv_ok = rcv_string_checks (tag, &msg);
+    rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE*2, nofault);
     print_result ("Xfer timeouts (no timeout)", rcv_ok && snd_ok);
 
     // Zero xfer timeouts
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_ZeroTime));
     setup_t1_mappings (rw_access, no_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
     ipc_pf_block_address = (L4_Word_t) &t1_buf[PAGE_SIZE];
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
     ipc_pf_block_address = 0;
@@ -176,12 +176,12 @@ static void string_ipc_pf_t1_1 (void)
     // Sender xfer timeouts
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_TimePeriod (1000*1000*30)));
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
     rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE, xfer_to_snd);
@@ -190,12 +190,12 @@ static void string_ipc_pf_t1_1 (void)
     // Receiver xfer timeouts
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_TimePeriod (1000*1000)));
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
     rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE, xfer_to_rcv);
@@ -204,12 +204,12 @@ static void string_ipc_pf_t1_1 (void)
     // Sender abort
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_Never));
     setup_t1_mappings (rw_access, rw_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     L4_Send (ipc_t2);
     rcv_ok = rcv_string_checks (tag, &msg, PAGE_SIZE, aborted);
@@ -231,13 +231,13 @@ static void string_ipc_pf_t1_2 (void)
     // Receiver abort
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_Never));
     setup_t1_mappings (rw_access, no_access);
-    L4_Clear (&msgbuf);
-    L4_Append (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
-    L4_Accept (L4_StringItemsAcceptor, &msgbuf);
+    L4_MsgBufferClear (&msgbuf);
+    L4_MsgBufferAppendSimpleRcvString (&msgbuf, L4_StringItem (PAGE_SIZE*2, t1_buf));
+    L4_AcceptStrings (L4_StringItemsAcceptor, &msgbuf);
     ipc_pf_abort_address = (L4_Word_t) &t1_buf[PAGE_SIZE];
 
     tag = L4_Receive (ipc_t2);
-    L4_Store (tag, &msg);
+    L4_MsgStore (tag, &msg);
     L4_Set_MsgTag (L4_Niltag);
     ipc_pf_abort_address = 0;
     L4_Send (ipc_t2);
@@ -259,61 +259,61 @@ static void string_ipc_pf_t2_1 (void)
 
     // Simple string transfer (no page faults)
     setup_t2_mappings (rw_access, rw_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
-    snd_ok = snd_string_checks (tag);
+    snd_ok = snd_string_checks (tag, PAGE_SIZE*2, nofault);
     L4_Receive (ipc_t1);
 
     // Single sender pagefault
     setup_t2_mappings (no_access, rw_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
-    snd_ok = snd_string_checks (tag);
+    snd_ok = snd_string_checks (tag, PAGE_SIZE*2, nofault);
     L4_Receive (ipc_t1);
 
     // Single receiver pagefault
     setup_t2_mappings (rw_access, rw_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
-    snd_ok = snd_string_checks (tag);
+    snd_ok = snd_string_checks (tag, PAGE_SIZE*2, nofault);
     L4_Receive (ipc_t1);
 
     // Multiple sender and receiver pagefaults
     setup_t2_mappings (no_access, no_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
-    snd_ok = snd_string_checks (tag);
+    snd_ok = snd_string_checks (tag, PAGE_SIZE*2, nofault);
     L4_Receive (ipc_t1);
 
     // Xfer timeouts (no timeout)
     L4_Set_XferTimeouts (L4_Timeouts (L4_TimePeriod (1000*1000*25), L4_Never));
     setup_t2_mappings (rw_access, no_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
-    snd_ok = snd_string_checks (tag);
+    snd_ok = snd_string_checks (tag, PAGE_SIZE*2, nofault);
     L4_Receive (ipc_t1);
 
     // Zero xfer timeout
     L4_Set_XferTimeouts (L4_Timeouts (L4_ZeroTime, L4_Never));
     setup_t2_mappings (rw_access, rw_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
     snd_ok = snd_string_checks (tag, PAGE_SIZE, xfer_to_snd);
@@ -322,9 +322,9 @@ static void string_ipc_pf_t2_1 (void)
     // Sender xfer timeout
     L4_Set_XferTimeouts (L4_Timeouts (L4_TimePeriod (1000*1000), L4_Never));
     setup_t2_mappings (rw_access, no_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
     ipc_pf_block_address = (L4_Word_t) &t2_buf[PAGE_SIZE];
 
     tag = L4_Send (ipc_t1);
@@ -335,9 +335,9 @@ static void string_ipc_pf_t2_1 (void)
     // Receiver xfer timeout
     L4_Set_XferTimeouts (L4_Timeouts (L4_TimePeriod (1000*1000*30), L4_Never));
     setup_t2_mappings (rw_access, no_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
     ipc_pf_block_address = (L4_Word_t) &t2_buf[PAGE_SIZE];
 
     tag = L4_Send (ipc_t1);
@@ -348,9 +348,9 @@ static void string_ipc_pf_t2_1 (void)
     // Sender abort
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_Never));
     setup_t2_mappings (rw_access, no_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
     ipc_pf_abort_address = (L4_Word_t) &t2_buf[PAGE_SIZE];
 
     tag = L4_Send (ipc_t1);
@@ -373,9 +373,9 @@ static void string_ipc_pf_t2_2 (void)
     // Receiver abort
     L4_Set_XferTimeouts (L4_Timeouts (L4_Never, L4_Never));
     setup_t2_mappings (rw_access, rw_access);
-    L4_Clear (&msg);
-    L4_Append (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_MsgAppendSimpleStringItem (&msg, L4_StringItem (PAGE_SIZE*2, t2_buf));
+    L4_MsgLoad (&msg);
 
     tag = L4_Send (ipc_t1);
     snd_ok = snd_string_checks (tag, PAGE_SIZE, aborted);
@@ -390,7 +390,7 @@ static void string_ipc_pf_t2_2 (void)
 static bool rcv_string_checks (L4_MsgTag_t tag,
 			       L4_Msg_t * msg,
 			       L4_Word_t cutpoint,
-			       fault_e fault)
+			       enum fault_e fault)
 {
     L4_StringItem_t * str;
     bool r = true;
@@ -432,7 +432,7 @@ static bool rcv_string_checks (L4_MsgTag_t tag,
 	    r = false;
 
     str = (L4_StringItem_t *) &msg->msg[1];
-    if (! L4_StringItem (str) && ! L4_Substrings (str) != 1)
+    if (! L4_IsStringItem (str) && ! L4_Substrings (str) != 1)
 	printf ("RCV: Did not receive simple string item\n"), 
 	    r = false;
     
@@ -453,7 +453,7 @@ static bool rcv_string_checks (L4_MsgTag_t tag,
 
 static bool snd_string_checks (L4_MsgTag_t tag,
 			       L4_Word_t cutpoint,
-			       fault_e fault)
+			       enum fault_e fault)
 {
     bool r = true;
 
@@ -490,22 +490,22 @@ static bool snd_string_checks (L4_MsgTag_t tag,
     return r;
 }
 
-static void revoke_rights (void * addr, access_e access)
+static void revoke_rights (void * addr, enum access_e access)
 {
     L4_Fpage_t fp = L4_Fpage ((L4_Word_t) addr, PAGE_SIZE);
 
     switch (access)
     {
-    case no_access:	fp = fp + L4_FullyAccessible; break;
-    case read_access:	fp = fp + L4_Writable; break;
-    case write_access:	fp = fp + L4_Readable; break;
+    case no_access:	fp = L4_FpageAddRights (fp, L4_FullyAccessible); break;
+    case read_access:	fp = L4_FpageAddRights (fp, L4_Writable); break;
+    case write_access:	fp = L4_FpageAddRights (fp, L4_Readable); break;
     case rw_access:	return;
     }
 
     L4_Flush (fp);
 }
 
-static void setup_t1_mappings (access_e p1, access_e p2)
+static void setup_t1_mappings (enum access_e p1, enum access_e p2)
 {
     for (unsigned int i = 0; i < PAGE_SIZE*2; i++)
 	t1_buf[i] = 0xff;
@@ -514,7 +514,7 @@ static void setup_t1_mappings (access_e p1, access_e p2)
     revoke_rights (&t1_buf[PAGE_SIZE], p2);
 }
 
-static void setup_t2_mappings (access_e p1, access_e p2)
+static void setup_t2_mappings (enum access_e p1, enum access_e p2)
 {
     for (unsigned int i = 0; i < PAGE_SIZE*2; i++)
 	t2_buf[i] = i;
@@ -530,8 +530,8 @@ string_ipc_pf (void)
     printf ("\nInter addres space string copy IPC test (with pagefaults)\n");
     t1_buf = (unsigned char *) get_pages (2, false);
     t2_buf = (unsigned char *) get_pages (2, false);
-    setup_ipc_threads (string_ipc_pf_t1_1, string_ipc_pf_t2_1, true, false);
-    setup_ipc_threads (string_ipc_pf_t1_2, string_ipc_pf_t2_2, false, true);
+    setup_ipc_threads (string_ipc_pf_t1_1, string_ipc_pf_t2_1, true, false, false);
+    setup_ipc_threads (string_ipc_pf_t1_2, string_ipc_pf_t2_2, false, true, false);
 }
 
 void
@@ -540,7 +540,7 @@ string_smpipc_pf (void)
     printf ("\nInter address space string copy SMP IPC test "
 	    "(with pagefaults)\n");
 
-    if (L4_NumProcessors (L4_KernelInterface ()) == 1)
+    if (L4_NumProcessors (L4_GetKernelInterface ()) == 1)
     {
 	printf ("  [Not a multiprocessor system.]\n");
 	return;

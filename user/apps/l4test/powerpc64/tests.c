@@ -59,7 +59,7 @@ request_page( void *page )
 	L4_Fpage_t rfpage;
 
 	/* find our pager's ID */
-	tid = L4_Pager();
+	tid = L4_Pager ();
 
 	/* setup the request */
 	rfpage = L4_FpageLog2( (L4_Word_t) page, PAGE_BITS );
@@ -67,11 +67,11 @@ request_page( void *page )
 	rattrib = 0;  /* arch. default attributes */
 
 	/* send it to our pager */
-	L4_Clear( &msg );
-	L4_Append(&msg, rfpage.raw );
-	L4_Append(&msg, rattrib );
-	L4_Set_Label( &msg.tag, FP_REQUEST_LABEL );
-	L4_Load( &msg );
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, rfpage.raw);
+	L4_MsgAppendWord (&msg, rattrib);
+	L4_Set_MsgLabel (&msg.tag, FP_REQUEST_LABEL);
+	L4_MsgLoad (&msg);
 
 	/* make the call */
 	tag = L4_Call(tid);
@@ -82,8 +82,8 @@ request_page( void *page )
 
 	/* FIXME: check no. typed/untyped words? */
 	/* decipher the results */
-	L4_Store(tag, &msg);
-	L4_Get( &msg, 0, &map );
+	L4_MsgStore (tag, &msg);
+	L4_MsgGetMapItem (&msg, 0, &map);
 
 	/* rejected mapping? */
 	if( map.X.snd_fpage.raw == L4_Nilpage.raw )
@@ -103,7 +103,7 @@ static char * find_1275tree(void)
     // Parse through all memory descriptors in kip.
     for (L4_Word_t n = 0; (md = L4_MemoryDesc (kip, n)); n++)
     {
-	if (L4_IsVirtual (md))
+	if (L4_IsMemoryDescVirtual (md))
 	    continue;
 
 	L4_Word_t low = (L4_MemoryDescLow (md));
@@ -172,7 +172,7 @@ void rtas_test(void)
 
 void fpu_test(void)
 {
-    asm volatile (
+    __asm__ __volatile__ (
 	"fadd	1, 2, 3;   "
 	);
 }

@@ -182,8 +182,8 @@ exreg_g2l(void)
 
 
 	/* check them */
-        print_result ("ExRegs local  -> global", myg == rmyg);
-        print_result ("ExRegs global -> local ", myl == rmyl);
+        print_result ("ExRegs local  -> global", L4_IsThreadEqual (myg, rmyg));
+        print_result ("ExRegs global -> local ", L4_IsThreadEqual (myl, rmyl));
 }
 
 static void
@@ -198,7 +198,7 @@ ex_thrash(void)
 	setup_exreg( &ip, &sp, printy_thread );
 
 	/* get a TID */
-	tid = create_thread();
+	tid = create_thread (false, -1, 0);
 
 	/* touch the entry point */
 	safe_mem_touch( code_addr( (void*) printy_thread ) );
@@ -247,7 +247,7 @@ ex_thrash2(void)
 	setup_exreg( &ip, &sp, printy_thread );
 
 	/* get a TID */
-	tid = create_thread();
+	tid = create_thread (false, -1, 0);
 
 	/* start it! */
 	//printf( "Starting Thread..." );
@@ -328,21 +328,21 @@ exreg_inactive_thread (void)
     test_id = L4_Myself ();
 
     // Create inactive thread
-    tid = create_thread ();
+    tid = create_thread (false, -1, 0);
 
     // Start thread using ExchangeRegisters
     get_startup_values (dummy_exreg_thread, &ip, &sp);
     rt = L4_ExchangeRegisters (tid, (0x33 << 3) + 6, sp, ip, 0, 0, L4_Pager (),
 			       &dummy, &dummy, &dummy, &dummy, &dummy, &dt);
 
-    if (rt == L4_nilthread)
+    if (L4_IsThreadEqual (rt, L4_nilthread))
     {
 	printf ("ExchangeRegisters() returned nilthread\n");
 	ok = false;
     }
     else
     {
-	L4_MsgTag_t tag = L4_Receive (tid, L4_TimePeriod (5*1000*1000));
+	L4_MsgTag_t tag = L4_Receive_Timeout (tid, L4_TimePeriod (5*1000*1000));
 	if (L4_IpcFailed (tag))
 	{
 	    printf ("No reply from newly started thread\n");

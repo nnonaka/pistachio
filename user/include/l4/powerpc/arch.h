@@ -617,7 +617,10 @@ L4_INLINE void L4_DebugCtrlXferItemInit(L4_DebugCtrlXferItem_t *c)
 	c->regs.reg[i] = 0;
 }
 
-L4_INLINE void L4_ConfigCtrlXferItemSet(L4_DebugCtrlXferItem_t *c, 
+/* was L4_ConfigCtrlXferItemSet -- the name of the *Config* setter thirty lines
+   up, copied and not renamed.  C++ made the pair an overload and hid it; in C
+   they collide.  Nothing calls this one.  Notes §172. */
+L4_INLINE void L4_DebugCtrlXferItemSet(L4_DebugCtrlXferItem_t *c,
 					L4_Word_t reg, L4_Word_t val)
 {
     c->regs.reg[reg] = val;

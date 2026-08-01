@@ -56,7 +56,7 @@ request_page( void *page )
 	L4_Fpage_t rfpage;
 
 	/* find our pager's ID */
-	tid = L4_Pager();
+	tid = L4_Pager ();
 
 	/* setup the request */
 	rfpage = L4_FpageLog2( (L4_Word_t) page, PAGE_BITS );
@@ -64,11 +64,11 @@ request_page( void *page )
 	rattrib = 0;  /* arch. default attributes */
 
 	/* send it to our pager */
-	L4_Clear( &msg );
-	L4_Append(&msg, rfpage.raw );
-	L4_Append(&msg, rattrib );
-	L4_Set_Label( &msg.tag, FP_REQUEST_LABEL );
-	L4_Load( &msg );
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, rfpage.raw);
+	L4_MsgAppendWord (&msg, rattrib);
+	L4_Set_MsgLabel (&msg.tag, FP_REQUEST_LABEL);
+	L4_MsgLoad (&msg);
 
 	/* make the call */
 	tag = L4_Call(tid);
@@ -79,8 +79,8 @@ request_page( void *page )
 
 	/* FIXME: check no. typed/untyped words? */
 	/* decipher the results */
-	L4_Store(tag, &msg);
-	L4_Get( &msg, 0, &map );
+	L4_MsgStore (tag, &msg);
+	L4_MsgGetMapItem (&msg, 0, &map);
 
 	/* rejected mapping? */
 	if( map.X.snd_fpage.raw == L4_Nilpage.raw )
@@ -127,12 +127,12 @@ bad_send(void)
 	L4_MsgTag_t tag;
 	L4_Msg_t msg;
 
-	L4_Clear( &msg );
-	L4_Append( &msg, 0 );
-	L4_Append( &msg, 0 );
-	L4_Load( &msg );
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, 0);
+	L4_MsgAppendWord (&msg, 0);
+	L4_MsgLoad (&msg);
 
-	tag = L4_Call_Timeouts( L4_Pager(), L4_Never, L4_TimePeriod( 1000 * 1000 ));
+	tag = L4_Call_Timeouts( L4_Pager (), L4_Never, L4_TimePeriod( 1000 * 1000 ));
         bool ok = (L4_IpcFailed(tag) && (L4_ErrorCode() & 0x1 == 1));
 
 	/* give sigma0 a little time to recover */
@@ -167,13 +167,13 @@ dump_mempools (void)
     L4_MsgTag_t tag;
     L4_Msg_t msg;
 
-    L4_Clear (&msg);
-    L4_Set_Label (&msg, L4_SIGMA0_EXT);
-    L4_Append (&msg, L4_S0EXT_DUMPMEM);
-    L4_Append (&msg, 1UL);
-    L4_Load (&msg);
+    L4_MsgClear (&msg);
+    L4_Set_MsgLabel (&msg, L4_SIGMA0_EXT);
+    L4_MsgAppendWord (&msg, L4_S0EXT_DUMPMEM);
+    L4_MsgAppendWord (&msg, 1UL);
+    L4_MsgLoad (&msg);
 
-    tag = L4_Call_Timeouts( L4_Pager(), L4_Never, L4_TimePeriod( 1000 * 1000 ));
+    tag = L4_Call_Timeouts( L4_Pager (), L4_Never, L4_TimePeriod( 1000 * 1000 ));
     print_result ("Sigma0 pool dump", L4_IpcSucceeded(tag));
     
     

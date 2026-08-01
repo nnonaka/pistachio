@@ -166,10 +166,10 @@ start_thread( L4_ThreadId_t tid, L4_Word_t ip, L4_Word_t sp )
 {
 	L4_Msg_t msg;
 
-	L4_Clear( &msg );
-	L4_Append( &msg, ip );
-	L4_Append( &msg, sp );
-	L4_Load( &msg );
+	L4_MsgClear (&msg);
+	L4_MsgAppendWord (&msg, ip);
+	L4_MsgAppendWord (&msg, sp);
+	L4_MsgLoad (&msg);
 
 	L4_Send( tid );
 }
@@ -225,7 +225,7 @@ static struct menu main_menu =
 };
 
 
-extern "C" int main (void)
+int main (void)
 {
 	printf( "L4/Pistachio test suite ready to go.\n\n" );
         

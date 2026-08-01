@@ -43,7 +43,7 @@
 
 void setup_ipc_threads (void (*f1)(void), void (*f2)(void),
 			bool rcv_same_space, bool snd_same_space,
-			bool xcpu = false);
+			bool xcpu);
 
 extern L4_ThreadId_t ipc_t1;
 extern L4_ThreadId_t ipc_t2;
@@ -66,7 +66,7 @@ static void simple_smpipc_t1 (void)
 	for (L4_Word_t k = 1; k <= 63; k++)
 	    L4_LoadMR (k, 0);
 	tag = L4_Receive (ipc_t2);
-	L4_Store (tag, &msg);
+	L4_MsgStore (tag, &msg);
 	if (L4_Label (tag) != 0xf00f)
 	{
 	    printf ("Xfer %d words -- wrong label: 0x%lx != 0xf00f\n",
@@ -80,7 +80,7 @@ static void simple_smpipc_t1 (void)
 	}
 	for (i = 1; i <= n; i++)
 	{
-	    L4_Word_t val = L4_Get (&msg, i - 1);
+	    L4_Word_t val = L4_MsgWord (&msg, i - 1);
 	    if (val != i)
 	    {
 		printf ("Xfer %d words -- wrong value in MR[%d]: "
@@ -97,7 +97,7 @@ static void simple_smpipc_t1 (void)
 
     // Send timeout
     L4_Set_MsgTag (L4_Niltag);
-    tag = L4_Send (ipc_t2, L4_TimePeriod (1000*1000));
+    tag = L4_Send_Timeout (ipc_t2, L4_TimePeriod (1000*1000));
     ok = true;
     if (L4_IpcSucceeded (tag))
     {
@@ -118,7 +118,7 @@ static void simple_smpipc_t1 (void)
     L4_Receive (ipc_t2);
 
     // Receive timeout
-    tag = L4_Receive (ipc_t2, L4_TimePeriod (1000*1000));
+    tag = L4_Receive_Timeout (ipc_t2, L4_TimePeriod (1000*1000));
     ok = true;
     if (L4_IpcSucceeded (tag))
     {
@@ -187,8 +187,7 @@ static void simple_smpipc_t1 (void)
 
     // Cancel pagefault
     unsigned char * buf = (unsigned char *) get_pages (1, false);
-    L4_Fpage_t fp = L4_Fpage ((L4_Word_t) buf, PAGE_SIZE)
-	+ L4_FullyAccessible;
+    L4_Fpage_t fp = L4_FpageAddRights (L4_Fpage ((L4_Word_t) buf, PAGE_SIZE), L4_FullyAccessible);
     L4_Flush (fp);
     ipc_pf_abort_address = (L4_Word_t) buf;
 
@@ -225,11 +224,11 @@ static void simple_smpipc_t2 (void)
     // Message contents
     for (L4_Word_t n = 0; n <= 63; n++)
     {
-	L4_Clear (&msg);
-	L4_Set_Label (&msg, 0xf00f);
+	L4_MsgClear (&msg);
+	L4_Set_MsgLabel (&msg, 0xf00f);
 	for (L4_Word_t i = 1; i <= n; i++)
-	    L4_Append (&msg, i);
-	L4_Load (&msg);
+	    L4_MsgAppendWord (&msg, i);
+	L4_MsgLoad (&msg);
 	L4_Call (ipc_t1);
     }
 
@@ -264,7 +263,7 @@ static void simple_smpipc_t2 (void)
 void simple_smpipc (void)
 {
     printf ("\nSimple SMP IPC test (only untyped words)\n");
-    if (L4_NumProcessors (L4_KernelInterface ()) == 1)
+    if (L4_NumProcessors (L4_GetKernelInterface ()) == 1)
     {
 	printf ("  [Not a multiprocessor system.]\n");
 	return;

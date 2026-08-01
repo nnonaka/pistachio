@@ -44,7 +44,7 @@
 bool check_kipptr(L4_KernelInterfacePage_t *kip, void * ptr)
 {
     if (((L4_Word_t)kip + (1 << kip->KipAreaInfo.X.s) >= (L4_Word_t)ptr) 
-	&& (ptr >= kip))
+	&& (ptr >= (void *) kip))
 	return true;
     printf("ERROR: kip-ptr (%p) not within KIP area\n", ptr);
     return false;
@@ -52,7 +52,9 @@ bool check_kipptr(L4_KernelInterfacePage_t *kip, void * ptr)
 
 
 /* list of kernel ids, subids and what they are */
-typedef struct kid_list_t { L4_Word_t id; L4_Word_t subid; const char *kernel; const char * supplier; };
+/* the typedef had no name: in C++ the struct tag alone is a type, in C it
+   is not. */
+typedef struct kid_list_t { L4_Word_t id; L4_Word_t subid; const char *kernel; const char * supplier; } kid_list_t;
 kid_list_t kid_list[] = 
 {
 	{ 0, 1, "L4/486", "GMD" },
@@ -69,7 +71,7 @@ kid_list_t kid_list[] =
 
 /* list of API versions */
 #define NO_SUBVERSION (L4_Word_t)-1ULL
-typedef struct api_list_t { L4_Word_t version; L4_Word_t subversion; const char *api; };
+typedef struct api_list_t { L4_Word_t version; L4_Word_t subversion; const char *api; } api_list_t;
 api_list_t api_list[] = 
 {
 	{ L4_APIVERSION_2,  NO_SUBVERSION, "Version 2" },
