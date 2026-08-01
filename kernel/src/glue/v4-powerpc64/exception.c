@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *
- * File path:	glue/v4-powerpc64/exception.cc
+ * File path:	glue/v4-powerpc64/exception.c
  * Description:	PowerPC64 exception handlers.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 #include INC_PLAT(prom.h)
 
 #include INC_API(tcb.h)
+#include INC_API(schedule.h)	/* for sched_handoff */
 #include INC_API(kernelinterface.h)
 
 #include INC_GLUE(syscalls.h)
@@ -61,7 +62,7 @@ DECLARE_TRACEPOINT(except_isi_cnt);
 static bool send_exception_ipc( word_t exc_no, word_t exc_code, bool with_address, word_t address )
 {
     tcb_t *current = get_current_tcb();
-    if( current->get_exception_handler().is_nilthread() )
+    if( ({ threadid_t __h = tcb_get_exception_handler (current); threadid_is_nilthread (&__h); }) )
     {
 	printf( "Unable to deliver user exception: no exception handler.\n" );
 	return false;
@@ -70,60 +71,61 @@ static bool send_exception_ipc( word_t exc_no, word_t exc_code, bool with_addres
     // Save message registers on the stack
     word_t saved_mr[GENERIC_SAVED_REGISTERS];
     msg_tag_t tag;
+    int i;
 
     // Save message registers.
-    for( int i = 0; i < GENERIC_SAVED_REGISTERS; i++ )
-	saved_mr[i] = current->get_mr(i);
-    current->set_saved_partner( current->get_partner() );
-    current->set_saved_state( current->get_state() );
+    for( i = 0; i < GENERIC_SAVED_REGISTERS; i++ )
+	saved_mr[i] = tcb_get_mr (current, i);
+    tcb_set_saved_partner (current, tcb_get_partner (current));
+    tcb_set_saved_state (current, tcb_get_state (current));
 
     // Create the message tag.
-    tag.set( 0, with_address ? EXCEPT_IPC_GEN_MR_NUM_ADDRESS :  EXCEPT_IPC_GEN_MR_NUM,
+    msg_tag_set (&tag, 0, with_address ? EXCEPT_IPC_GEN_MR_NUM_ADDRESS :  EXCEPT_IPC_GEN_MR_NUM,
 		    EXCEPT_IPC_GEN_LABEL);
-    current->set_tag( tag );
+    tcb_set_tag (current, tag);
 
     // Create the message.
-    current->set_mr( EXCEPT_IPC_GEN_MR_IP, (word_t)current->get_user_ip() );
-    current->set_mr( EXCEPT_IPC_GEN_MR_SP, (word_t)current->get_user_sp() );
-    current->set_mr( EXCEPT_IPC_GEN_MR_FLAGS, (word_t)current->get_user_flags() );
-    current->set_mr( EXCEPT_IPC_GEN_MR_EXCEPTNO, exc_no );
-    current->set_mr( EXCEPT_IPC_GEN_MR_ERRORCODE, exc_code );
-    current->set_mr( EXCEPT_IPC_GEN_MR_LOCALID, current->get_local_id().get_raw() );
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_IP, (word_t)tcb_get_user_ip (current));
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_SP, (word_t)tcb_get_user_sp (current));
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_FLAGS, (word_t)tcb_get_user_flags (current));
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_EXCEPTNO, exc_no);
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_ERRORCODE, exc_code);
+    tcb_set_mr (current, EXCEPT_IPC_GEN_MR_LOCALID, ({ threadid_t __l = tcb_get_local_id (current); threadid_get_raw (&__l); }));
     if (with_address)
-	current->set_mr( EXCEPT_IPC_GEN_MR_ERRORADDRESS, address );
+	tcb_set_mr (current, EXCEPT_IPC_GEN_MR_ERRORADDRESS, address);
 
     // Deliver the exception IPC.
-    tag = current->do_ipc( current->get_exception_handler(),
-	    current->get_exception_handler(), timeout_t::never() );
+    tag = tcb_do_ipc (current, tcb_get_exception_handler (current),
+	    tcb_get_exception_handler (current), timeout_never() );
 
     // Alter the user context if necessary.
-    if( !tag.is_error() )
+    if( !msg_tag_is_error (&tag) )
     {
-	current->set_user_ip( (addr_t)current->get_mr(EXCEPT_IPC_GEN_MR_IP) );
-	current->set_user_sp( (addr_t)current->get_mr(EXCEPT_IPC_GEN_MR_SP) );
-	current->set_user_flags( current->get_mr(EXCEPT_IPC_GEN_MR_FLAGS) );
+	tcb_set_user_ip (current, (addr_t)tcb_get_mr (current, EXCEPT_IPC_GEN_MR_IP));
+	tcb_set_user_sp (current, (addr_t)tcb_get_mr (current, EXCEPT_IPC_GEN_MR_SP));
+	tcb_set_user_flags (current, tcb_get_mr (current, EXCEPT_IPC_GEN_MR_FLAGS));
     }
     else
 	printf( "Unable to deliver user exception: IPC error.\n" );
 
     // Clean-up.
-    for( int i = 0; i < GENERIC_SAVED_REGISTERS; i++ )
-	current->set_mr( i, saved_mr[i] );
+    for( i = 0; i < GENERIC_SAVED_REGISTERS; i++ )
+	tcb_set_mr (current, i, saved_mr[i]);
 
-    current->set_partner( current->get_saved_partner() );
-    current->set_saved_partner( NILTHREAD );
-    current->set_state( current->get_saved_state() );
-    current->set_saved_state( thread_state_t::aborted );
+    tcb_set_partner (current, tcb_get_saved_partner (current));
+    tcb_set_saved_partner (current, NILTHREAD);
+    tcb_set_state (current, tcb_get_saved_state (current));
+    tcb_set_saved_state (current, THREAD_STATE_ABORTED);
 
-    return !tag.is_error();
+    return !msg_tag_is_error (&tag);
 }
 
-INLINE void halt_user_thread( void )
+static void halt_user_thread( void )
 {
     tcb_t *current = get_current_tcb();
 
-    current->set_state( thread_state_t::halted );
-    get_current_scheduler()->schedule(get_idle_tcb(), sched_handoff);
+    tcb_set_state (current, THREAD_STATE_HALTED);
+    sched_schedule (get_idle_tcb (), sched_handoff);
 }
 
 /* except_return() short circuits the C code return path.
@@ -144,9 +146,9 @@ do {					\
     while(1);				\
 } while(0)
 
-extern "C" void ppc64_except_unhandled( word_t vect, powerpc64_irq_context_t *context )
+void ppc64_except_unhandled( word_t vect, powerpc64_irq_context_t *context )
 {
-    char * vector;
+    const char * vector;
     bool with_address = false, deliver = false;
     word_t address = 0, exc_code = 0;
 
@@ -195,15 +197,14 @@ extern "C" void ppc64_except_unhandled( word_t vect, powerpc64_irq_context_t *co
 }
 
 /* Data storage interrupt (Data TLB miss) */
-extern "C" void dsi_handler( word_t dar, word_t dsisr, powerpc64_irq_context_t *context )
+void dsi_handler( word_t dar, word_t dsisr, powerpc64_irq_context_t *context )
 {
     tcb_t *tcb = get_current_tcb();
 
     bool is_kernel = ppc64_is_kernel_mode(context->srr1);
 
-    TRACEPOINT( except_dsi_cnt,
-		printf( "[%p%s] Data exception @ %p from %p\n", tcb,
-		is_kernel ? " (kernel)" : "", dar, context->srr0 ) );
+    TRACEPOINT( except_dsi_cnt, "[%p%s] Data exception @ %p from %p\n", tcb,
+		is_kernel ? " (kernel)" : "", dar, context->srr0 );
 
 #if defined(CONFIG_DEBUG)
     // Do we have a DABR hit?
@@ -216,62 +217,62 @@ extern "C" void dsi_handler( word_t dar, word_t dsisr, powerpc64_irq_context_t *
 #endif
 
     // If fault is in the kernel area, just map in a kernel page
-    if ( EXPECT_FALSE( is_kernel && space_t::is_kernel_area ((addr_t)dar) ))
+    if ( EXPECT_FALSE( is_kernel && space_is_kernel_area ((addr_t)dar) ))
     {
 	//TRACEF( "kernel fault\n" );
 	pgent_t pg;
         space_t *space = get_kernel_space();
 #ifdef CONFIG_POWERPC64_LARGE_PAGES
-	pgent_t::pgsize_e size = pgent_t::size_16m;
+	pgsize_e size = size_16m;
 #else
-	pgent_t::pgsize_e size = pgent_t::size_4k;
+	pgsize_e size = size_4k;
 #endif
 
 	/* Create a dummy page table entry */
-	pg.set_entry( space, size, virt_to_phys((addr_t)dar),
-		      7, pgent_t::l4default, true );
+	pgent_set_entry( &pg, space, size, virt_to_phys((addr_t)dar),
+		      7, l4default, true );
 
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( space, (addr_t)dar, &pg, size, true );
+	pghash_insert_mapping_bolted( get_pghash(), space, (addr_t)dar, &pg, size, true );
 
 	//TRACEF( "kernel fault done\n" );
 	except_return();
     }
 
-    space_t *space = tcb->get_space();
+    space_t *space = tcb_get_space (tcb);
     if (!space) space = get_kernel_space();
 
     // Use kernel space if we have kernel fault in TCB area or
     // when no space is set (e.g., running on the idle thread)
-    if ( EXPECT_FALSE( is_kernel && space->is_tcb_area ((addr_t)dar) )
+    if ( EXPECT_FALSE( is_kernel && space_is_tcb_area ((addr_t)dar) )
 			    || space == NULL)
     {
         space = get_kernel_space();
 	//TRACEF( "kernel space\n" );
     }
 
-    ASSERT( !(is_kernel && space->is_cpu_area ((addr_t)dar)) );
+    ASSERT( !(is_kernel && space_is_cpu_area ((addr_t)dar)) );
 
     // Do we have a page hash miss?
     if( EXPECT_TRUE( EXCEPT_IS_DSI_MISS(dsisr) ) )
     {
 
 	// Is the page hash miss in the copy area?
-	if( EXPECT_FALSE(space->is_copy_area((addr_t)dar)) )
+	if( EXPECT_FALSE(space_is_copy_area ((addr_t)dar)) )
 	{
 	    enter_kdebug( "Page table needs to be fixed for copy area" );
 	    // Resolve the fault using the partner's address space!
-	    tcb_t *partner = tcb_t::get_tcb( tcb->get_partner() );
+	    tcb_t *partner = tcb_get_partner_tcb (tcb);
 	    if( partner )
 	    {
-		addr_t real_fault = tcb->copy_area_real_address( (addr_t)dar );
-		if( partner->get_space()->handle_hash_miss(real_fault) )
+		addr_t real_fault = tcb_copy_area_real_address (tcb, (addr_t)dar );
+		if( space_handle_hash_miss (tcb_get_space (partner), real_fault) )
 	    	    except_return();
 	    }
 	}
 
 	// Normal page hash miss.
-	if( EXPECT_TRUE(space->handle_hash_miss((addr_t)dar)) )
+	if( EXPECT_TRUE(space_handle_hash_miss (space, (addr_t)dar)) )
 	{
 	    //TRACEF("found - returning\n");
 	    except_return();
@@ -280,7 +281,7 @@ extern "C" void dsi_handler( word_t dar, word_t dsisr, powerpc64_irq_context_t *
     else if( EXCEPT_IS_DSI_FAULT(dsisr) )
     {
 	// Page found, but access denied
-	if( EXPECT_TRUE(space->handle_protection_fault( (addr_t)dar, true )) )
+	if( EXPECT_TRUE(space_handle_protection_fault (space, (addr_t)dar, true )) )
 	{
 	    //TRACEF("handled - returning\n");
 	    except_return();
@@ -295,15 +296,15 @@ extern "C" void dsi_handler( word_t dar, word_t dsisr, powerpc64_irq_context_t *
     }
 
     //TRACEF("handle pagefault\n");
-    space->handle_pagefault( (addr_t)dar, (addr_t)context->srr0, 
-		    EXCEPT_IS_DSI_WRITE(dsisr) ?  space_t::write : space_t::read,
+    space_handle_pagefault (space, (addr_t)dar, (addr_t)context->srr0,
+		    EXCEPT_IS_DSI_WRITE(dsisr) ?  SPACE_ACCESS_WRITE : SPACE_ACCESS_READ,
 		    ppc64_is_kernel_mode(context->srr1) );
 
     //TRACEF("handled - returning\n");
     except_return();
 }
 
-extern "C" void program_check_handler( word_t vect, powerpc64_irq_context_t *context )
+void program_check_handler( word_t vect, powerpc64_irq_context_t *context )
 {
 #if defined(CONFIG_DEBUG)
     if ( *(u32_t *)context->srr0 == KDEBUG_EXCEPT_INSTR )
@@ -337,9 +338,10 @@ extern "C" void program_check_handler( word_t vect, powerpc64_irq_context_t *con
 	context->srr0 += 4;
         space_t * space = get_current_space ();
 
-	context->r3 = (u64_t) space->get_kip_page_area ().get_base ();
-	context->r4 = get_kip ()->api_version;
-	context->r5 = get_kip ()->api_flags;
+	{ fpage_t kip_area = space_get_kip_page_area (space);
+	  context->r3 = (u64_t) fpage_get_base (&kip_area); }
+	context->r4 = api_version_to_word (&get_kip ()->api_version);
+	context->r5 = api_flags_to_word (&get_kip ()->api_flags);
 	context->r6 = (NULL != get_kip()->kernel_desc_ptr) ?
 		    *(word_t *)((word_t)get_kip() + get_kip()->kernel_desc_ptr) : 0;
 
@@ -360,39 +362,38 @@ exception:
 }
 
 /* Instruction storage interrupt (Instruction TLB miss) */
-extern "C" void isi_handler( powerpc64_irq_context_t *context )
+void isi_handler( powerpc64_irq_context_t *context )
 {
     word_t srr0 = context->srr0;
     word_t srr1 = context->srr1;
 
     tcb_t *tcb = get_current_tcb();
-    space_t *space = tcb->get_space();
+    space_t *space = tcb_get_space (tcb);
     if (!space) space = get_kernel_space();
 
     bool is_kernel = ppc64_is_kernel_mode(srr1);
 
-    TRACEPOINT( except_isi_cnt, 
-		printf( "[%p%s] Instruction fault @ %p\n", tcb,
-		is_kernel ? " (kernel)" : "", srr0 ) );
+    TRACEPOINT( except_isi_cnt, "[%p%s] Instruction fault @ %p\n", tcb,
+		is_kernel ? " (kernel)" : "", srr0 );
 
     // If fault is in the kernel area, just map in a kernel page
-    if ( EXPECT_FALSE( is_kernel && space->is_kernel_area ((addr_t)srr0) ))
+    if ( EXPECT_FALSE( is_kernel && space_is_kernel_area ((addr_t)srr0) ))
     {
 	TRACEF( "kernel execute @ %p\n", srr0 );
 	pgent_t pg;
         space = get_kernel_space();
 #ifdef CONFIG_POWERPC64_LARGE_PAGES
-	pgent_t::pgsize_e size = pgent_t::size_16m;
+	pgsize_e size = size_16m;
 #else
-	pgent_t::pgsize_e size = pgent_t::size_4k;
+	pgsize_e size = size_4k;
 #endif
 
 	/* Create a dummy page table entry */
-	pg.set_entry( space, size, virt_to_phys((addr_t)srr0),
-		      7, pgent_t::l4default, true );
+	pgent_set_entry( &pg, space, size, virt_to_phys((addr_t)srr0),
+		      7, l4default, true );
 
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( space, (addr_t)srr0, &pg, size, true );
+	pghash_insert_mapping_bolted( get_pghash(), space, (addr_t)srr0, &pg, size, true );
 
 	//TRACEF( "kernel fault done\n" );
 	except_return();
@@ -400,7 +401,7 @@ extern "C" void isi_handler( powerpc64_irq_context_t *context )
 
     // Use kernel space if we have kernel fault in TCB area or
     // when no space is set (e.g., running on the idle thread)
-    if ( EXPECT_FALSE( is_kernel && space->is_tcb_area ((addr_t)srr0) )
+    if ( EXPECT_FALSE( is_kernel && space_is_tcb_area ((addr_t)srr0) )
 			    || space == NULL)
     {
         space = get_kernel_space();
@@ -417,7 +418,7 @@ extern "C" void isi_handler( powerpc64_irq_context_t *context )
 
     if( EXPECT_TRUE( EXCEPT_IS_ISI_MISS(srr1) ) ) 
     {
-	if( EXPECT_TRUE(space->handle_hash_miss((addr_t)srr0)) ) 
+	if( EXPECT_TRUE(space_handle_hash_miss (space, (addr_t)srr0)) ) 
 	{
 	    //TRACEF("found - returning\n");
 	    except_return();
@@ -426,7 +427,7 @@ extern "C" void isi_handler( powerpc64_irq_context_t *context )
     else if( EXCEPT_IS_FAULT(srr1) )
     {
 	// Page found, but access denied
-	if( EXPECT_TRUE(space->handle_protection_fault( (addr_t)srr0, false )) )
+	if( EXPECT_TRUE(space_handle_protection_fault (space, (addr_t)srr0, false )) )
 	{
 	    //TRACEF("handled - returning\n");
 	    except_return();
@@ -438,18 +439,18 @@ extern "C" void isi_handler( powerpc64_irq_context_t *context )
     }
 
     //TRACEF("handle pagefault\n");
-    space->handle_pagefault( (addr_t)srr0, (addr_t)srr0, 
-	    space_t::execute, ppc64_is_kernel_mode(srr1) );
+    space_handle_pagefault (space, (addr_t)srr0, (addr_t)srr0,
+	    SPACE_ACCESS_EXECUTE, ppc64_is_kernel_mode(srr1) );
 
     // Try to reload the hash table after pagefault
-    space->handle_hash_miss((addr_t)srr0);
+    space_handle_hash_miss (space, (addr_t)srr0);
 
     //TRACEF("done pagefault\n");
     except_return();
 }
 
 /* FIXME - check if the kernel debugger is waiting for this */
-extern "C" void ppc64_except_trace( word_t vect, powerpc64_irq_context_t *context )
+void ppc64_except_trace( word_t vect, powerpc64_irq_context_t *context )
 {
     printf( "--KD# Trace Point: IP=%p, SRR1=%p --\n", context->srr0, context->srr1 );
     if( EXPECT_FALSE(get_kip()->kdebug_entry != NULL) )
@@ -457,13 +458,13 @@ extern "C" void ppc64_except_trace( word_t vect, powerpc64_irq_context_t *contex
     except_return();
 }
 
-extern "C" void fpu_unavailable_handler( word_t vect, powerpc64_irq_context_t *context )
+void fpu_unavailable_handler( word_t vect, powerpc64_irq_context_t *context )
 {
     tcb_t *current = get_current_tcb();
 
     ASSERT(!ppc64_is_kernel_mode(context->srr1));
 
-    current->resources.powerpc64_fpu_unavail_exception( current );
+    tcb_resources_powerpc64_fpu_unavail_exception (&current->resources, current);
 
     except_return();
 }
@@ -473,7 +474,7 @@ extern "C" void fpu_unavailable_handler( word_t vect, powerpc64_irq_context_t *c
 static bool send_syscall_ipc( powerpc64_irq_context_t *context )
 {
     tcb_t *current = get_current_tcb();
-    if( current->get_exception_handler().is_nilthread() )
+    if( ({ threadid_t __h = tcb_get_exception_handler (current); threadid_is_nilthread (&__h); }) )
     {
 	printf( "Unable to deliver user exception: no exception handler.\n" );
 	return false;
@@ -482,70 +483,71 @@ static bool send_syscall_ipc( powerpc64_irq_context_t *context )
     // Save message registers on the stack
     word_t saved_mr[SYSCALL_SAVED_REGISTERS];
     msg_tag_t tag;
+    int i;
 
     // Save message registers.
-    for( int i = 0; i < SYSCALL_SAVED_REGISTERS; i++ )
-	saved_mr[i] = current->get_mr(i);
-    current->set_saved_partner( current->get_partner() );
-    current->set_saved_state( current->get_state() );
+    for( i = 0; i < SYSCALL_SAVED_REGISTERS; i++ )
+	saved_mr[i] = tcb_get_mr (current, i);
+    tcb_set_saved_partner (current, tcb_get_partner (current));
+    tcb_set_saved_state (current, tcb_get_state (current));
 
     // Create the message tag.
-    tag.set( 0, EXCEPT_IPC_SYS_MR_NUM, EXCEPT_IPC_SYS_LABEL);
-    current->set_tag( tag );
+    msg_tag_set (&tag, 0, EXCEPT_IPC_SYS_MR_NUM, EXCEPT_IPC_SYS_LABEL);
+    tcb_set_tag (current, tag);
 
     // Create the message.
-    current->set_mr( EXCEPT_IPC_SYS_MR_R3, context->r3 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R4, context->r4 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R5, context->r5 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R6, context->r6 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R7, context->r7 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R8, context->r8 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R9, context->r9 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R10, context->r10 );
-    current->set_mr( EXCEPT_IPC_SYS_MR_R0, context->r0 );
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R3, context->r3);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R4, context->r4);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R5, context->r5);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R6, context->r6);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R7, context->r7);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R8, context->r8);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R9, context->r9);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R10, context->r10);
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_R0, context->r0);
 
-    current->set_mr( EXCEPT_IPC_SYS_MR_IP, (word_t)current->get_user_ip() );
-    current->set_mr( EXCEPT_IPC_SYS_MR_SP, (word_t)current->get_user_sp() );
-    current->set_mr( EXCEPT_IPC_SYS_MR_FLAGS, (word_t)current->get_user_flags() );
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_IP, (word_t)tcb_get_user_ip (current));
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_SP, (word_t)tcb_get_user_sp (current));
+    tcb_set_mr (current, EXCEPT_IPC_SYS_MR_FLAGS, (word_t)tcb_get_user_flags (current));
 
     // Deliver the exception IPC.
-    tag = current->do_ipc( current->get_exception_handler(),
-	    current->get_exception_handler(), timeout_t::never() );
+    tag = tcb_do_ipc (current, tcb_get_exception_handler (current),
+	    tcb_get_exception_handler (current), timeout_never() );
 
     // Alter the user context if necessary.
-    if( !tag.is_error() )
+    if( !msg_tag_is_error (&tag) )
     {
-	current->set_user_ip( (addr_t)current->get_mr( EXCEPT_IPC_SYS_MR_IP ) );
-	current->set_user_sp( (addr_t)current->get_mr( EXCEPT_IPC_SYS_MR_SP ) );
-	current->set_user_flags( current->get_mr(EXCEPT_IPC_SYS_MR_FLAGS) );
+	tcb_set_user_ip (current, (addr_t)tcb_get_mr (current, EXCEPT_IPC_SYS_MR_IP));
+	tcb_set_user_sp (current, (addr_t)tcb_get_mr (current, EXCEPT_IPC_SYS_MR_SP));
+	tcb_set_user_flags (current, tcb_get_mr (current, EXCEPT_IPC_SYS_MR_FLAGS));
     }
     else
 	printf( "Unable to deliver user exception: IPC error.\n" );
 
     // Results
-    context->r3 = current->get_mr( EXCEPT_IPC_SYS_MR_R3 );
-    context->r4 = current->get_mr( EXCEPT_IPC_SYS_MR_R4 );
-    context->r5 = current->get_mr( EXCEPT_IPC_SYS_MR_R5 );
-    context->r6 = current->get_mr( EXCEPT_IPC_SYS_MR_R6 );
-    context->r7 = current->get_mr( EXCEPT_IPC_SYS_MR_R7 );
-    context->r8 = current->get_mr( EXCEPT_IPC_SYS_MR_R8 );
-    context->r9 = current->get_mr( EXCEPT_IPC_SYS_MR_R0 );
-    context->r10 = current->get_mr( EXCEPT_IPC_SYS_MR_R10 );
-    context->r0 = current->get_mr( EXCEPT_IPC_SYS_MR_R0 );
+    context->r3 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R3);
+    context->r4 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R4);
+    context->r5 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R5);
+    context->r6 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R6);
+    context->r7 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R7);
+    context->r8 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R8);
+    context->r9 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R0);
+    context->r10 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R10);
+    context->r0 = tcb_get_mr (current, EXCEPT_IPC_SYS_MR_R0);
 
     // Clean-up.
-    for( int i = 0; i < SYSCALL_SAVED_REGISTERS; i++ )
-	current->set_mr( i, saved_mr[i] );
+    for( i = 0; i < SYSCALL_SAVED_REGISTERS; i++ )
+	tcb_set_mr (current, i, saved_mr[i]);
 
-    current->set_partner( current->get_saved_partner() );
-    current->set_saved_partner( NILTHREAD );
-    current->set_state( current->get_saved_state() );
-    current->set_saved_state( thread_state_t::aborted );
+    tcb_set_partner (current, tcb_get_saved_partner (current));
+    tcb_set_saved_partner (current, NILTHREAD);
+    tcb_set_state (current, tcb_get_saved_state (current));
+    tcb_set_saved_state (current, THREAD_STATE_ABORTED);
 
-    return !tag.is_error();
+    return !msg_tag_is_error (&tag);
 }
 
-extern "C" void ppc64_except_syscall( word_t vect, powerpc64_irq_context_t *context )
+void ppc64_except_syscall( word_t vect, powerpc64_irq_context_t *context )
 {
     if ( !send_syscall_ipc( context ) )
     {

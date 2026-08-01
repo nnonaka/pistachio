@@ -9208,3 +9208,28 @@ same for the header).
 
     §166:  17 `.cc` files
     now:   11
+
+## §168 -- powerpc64: the exception handlers and kernel init
+
+`exception.cc` and `init.cc`, the two largest remaining sources, are C.
+Mechanical throughout -- the same accessor renames as every other port -- with
+one recurrence and two small notes.
+
+`exception.cc` calls TRACEPOINT the old way twice (`except_dsi_cnt`,
+`except_isi_cnt`), same as §167. `space_t::access_e` becomes the
+`SPACE_ACCESS_*` constants at the two `handle_pagefault` calls.
+
+`init.cc` reached `get_kip()->api_version` and `->api_flags` as plain words.
+They are structs (`api_version_t`, `api_flags_t`) with conversion operators;
+C uses `api_version_to_word`/`api_flags_to_word`, which is what
+glue/v4-powerpc/except_handlers.c already does.
+
+Two C-scoping habits show up all through both files and are worth stating once
+rather than per-file: `for (int i = ...)` and mid-block declarations after a
+statement both have to move to the top of their block, and every such move is
+a chance to change a variable's lifetime silently. Each one here was hoisted
+explicitly rather than by pattern, and the initialiser stayed where the
+declaration was when it read a value computed above it.
+
+    §167:  11 `.cc` files
+    now:   10 -- `asmsyms.cc`, `ofpower4/prom.cc`, and the eight kdb files

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *
- * File path:	glue/v4-powerpc64/init.cc
+ * File path:	glue/v4-powerpc64/init.c
  * Description:	Kernel second stage initialization.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,9 +37,9 @@
 
 // Debug consoles
 #if defined(CONFIG_KDB_CONS_RTAS)
-extern void init_rtas_console();
+extern void init_rtas_console(void);
 #endif
-extern void init_serial_console();
+extern void init_serial_console(void);
 
 #include INC_PLAT(prom.h)
 
@@ -71,17 +71,18 @@ SECTION(".init") addr_t kip_get_phys_mem( kernel_interface_page_t *kip )
      */
 {
     addr_t max = 0;
+    word_t i;
 
     max = kip->main_mem.high;
 
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ ) 
+    for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	if( (mdesc->type() == memdesc_t::conventional)
-		&& !mdesc->is_virtual()
-		&& (mdesc->high() > max) )
+	memdesc_t *mdesc = memory_info_get_memdesc( &kip->memory_info, i );
+	if( (memdesc_type (mdesc) == MEMDESC_CONVENTIONAL)
+		&& !memdesc_is_virtual (mdesc)
+		&& (memdesc_high (mdesc) > max) )
 	{
-	    max = mdesc->high();
+	    max = memdesc_high (mdesc);
 	}
     }
 
@@ -94,19 +95,19 @@ SECTION(".init") static void kip_mem_init( kernel_interface_page_t *kip )
     extern char _end_kernel_phys[];
 
     // Define the user's virtual address space.
-    kip->memory_info.insert( memdesc_t::conventional, true,
+    memory_info_insert( &kip->memory_info, MEMDESC_CONVENTIONAL, 0, true,
 	    (addr_t)0, (addr_t)USER_AREA_END );
 
     // Define the area reserved for the exception vectors.
-    kip->memory_info.insert( memdesc_t::reserved, false, 
+    memory_info_insert( &kip->memory_info, MEMDESC_RESERVED, 0, false,
 	    (addr_t)0, (addr_t)KERNEL_PHYS_START );
 
     // Define the area reserved for kernel code.
-    kip->memory_info.insert( memdesc_t::reserved, false,
+    memory_info_insert( &kip->memory_info, MEMDESC_RESERVED, 0, false,
 	    _start_kernel_phys, _end_kernel_phys );
 
     // Reserve all other physical memory
-    kip->memory_info.insert( memdesc_t::reserved, false, 
+    memory_info_insert( &kip->memory_info, MEMDESC_RESERVED, 0, false,
 	    addr_align_up (kip->main_mem.high, KB(4)), (addr_t)~0ul);
 
     TRACEF( "Inserted kernel regions\n" );
@@ -123,6 +124,7 @@ word_t find_memory_area( word_t size )
 {
     word_t phys_start = 0;
     bool busy = true;
+    word_t i;
 
     for (; busy; phys_start += POWERPC64_PAGE_SIZE)
     {
@@ -141,14 +143,16 @@ word_t find_memory_area( word_t size )
 	// Walk through the KIP's memory descriptors and search for any
 	// reserved memory regions that collide with our intended memory
 	// allocation.
-	for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ )
+	for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
 	{
-	    memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
-	    if( (mdesc->type() == memdesc_t::conventional) || mdesc->is_virtual() )
+	    memdesc_t *mdesc = memory_info_get_memdesc( &kip->memory_info, i );
+	    word_t low, high;
+
+	    if( (memdesc_type (mdesc) == MEMDESC_CONVENTIONAL) || memdesc_is_virtual (mdesc) )
 		continue;
 
-	    word_t low = (word_t)mdesc->low();
-	    word_t high = (word_t)mdesc->high();
+	    low = (word_t)memdesc_low (mdesc);
+	    high = (word_t)memdesc_high (mdesc);
 
 	    if( (phys_start < low) && (phys_end > high) )
 		{ busy = true; break; }
@@ -162,7 +166,7 @@ word_t find_memory_area( word_t size )
 }
 
 
-SECTION(".init") static void do_kmem_init()
+SECTION(".init") static void do_kmem_init(void)
 {
     word_t bootmem_size = CONFIG_BOOTMEM_PAGES << POWERPC64_PAGE_BITS;
 
@@ -172,7 +176,7 @@ SECTION(".init") static void do_kmem_init()
     kmem_init(&kmem,  (addr_t)bootmem_start, (addr_t)bootmem_end );
 
     // Define the area reserved for the exception vectors.
-    get_kip()->memory_info.insert( memdesc_t::reserved, false, 
+    memory_info_insert( &get_kip()->memory_info, MEMDESC_RESERVED, 0, false,
 	    (addr_t)virt_to_phys( bootmem_start ),
 	    (addr_t)virt_to_phys( bootmem_end ) );
 }
@@ -194,8 +198,9 @@ static SECTION(".init") void cpu_init( cpuid_t cpu )
      * Each cpu requires its own spill area, on non-conflicting cache lines.
      */
     char *cpu_spill = &spill_area[ cpu * POWERPC64_CACHE_LINE_SIZE ];
+    int i;
 
-    for (int i=0; i<CPU_SPILL_SIZE; i++)
+    for (i=0; i<CPU_SPILL_SIZE; i++)
 	spill_area[i] = 0;
 
     ppc64_set_sprg( SPRG_LOCAL, (word_t)cpu_spill );
@@ -210,25 +215,26 @@ static SECTION(".init") void cpulocal_init( cpuid_t cpu )
 		    addr_align_up( (addr_t)(_end_cpu_ - _start_cpu_), POWERPC64_PAGE_SIZE ) );
 
     pgent_t pg;
+    word_t i;
 
     /* We assume cpu local area is less than 256 MB */
     /* XXX - this must change for SMP - assembler handled */
-    segment_t::insert_entry( get_kernel_space(),
-		    get_kernel_space()->get_vsid( (addr_t)KERNEL_CPU_OFFSET ),
+    segment_insert_entry( get_kernel_space(),
+		    space_get_vsid( get_kernel_space(), (addr_t)KERNEL_CPU_OFFSET ),
 		    ESID( (word_t)KERNEL_CPU_OFFSET ), false );
 
-    for ( word_t i=0; i < (word_t)addr_align_up(
+    for ( i=0; i < (word_t)addr_align_up(
 		(addr_t)( _end_cpu_ - _start_cpu_), POWERPC64_PAGE_SIZE );
 		i+= POWERPC64_PAGE_SIZE )
     {
 	/* Create a dummy page table entry */
-	pg.set_entry( get_kernel_space(), pgent_t::size_4k,
+	pgent_set_entry( &pg, get_kernel_space(), size_4k,
 			virt_to_phys((addr_t)((word_t)cpu_area + i)),
-		      6, (pgent_t::l4default), true );
+		      6, (l4default), true );
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)(KERNEL_CPU_OFFSET + i),
-			&pg, pgent_t::size_4k, true );
+			&pg, size_4k, true );
     }
 
     TRACEF( "Allocated cpu(%d) area %p\n", cpu, cpu_area );
@@ -237,7 +243,7 @@ static SECTION(".init") void cpulocal_init( cpuid_t cpu )
 
 SECTION(".init") static void finish_api_init( void )
 {
-    get_timer()->init_global();
+    timer_init_global ();
 
 #if defined(CONFIG_SMP)
     init_cpu( boot_cpu, boot_buskhz, boot_cpukhz );
@@ -245,9 +251,9 @@ SECTION(".init") static void finish_api_init( void )
     init_cpu( 0, boot_buskhz, boot_cpukhz );
 #endif
 
-    get_interrupt_ctrl()->init_arch();
+    intctrl_init_arch ();
 
-    get_timer()->init_cpu();
+    timer_init_cpu (get_timer ());
 }
 
 static SECTION(".init") void install_exception_handlers( void )
@@ -256,13 +262,14 @@ static SECTION(".init") void install_exception_handlers( void )
      * vectors.  We need valid exception vectors to handle machine check
      * exceptions.
      */
-    word_t msr = ppc64_get_msr();
+    word_t msr;
+    extern char _except_start_[];
+    extern char _except_end_[];
+
+    msr = ppc64_get_msr();
     msr = msr & (~MSR_ME);
     ppc64_set_msr( msr );
     isync();	// Enable the msr change.
-
-    extern char _except_start_[];
-    extern char _except_end_[];
 
     memcpy_cache_flush( (word_t *)(KERNEL_OFFSET),
 	    (word_t *)_except_start_,
@@ -277,7 +284,7 @@ static SECTION(".init") void install_exception_handlers( void )
 
 extern void init_plat (word_t);
 
-extern void early_kernel_map ();
+extern void early_kernel_map (void);
 
 /****************************************************************************
  *
@@ -285,18 +292,20 @@ extern void early_kernel_map ();
  *
  ****************************************************************************/
 
-extern "C" SECTION(".init") void start_kernel( word_t r3, word_t r4, word_t ofentry )
+SECTION(".init") void start_kernel( word_t r3, word_t r4, word_t ofentry )
 {
     /* We are called either real or virtual mode :(
      * First thing is to initialise the platform and map kernel data
      * to enable relocated operation
      */
+    kernel_interface_page_t *kip;
+
     init_plat( ofentry );
 
-    kernel_interface_page_t *kip = PTRRELOC(get_kip());
+    kip = PTRRELOC(get_kip());
 
     /* Setup the Hash Page Table */
-    if( !PTRRELOC(get_pghash())->init((word_t)kip_get_phys_mem(kip)) )
+    if( !pghash_init( PTRRELOC(get_pghash()), (word_t)kip_get_phys_mem(kip)) )
 	prom_exit( "unable to find a suitable location for the page hash." );
 
     prom_puts( "Inserting kernel bolted hash table entry\n\r" );
@@ -307,7 +316,7 @@ extern "C" SECTION(".init") void start_kernel( word_t r3, word_t r4, word_t ofen
 #endif
 
     /* Install the Hash Page Table and jump to virtmode_call() */
-    PTRRELOC(get_pghash())->get_htab()->activate();
+    ppc64_htab_activate( pghash_get_htab( PTRRELOC(get_pghash()) ) );
 
     /* We should never get here */
     while (1);
@@ -315,7 +324,7 @@ extern "C" SECTION(".init") void start_kernel( word_t r3, word_t r4, word_t ofen
 
 
 void switch_console( const char *name );
-extern "C" SECTION(".init") void virtmode_call(void)
+SECTION(".init") void virtmode_call(void)
 {
     /* --- Running in MAPPED VIRTUAL MODE from here! --- */
 
@@ -345,20 +354,20 @@ extern "C" SECTION(".init") void virtmode_call(void)
     init_hello();
 
     /* initialize kernel interface page syscalls */
-    get_kip()->init();
+    kernel_interface_page_init (get_kip());
 
     init_mdb();
     init_kernel_space ();
 
     /* Initialize the idle tcb, and push notify frames for starting
      * the idle thread. */
-    get_current_scheduler()->init();
+    sched_init (true);
 
     /* Push a notify frame for the second stage of initialization, which
      * executes in the context of the idle thread.  This must execute
      * before the scheduler's notify frames. */
-    get_idle_tcb()->notify( finish_api_init );
-    get_current_scheduler()->start(); /* Does not return. */
+    tcb_notify (get_idle_tcb_c (), finish_api_init );
+    sched_start (0); /* Does not return. */
 
     /* we should never get here! */
     while (1);

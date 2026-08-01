@@ -30,7 +30,7 @@
 ##                
 ######################################################################
 SOURCES += $(addprefix src/glue/v4-powerpc64/, thread.c timer.c \
-	space.c init.cc resources.c pghash.c exception.cc user.S \
+	space.c init.c resources.c pghash.c exception.c user.S \
 	memcontrol.c )
 
 SOURCES += $(addprefix src/generic/, linear_ptab_walker.c mapping.c \
