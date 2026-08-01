@@ -36,10 +36,10 @@ top_builddir=	@top_builddir@
 include $(top_srcdir)/Mk/l4.base.mk
 
 
-powerpc_SRCS=	1275tree.cc fdt.cc 
+powerpc_SRCS=	1275tree.c fdt.c 
 
 LIBRARY=	io
-SRCS=		get_hex.cc  print.cc $(ARCH).cc $($(ARCH)_SRCS)
+SRCS=		get_hex.c  print.c $(ARCH).c $($(ARCH)_SRCS)
 
 include $(top_srcdir)/Mk/l4.lib.mk
 

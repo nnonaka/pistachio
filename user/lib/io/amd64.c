@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2001-2006, 2010,  Karlsruhe University
  *                
- * File path:     ia32.cc
+ * File path:     amd64.cc
  * Description:   putc() for x86-based PCs, serial and screen
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -31,12 +31,13 @@
  ********************************************************************/
 #include <config.h>
 #include <l4/types.h>
-#include "ia32.h"
 
-extern "C" void __l4_putc (int c);
-extern "C" void putc (int c) __attribute__ ((weak, alias ("__l4_putc")));
-extern "C" int __l4_getc (void);
-extern "C" int getc (void) __attribute__ ((weak, alias ("__l4_getc")));
+#include "amd64.h"
+
+void __l4_putc (int c);
+void putc (int c) __attribute__ ((weak, alias ("__l4_putc")));
+int __l4_getc (void);
+int getc (void) __attribute__ ((weak, alias ("__l4_getc")));
 
 
 #if defined(CONFIG_COMPORT)
@@ -103,8 +104,6 @@ void __l4_putc(int c)
 
 int __l4_getc (void)
 {
-    io_init();
-
     while ((inb(COMPORT+5) & 0x01) == 0);
     return inb(COMPORT);
 }

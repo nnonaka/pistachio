@@ -35,24 +35,24 @@
 #include "lib.h"
 
 
-fdt_header_t *fdt_t::find_subtree_node(fdt_node_t *node, char *name)
+fdt_header_t *fdt_find_subtree_node (fdt_t *self, fdt_node_t *node, char *name)
 {
     int level = 0;
     do {
-	if (node->is_begin_node())
+	if (fdt_node_is_begin_node (node))
 	{
 	    fdt_header_t* hdr = (fdt_header_t*)node;
 	    if (strcmp(hdr->name, name) == 0 && level == 1)
 		return hdr;
 	    level++;
-	    node = get_next_node(hdr);
+	    node = fdt_next_node_header (hdr);
 	} 
-	else if (node->is_property_node()) 
+	else if (fdt_node_is_property_node (node)) 
 	{
 	    fdt_property_t* prop = (fdt_property_t*)node;
-	    node = get_next_node(prop);
+	    node = fdt_next_node_property (prop);
 	}	    
-	else if (node->is_end_node()) 
+	else if (fdt_node_is_end_node (node)) 
 	{
 	    level--;
 	    node++;
@@ -65,24 +65,24 @@ fdt_header_t *fdt_t::find_subtree_node(fdt_node_t *node, char *name)
     return 0;
 }
 
-fdt_property_t *fdt_t::find_property_node(fdt_node_t *node, char *name)
+fdt_property_t *fdt_find_property_node (fdt_t *self, fdt_node_t *node, char *name)
 {
     int level = 0;
     do {
-	if (node->is_begin_node())
+	if (fdt_node_is_begin_node (node))
 	{
 	    fdt_header_t* hdr = (fdt_header_t*)node;
 	    level++;
-	    node = get_next_node(hdr);
+	    node = fdt_next_node_header (hdr);
 	} 
-	else if (node->is_property_node()) 
+	else if (fdt_node_is_property_node (node)) 
 	{
 	    fdt_property_t* prop = (fdt_property_t*)node;
-	    if (strcmp(prop->get_name(this), name) == 0 && level == 1)
+	    if (strcmp(fdt_property_get_name (prop, self), name) == 0 && level == 1)
 		return prop;
-	    node = get_next_node(prop);
+	    node = fdt_next_node_property (prop);
 	}	    
-	else if (node->is_end_node()) 
+	else if (fdt_node_is_end_node (node)) 
 	{
 	    level--;
 	    node++;
@@ -95,9 +95,9 @@ fdt_property_t *fdt_t::find_property_node(fdt_node_t *node, char *name)
     return 0;
 }
 
-fdt_property_t *fdt_t::find_property_node(char *path)
+fdt_property_t *fdt_find_property_node_path (fdt_t *self, char *path)
 {
-    fdt_node_t *node = get_root_node();
+    fdt_node_t *node = fdt_get_root_node (self);
     char *next_path;
 
     /* remove trailing / */
@@ -110,20 +110,20 @@ fdt_property_t *fdt_t::find_property_node(char *path)
 	if (next_path != 0)
 	{
 	    *next_path = 0;
-	    node = find_subtree_node(node, path);
+	    node = (fdt_node_t *)fdt_find_subtree_node (self, node, path);
 	    *next_path = '/';
 	    path = next_path + 1;
 	    if (!node)
 		return 0;
 	}
 	else
-	    return find_property_node(node, path);
+	    return fdt_find_property_node (self, node, path);
     } 
 }
 
-fdt_header_t *fdt_t::find_subtree(char *path)
+fdt_header_t *fdt_find_subtree (fdt_t *self, char *path)
 {
-    fdt_node_t *node = get_root_node();
+    fdt_node_t *node = fdt_get_root_node (self);
     char *next_path;
 
     /* remove trailing / */
@@ -136,13 +136,13 @@ fdt_header_t *fdt_t::find_subtree(char *path)
 	if (next_path != 0)
 	{
 	    *next_path = 0;
-	    node = find_subtree_node(node, path);
+	    node = (fdt_node_t *)fdt_find_subtree_node (self, node, path);
 	    *next_path = '/';
 	    path = next_path + 1;
 	    if (!node)
 		return 0;
 	}
 	else
-	    return find_subtree_node(node, path);
+	    return fdt_find_subtree_node (self, node, path);
     }
 }

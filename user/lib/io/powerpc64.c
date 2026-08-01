@@ -33,13 +33,13 @@
 #include <l4/types.h>
 #include <l4/powerpc64/kdebug.h>
 
-extern "C" void __l4_putc (int c);
-extern "C" void putc (int c) __attribute__ ((weak, alias ("__l4_putc")));
+void __l4_putc (int c);
+void putc (int c) __attribute__ ((weak, alias ("__l4_putc")));
 
-extern "C" int __l4_getc (void);
-extern "C" int getc (void) __attribute__ ((weak, alias ("__l4_getc")));
+int __l4_getc (void);
+int getc (void) __attribute__ ((weak, alias ("__l4_getc")));
 
-extern "C" void __l4_putc( int c )
+void __l4_putc( int c )
 {
     L4_KDB_PrintChar( c );
     if( c == '\n' )
@@ -47,7 +47,7 @@ extern "C" void __l4_putc( int c )
 }
 
 
-extern "C" int __l4_getc()
+int __l4_getc()
 {
     return L4_KDB_ReadChar_Blocked();
 }

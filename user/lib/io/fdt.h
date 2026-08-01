@@ -35,16 +35,22 @@
 
 #include "lib.h"
 
-class fdt_reserve_entry_t
+/* Was six classes, two of them deriving from fdt_node_t.  The derived pair are
+   memory overlays whose base contributes exactly one word, so in C that word
+   is spelled out as their first member -- the layout is what matters here, and
+   an embedded struct would have forced `p->node.tag' at every use.
+   See doc/notes/cpp-to-c-migration.md §172. */
+
+struct fdt_reserve_entry_t
 {
-public:
     L4_Word64_t address;
     L4_Word64_t size;
 };
+typedef struct fdt_reserve_entry_t fdt_reserve_entry_t;
 
-class fdt_t;
-class fdt_header_t;
-class fdt_property_t;
+struct fdt_t;         typedef struct fdt_t fdt_t;
+struct fdt_header_t;  typedef struct fdt_header_t fdt_header_t;
+struct fdt_property_t;typedef struct fdt_property_t fdt_property_t;
 
 enum {
     fdt_begin_node = 1,
@@ -52,39 +58,21 @@ enum {
     fdt_property_node = 3,
 };
 
-class fdt_node_t
+struct fdt_node_t
 {
-public:
     L4_Word32_t tag;
-
-    bool is_begin_node()
-	{ return tag == fdt_begin_node; }
-    bool is_end_node()
-	{ return tag == fdt_end_node; }
-    bool is_property_node()
-	{ return tag == fdt_property_node; }
 };
+typedef struct fdt_node_t fdt_node_t;
 
-class fdt_t
+L4_INLINE bool fdt_node_is_begin_node (fdt_node_t *self)
+    { return self->tag == fdt_begin_node; }
+L4_INLINE bool fdt_node_is_end_node (fdt_node_t *self)
+    { return self->tag == fdt_end_node; }
+L4_INLINE bool fdt_node_is_property_node (fdt_node_t *self)
+    { return self->tag == fdt_property_node; }
+
+struct fdt_t
 {
-public:
-    bool is_valid()
-	{ return magic == 0xd00dfeed; }
-
-    fdt_node_t *get_root_node()
-	{ return (fdt_node_t*)((L4_Word_t)this + offset_dt_struct); }
-
-    template <typename T> fdt_node_t *get_next_node(T *p)
-	{ return (fdt_node_t*)((L4_Word_t)p + p->get_size()); }
-
-    fdt_property_t *find_property_node(char *path);
-    fdt_property_t *find_property_node(fdt_node_t *node, char *name);
-    fdt_header_t *find_subtree_node(fdt_node_t *node, char *name);
-    fdt_header_t *find_subtree(char *name);
-
-    void dump();
-
-public:
     L4_Word32_t magic;
     L4_Word32_t size;
     L4_Word32_t offset_dt_struct;	/* offset to structure */
@@ -97,40 +85,58 @@ public:
     L4_Word32_t dt_struct_size;
 };
 
-class fdt_header_t : public fdt_node_t
+struct fdt_header_t
 {
-public:
+    L4_Word32_t tag;		/* was the fdt_node_t base */
     char name[0];
-
-    int get_size()
-	{ return sizeof(fdt_header_t) + (strlen(name) + 4) & ~3; }
 };
 
-class fdt_property_t : public fdt_node_t
+struct fdt_property_t
 {
-public:
-    int get_size()
-	{ return sizeof(fdt_property_t) + (len - 1 + 4) & ~3; }
-
-    char *get_name(fdt_t *fdt)
-	{ return ((char*)fdt) + fdt->offset_dt_strings + offset_name; }
-
-    L4_Word_t get_len()
-	{ return len; }
-    L4_Word_t get_word(int index)
-	{ return data[index]; }
-    L4_Word64_t get_u64(int index)
-	{ return ((L4_Word64_t)data[index]) << 32 | ((L4_Word64_t)data[index + 1]); }
-    char *get_string()
-	{ return (char*)data; }
-
+    L4_Word32_t tag;		/* was the fdt_node_t base */
     L4_Word32_t len;
     L4_Word32_t offset_name;
     L4_Word_t data[0];
 };
 
-    
+L4_INLINE bool fdt_is_valid (fdt_t *self)
+    { return self->magic == 0xd00dfeed; }
 
+L4_INLINE fdt_node_t *fdt_get_root_node (fdt_t *self)
+    { return (fdt_node_t*)((L4_Word_t)self + self->offset_dt_struct); }
+
+L4_INLINE int fdt_header_get_size (fdt_header_t *self)
+    { return sizeof(fdt_header_t) + (strlen(self->name) + 4) & ~3; }
+
+L4_INLINE int fdt_property_get_size (fdt_property_t *self)
+    { return sizeof(fdt_property_t) + (self->len - 1 + 4) & ~3; }
+
+L4_INLINE char *fdt_property_get_name (fdt_property_t *self, fdt_t *fdt)
+    { return ((char*)fdt) + fdt->offset_dt_strings + self->offset_name; }
+
+L4_INLINE L4_Word_t fdt_property_get_len (fdt_property_t *self)
+    { return self->len; }
+L4_INLINE L4_Word_t fdt_property_get_word (fdt_property_t *self, int index)
+    { return self->data[index]; }
+L4_INLINE L4_Word64_t fdt_property_get_u64 (fdt_property_t *self, int index)
+    { return ((L4_Word64_t)self->data[index]) << 32 |
+	     ((L4_Word64_t)self->data[index + 1]); }
+L4_INLINE char *fdt_property_get_string (fdt_property_t *self)
+    { return (char*)self->data; }
+
+/* fdt_t::get_next_node was a template over the two node kinds; both branches
+   are `(fdt_node_t*)((L4_Word_t)p + p->get_size())'. */
+L4_INLINE fdt_node_t *fdt_next_node_header (fdt_header_t *p)
+    { return (fdt_node_t*)((L4_Word_t)p + fdt_header_get_size (p)); }
+L4_INLINE fdt_node_t *fdt_next_node_property (fdt_property_t *p)
+    { return (fdt_node_t*)((L4_Word_t)p + fdt_property_get_size (p)); }
+
+fdt_property_t *fdt_find_property_node_path (fdt_t *self, char *path);
+fdt_property_t *fdt_find_property_node (fdt_t *self, fdt_node_t *node, char *name);
+fdt_header_t *fdt_find_subtree_node (fdt_t *self, fdt_node_t *node, char *name);
+fdt_header_t *fdt_find_subtree (fdt_t *self, char *name);
+
+void fdt_dump (fdt_t *self);
 
 
 #endif /* !__FDT_H__ */

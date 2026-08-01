@@ -40,7 +40,7 @@
 #define __L4_TRAP64_KGETC_NB	    (__L4_TRAP64_MAGIC + 3)
 
 #define L4_KDB_Enter(str...)					\
-    asm volatile (						\
+    __asm__ __volatile__ (						\
 	"mr	0, %0 ;"					\
 	"trap ;"						\
 	"b 1f ;"						\

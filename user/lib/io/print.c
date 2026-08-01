@@ -43,20 +43,20 @@
  * symbols that aliases these functions. 
  */
 
-extern "C" int __l4_printf (const char *fmt, ...);
-extern "C" int printf (const char *fmt, ...)
+int __l4_printf (const char *fmt, ...);
+int printf (const char *fmt, ...)
     __attribute__ ((weak, alias ("__l4_printf")));
-extern "C" int __l4_snprintf (char *str, L4_Size_t size, const char *fmt, ...);
-extern "C" int snprintf (char *str, L4_Size_t size, const char *fmt, ...)
+int __l4_snprintf (char *str, L4_Size_t size, const char *fmt, ...);
+int snprintf (char *str, L4_Size_t size, const char *fmt, ...)
     __attribute__ ((weak, alias ("__l4_snprintf")));
-extern "C" int __l4_vsnprintf (char *str, L4_Size_t size, const char *fmt, va_list);
-extern "C" int vsnprintf (char *str, L4_Size_t size, const char *fmt, va_list)
+int __l4_vsnprintf (char *str, L4_Size_t size, const char *fmt, va_list);
+int vsnprintf (char *str, L4_Size_t size, const char *fmt, va_list)
     __attribute__ ((weak, alias ("__l4_vsnprintf")));
-extern "C" int __l4_puts (const char * str);
-extern "C" int puts (const char * str)
+int __l4_puts (const char * str);
+int puts (const char * str)
     __attribute__ ((weak, alias ("__l4_puts")));
-extern "C" int __l4_putchar (int c);
-extern "C" int putchar (int c)
+int __l4_putchar (int c);
+int putchar (int c)
     __attribute__ ((weak, alias ("__l4_putchar")));
 
 static void print_string (const char * s);

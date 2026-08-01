@@ -76,6 +76,19 @@
 
 typedef L4_Word_t		L4_Bool_t;
 
+/* C has no bool/true/false keywords, and this is a freestanding build:
+   -nostdinc is on and configure locates only stdarg.h, so <stdbool.h> is not
+   dependably on the include path (the ia32 configuration has no gcc include
+   directory at all).  _Bool is C99, so the three names are spelled out here
+   the way kernel/src/generic/types.h does for the kernel side.  L4_Bool_t
+   above is unchanged -- it is the API's boolean and stays a word.
+   See doc/notes/cpp-to-c-migration.md §172. */
+#if !defined(__cplusplus)
+typedef _Bool	bool;
+#define true	1
+#define false	0
+#endif
+
 #define L4_INLINE		static inline
 #define L4_BITS_PER_WORD	(sizeof (L4_Word_t) * 8)
 

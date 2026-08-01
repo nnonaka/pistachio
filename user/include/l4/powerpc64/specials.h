@@ -38,7 +38,9 @@ L4_INLINE int __L4_Msb( L4_Word_t w )
 {
     int zeros;
 
-    asm volatile ("cntlzd %0, %1" : "=r" (zeros) : "r" (w) );
+    /* `__asm__' is not a keyword under -std=c99, which is what the userland
+       builds C with; l4/powerpc/specials.h already uses this spelling. */
+    __asm__ __volatile__ ("cntlzd %0, %1" : "=r" (zeros) : "r" (w) );
 
     return 63-zeros;
 }

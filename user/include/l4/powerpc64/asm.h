@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002,  University of New South Wales
  *                
- * File path:     arch/powerpc64/asm.h
+ * File path:     arch/powerpc64/__asm__.h
  * Created:       23/07/2002 17:48:20 by Simon Winwood (sjw)
  * Description:   Assembler macros etc. 
  *                
@@ -27,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: asm.h,v 1.3 2003/10/17 01:48:55 cvansch Exp $
+ * $Id: __asm__.h,v 1.3 2003/10/17 01:48:55 cvansch Exp $
  *                
  ********************************************************************/
 

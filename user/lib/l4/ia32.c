@@ -47,7 +47,7 @@ extern char __L4_syscalls_end;
 extern char __L4_syscalls_copy_start;
 extern char __L4_syscalls_copy_end;
 
-extern "C" void __L4_copy_syscalls_out (void)
+void __L4_copy_syscalls_out (void)
 {
     char * s = &__L4_syscalls_start;
     char * e = &__L4_syscalls_end;
@@ -57,7 +57,7 @@ extern "C" void __L4_copy_syscalls_out (void)
 	*d++ = *s++;
 }
 
-extern "C" void __L4_copy_syscalls_in (L4_Word_t dest)
+void __L4_copy_syscalls_in (L4_Word_t dest)
 {
     char * s = &__L4_syscalls_copy_start;
     char * e = &__L4_syscalls_copy_end;
@@ -67,10 +67,13 @@ extern "C" void __L4_copy_syscalls_in (L4_Word_t dest)
 	*d++ = *s++;
 }
 
-extern "C" void __L4_init_syscalls (void)
+void __L4_init_syscalls (void)
 {
+    /* L4_KernelInterface() with no arguments is the C++ binding's overload
+       (l4/kip.h, inside its __cplusplus block); L4_GetKernelInterface is the
+       C spelling of the same thing. */
     L4_KernelInterfacePage_t * kip = (L4_KernelInterfacePage_t *)
-	L4_KernelInterface ();
+	L4_GetKernelInterface ();
 
     // Make copy before starting to modify.
     __L4_copy_syscalls_out ();

@@ -36,7 +36,7 @@ L4_INLINE L4_Word_t *__L4_PPC64_Utcb( void ) __attribute__ ((const));
 
 L4_INLINE L4_Word_t *__L4_PPC64_Utcb( void )
 {
-    register L4_Word_t *utcb asm("r13");
+    register L4_Word_t *utcb __asm__("r13");
 
     return utcb;
 }

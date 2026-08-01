@@ -39,7 +39,7 @@ include $(top_srcdir)/Mk/l4.base.mk
 ia32_OBJS=	ia32-syscall-stubs.S
 
 LIBRARY=	l4
-SRCS=		debug.cc $(ARCH).cc $($(ARCH)_OBJS) 
+SRCS=		debug.c $(ARCH).c $($(ARCH)_OBJS) 
 
 
 include $(top_srcdir)/Mk/l4.lib.mk

@@ -552,25 +552,28 @@ L4_INLINE char * L4_Feature (void * KernelInterface, L4_Word_t num)
 
     return str;
 }
-#if defined(__cplusplus)
+/* Not part of the X.2 API, and it used to sit inside the __cplusplus block
+   even though its body is plain C -- so the C binding had no way to ask.  The
+   guard is gone and `true'/`false' are spelled as the L4_Bool_t values they
+   are.  See doc/notes/cpp-to-c-migration.md §172. */
 L4_INLINE L4_Bool_t L4_HasFeature (const char *feature_name)
 {
     void *kip = L4_GetKernelInterface();
     char *name;
+    L4_Word_t i;
 
-    for( L4_Word_t i = 0; (name = L4_Feature(kip,i)) != 0; i++ )
+    for( i = 0; (name = L4_Feature(kip,i)) != 0; i++ )
     {
         const char *n = name;
         const char *fn = feature_name;
 
 	while (*n == *fn++)
             if (*n++ == 0)
-                return true;
+                return 1;
 	/* Names differ -- carry on with the next feature. */
     }
-    return false;
+    return 0;
 }
-#endif
 
 typedef union {
     L4_Word_t	raw[2];

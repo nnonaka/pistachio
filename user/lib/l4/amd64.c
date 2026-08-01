@@ -49,7 +49,7 @@ __L4_SpaceControl_t __L4_SpaceControl = NULL;
 __L4_ProcessorControl_t __L4_ProcessorControl = NULL;
 __L4_MemoryControl_t __L4_MemoryControl = NULL;
 
-extern "C" void __L4_Init( void )
+void __L4_Init( void )
 {
     L4_KernelInterfacePage_t *kip;
     L4_Word_t dummy;

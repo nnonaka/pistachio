@@ -34,11 +34,11 @@
 #include <l4/powerpc/kdebug.h>
 #include <l4/space.h>
 
-extern "C" int __l4_getc( void );
-extern "C" int getc( void ) __attribute__ ((weak, alias("__l4_getc")));
+int __l4_getc( void );
+int getc( void ) __attribute__ ((weak, alias("__l4_getc")));
 
-extern "C" void __l4_putc( int c );
-extern "C" void putc( int c ) __attribute__ ((weak, alias("__l4_putc")));
+void __l4_putc( int c );
+void putc( int c ) __attribute__ ((weak, alias("__l4_putc")));
 
 /****************************************************************************
  *
@@ -232,7 +232,7 @@ static void io_init( void )
 }
 
 
-extern "C" int __l4_getc( void )
+int __l4_getc( void )
 {
     io_init();
     
@@ -249,7 +249,7 @@ extern "C" int __l4_getc( void )
 }
 
 
-extern "C" void __l4_putc( int c )
+void __l4_putc( int c )
 {
     io_init();
 
@@ -268,12 +268,12 @@ extern "C" void __l4_putc( int c )
 }
 #else	/* CONFIG_COMPORT */
 
-extern "C" int __l4_getc()
+int __l4_getc()
 {
     return L4_KDB_ReadChar_Blocked();
 }
 
-extern "C" void __l4_putc( int c )
+void __l4_putc( int c )
 {
     L4_KDB_PrintChar( c );
     if( c == '\n' )

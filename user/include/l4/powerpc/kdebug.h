@@ -37,7 +37,7 @@
 #define __L4_TRAP_KGETC	(__L4_TRAP_KDEBUG + 2)
 
 #define L4_KDB_Enter(str...)					\
-    asm volatile (						\
+    __asm__ __volatile__ (						\
 	"li %%r0, %0 ;"						\
 	"trap ;"						\
 	"b 1f ;"						\
