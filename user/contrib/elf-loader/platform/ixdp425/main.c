@@ -1,10 +1,9 @@
 /*********************************************************************
  *
- * Copyright (C) 2003-2004,  University of New South Wales
- * Copyright (C) 2004,  National ICT Australia
+ * Copyright (C) 2003,  University of New South Wales
  *
- * File path:     contrib/elf-loader/platform/innovator/main.cc
- * Description:   Main file for elf-loader
+ * File path:     contrib/elf-loader/platform/pleb/main.cc
+ * Description:   Main file for elf loader
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,34 +26,34 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: main.cc,v 1.2 2004/06/04 07:53:55 htuch Exp $
+ * $Id: main.cc,v 1.2 2004/06/04 07:54:30 htuch Exp $
  *
  ********************************************************************/
 
 #include <l4io.h>
 #include <elf-loader.h>
-#include "io.h"
 
 #define PHYS_OFFSET 0x00000000
 
 extern L4_KernelConfigurationPage_t *kip;
 
+void print_byte(char c);
 
-extern "C" void putc(int c)
+void putc(int c)
 {
-    print_byte_ser(c);
+    print_byte(c);
 
     if (c == '\n')
-        print_byte_ser('\r');
+        print_byte('\r');
 }
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
         *(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;
@@ -68,7 +67,7 @@ memcpy (void * dst, const void * src, unsigned int len)
 
 void start_kernel(L4_Word_t bootaddr)
 {
-    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0xDFF00000);
+    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0xEFF00000);
 
     /* XXX - Get this from boot loader FIXME
     kip->MainMem.high = 16UL * 1024 * 1024; */
@@ -76,14 +75,12 @@ void start_kernel(L4_Word_t bootaddr)
 
     printf("Jumping to kernel @ %p\n", func);
 
-
     func(0);
 }
 
 int main(void)
 {
     L4_Word_t entry;
-
 
     if (load_modules(&entry, PHYS_OFFSET)) {
         putc('!');

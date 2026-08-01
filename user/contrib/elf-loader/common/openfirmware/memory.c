@@ -142,7 +142,7 @@ ofw_size_physmem(void)
 
     printf("\t\tRegion [%d] 0x%lx - 0x%lx\n", i, mem_lo, mem_hi);
 
-    if(kip_manager.add_memdesc(0, mem_lo, mem_hi, 
+    if(kip_manager_add_memdesc (&kip_manager, 0, mem_lo, mem_hi, 
 			       L4_ConventionalMemoryType, 0) == -1) {
 
       ofw_error("kip manager failed to add memory descriptor!");
@@ -202,7 +202,7 @@ ofw_size_physmem(void)
 
       printf("\t\tRegion [%d] 0x%lx - 0x%lx\n", i, resv_lo, resv_hi);
       
-      if(kip_manager.add_memdesc(0, resv_lo, resv_hi, 
+      if(kip_manager_add_memdesc (&kip_manager, 0, resv_lo, resv_hi, 
 				 L4_BootLoaderSpecificMemoryType,
 				 OFWMemorySubType_Reserved) == -1) {
 	
@@ -243,7 +243,7 @@ ofw_setup_virtmem(void)
 void
 ofw_map_virtmem(L4_Word_t vaddr, L4_Word_t size)
 {
-  L4_Word_t paddr = kip_manager.mem_base() + vaddr; /* one-one memory map */
+  L4_Word_t paddr = kip_manager_mem_base (&kip_manager) + vaddr; /* one-one memory map */
 #warning awiggins (06-09-03): Clean up to do address encoding property.
   ofw_addr_t paddr_lo = ADDR2OFW_ADDR(paddr);
   ofw_addr_t paddr_hi = ADDR2OFW_ADDR(paddr >> 32);

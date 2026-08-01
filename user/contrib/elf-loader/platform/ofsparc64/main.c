@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:    contrib/elf-loader/platform/ofsparc64/main.cc
+ * File path:    contrib/elf-loader/platform/ofsparc64/main.c
  * Description:  Main file for elf-loader on sparc v9 OpenBoot
  *               (Open Firmware) platforms.
  *
@@ -52,7 +52,7 @@ main(void)
 
     printf("\nelf-loader:\tStarting.\n");
 
-    kip_manager.init(kip_paddr);
+    kip_manager_init (&kip_manager, kip_paddr);
 
     ofw_setup_physmem();
     ofw_setup_virtmem();
@@ -67,18 +67,18 @@ main(void)
     }
 
     /* Setup Open Firmware device tree. */
-    //L4_Word_t devtree_start = kip_manager.first_avail_page();
-    //L4_Word_t devtree_size  = devtree.build((char *)devtree_start);
+    //L4_Word_t devtree_start = kip_manager_first_avail_page (&kip_manager);
+    //L4_Word_t devtree_size  = ofw_devtree_build (&devtree, (char *)devtree_start);
     //L4_Word_t devtree_end   = wrap_up(devtree_start + devtree_size, PAGE_SIZE);
 
-    //kip_manager.add_memdesc(0, devtree_start, devtree_end, 
+    //kip_manager_add_memdesc (&kip_manager, 0, devtree_start, devtree_end, 
     //			  L4_BootLoaderSpecificMemoryType,
     //			  OFWMemorySubType_DeviceTree);
 
     //printf("elf-loader:\tOpen firmware device tree located at 0x%lx - 0x%lx.\n");
 
     /* Setup KIP. */
-    kip_manager.update();
+    kip_manager_update (&kip_manager);
 
     /* Jump to kernel. */
 
@@ -90,7 +90,7 @@ main(void)
 
 } // main()
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;

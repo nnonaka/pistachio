@@ -47,6 +47,7 @@ struct elf_phdr {
     L4_Word_t mem_size;
     L4_Word_t offset;
 };
+typedef struct elf_phdr elf_phdr;
 
 typedef int (*elf_next_phdr_func)(L4_Word_t addr, int *index, elf_phdr *phdr);
 

@@ -46,14 +46,14 @@ extern ofw_ihandle_t ofw_stdout;
 * Function Prototypes *
 **********************/
 
-extern "C" int printf(const char * fmt, ...); /* Need to define this here */
+int printf(const char * fmt, ...); /* Need to define this here */
 
 void ofw_setup_console(void);
 
 void ofw_error(const char * msg);
 
-extern "C" void putc(int c);
-extern "C" int  getc(void);
+void putc(int c);
+int  getc(void);
 
 
 #endif /* !__OPENFIRMWARE__CONSOLE_H__ */

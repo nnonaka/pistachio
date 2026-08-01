@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003-2004,  University of New South Wales
  *
- * File path:      contrib/elf-loader/platform/innovator/io_omap1510.cc
+ * File path:      contrib/elf-loader/platform/innovator/io_omap1510.c
  * Description:    Interface to basic IO
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,7 +95,7 @@ static const int CONSOLE_TYPE = SER;  // 0 = serial port device
  * FCR<0>   1  turn on fifo mode
  */
 
-#define WAIT asm volatile ("mov r0, #0x1800 \n subs r0, r0, #0x1 \n bne . - 0x4");
+#define WAIT __asm__ __volatile__ ("mov r0, #0x1800 \n subs r0, r0, #0x1 \n bne . - 0x4");
 
 #define REG_ARM_IDLECT2	0xfffece08
 #define REG_ARM_RSTCT2	0xfffece14

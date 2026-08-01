@@ -41,7 +41,8 @@
 Elf64_Shdr *elf64_next_shdr(Elf64_Ehdr *ehdr, int *index);						
 Elf64_Phdr *elf64_next_phdr(Elf64_Ehdr *ehdr, int *index);						
 Elf64_Ehdr *valid_elf64(L4_Word_t addr,  L4_Word64_t *entry);					
-void elf64_install_image(Elf64_Ehdr *ehdr,  L4_Word64_t *image_start,  L4_Word64_t *image_end, bool copy=1);
+/* copy defaulted to 1. */
+void elf64_install_image(Elf64_Ehdr *ehdr,  L4_Word64_t *image_start,  L4_Word64_t *image_end, bool copy);
 
 /* From string.cc */
 int strcmp(const char * cs,const char * ct);

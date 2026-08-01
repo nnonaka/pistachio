@@ -42,58 +42,60 @@
 #define OFWMemorySubType_Reserved   0xE
 #define OFWMemorySubType_DeviceTree 0xF
 
-class kip_server_t
-{
-public:
-  typedef enum {
-    server_sigma0 = 0,
-    server_sigma1,
-    server_root,
-    server_total,       // Total number of servers.
-    server_invalid = -1 // Invalid server.
-  } kip_server_e;
+/* Two classes; the nested enum moves to file scope, and the members become
+   kip_manager_* / kip_server_* entry points.  Notes §174. */
+typedef enum {
+  server_sigma0 = 0,
+  server_sigma1,
+  server_root,
+  server_total,       // Total number of servers.
+  server_invalid = -1 // Invalid server.
+} kip_server_e;
 
+struct kip_server_t
+{
   L4_Word_t sp;         // Initial stack pointer.
   L4_Word_t ip;         // Initial instruction pointer.
   L4_Word_t low;        // Start address of server.
   L4_Word_t high;       // End address of server.
-
-  void clear() {
-    this->sp = this->ip = this->low = this->high = 0;
-
-  } // clear()
-  
-  
 }; // kip_server_t
+typedef struct kip_server_t kip_server_t;
 
-class kip_manager_t
+L4_INLINE void kip_server_clear (kip_server_t *self)
 {
-protected:
+  self->sp = self->ip = self->low = self->high = 0;
+}
+
+struct kip_manager_t
+{
+  /* were protected */
   L4_KernelConfigurationPage_t * kip; // Where the KIP gets loaded.
 
   L4_MemoryDesc_t memdesc[MAX_MEMDESC];
-  kip_server_t    servers[kip_server_t::server_total];
+  kip_server_t    servers[server_total];
 
   L4_Word_t boot_info;
   L4_Word_t total_memdesc;
-
-public:
-  bool add_server(kip_server_t::kip_server_e server,
-		  L4_Word_t sp, L4_Word_t ip, L4_Word_t low, L4_Word_t high);
-  int add_memdesc(bool is_virt, L4_Word_t low, L4_Word_t high,
-		  L4_Word_t type, L4_Word_t sub_type);
-
-  L4_Word_t mem_base(void);
-  L4_Word_t first_avail_page(void);
-
-  bool init(void * kip_addr);
-  bool update(void);
-
-  void set_boot_info(L4_Word_t value) {
-    this->boot_info = value;
-  }
-
 }; // kip_manager_t
+typedef struct kip_manager_t kip_manager_t;
+
+bool kip_manager_add_server (kip_manager_t *self, kip_server_e server,
+			     L4_Word_t sp, L4_Word_t ip,
+			     L4_Word_t low, L4_Word_t high);
+int kip_manager_add_memdesc (kip_manager_t *self, bool is_virt,
+			     L4_Word_t low, L4_Word_t high,
+			     L4_Word_t type, L4_Word_t sub_type);
+
+L4_Word_t kip_manager_mem_base (kip_manager_t *self);
+L4_Word_t kip_manager_first_avail_page (kip_manager_t *self);
+
+bool kip_manager_init (kip_manager_t *self, void * kip_addr);
+bool kip_manager_update (kip_manager_t *self);
+
+L4_INLINE void kip_manager_set_boot_info (kip_manager_t *self, L4_Word_t value)
+{
+  self->boot_info = value;
+}
 
 extern kip_manager_t kip_manager;
 

@@ -9540,3 +9540,63 @@ Verified: amd64, ia32 and powerpc64 build the whole userland; `tools/boottest`
 passes, so the converted kickstart loads the converted sigma0 and l4test and
 the suite starts. powerpc compiles everything and stops at the pre-existing
 soft-float link described in §172.
+
+## §174 -- contrib/elf-loader, and what "verified" means for it
+
+The last 27 files. `contrib/elf-loader` is a set of boot loaders for mips64,
+alpha, arm and sparc64 -- architectures `user/configure` does not accept -- so
+no configuration in this tree compiles a line of it, and no cross toolchain for
+any of them is installed here. It cannot be built, and saying otherwise would
+be false.
+
+What it *can* have is a syntax check. Each file was run through
+`gcc -fsyntax-only -std=c99` with its own platform include directory, the L4
+headers, and a one-line shim supplying `openfirmware/amd64/types.h` (the arch
+directory the host compile selects, which only exists for sparc64 in-tree).
+That proves the C parses and every name resolves. It does not prove the code
+generates correctly for the real target, and nothing available here could.
+
+    33 of 36 checks pass   (36 not 27: the four common/ files are checked once
+                            per platform include set)
+
+The three that do not are environmental, not code:
+
+  * `common/loader.c` and `platform/ofsparc64/main.c` use `KIP_ADDR`, which is
+    defined nowhere in the tree -- not in any header, not in configure. It was
+    equally undefined before the conversion; C++ would have rejected it too.
+  * `platform/srm/console.c` includes `<l4/alpha/pal.h>`. `user/include/l4`
+    has amd64, ia32, powerpc and powerpc64 and never had an alpha directory.
+
+### What the conversion found
+
+`platform/amd64-pc99/elf.cc`:
+
+    start <?= ((L4_Word_t) phdr->p_paddr);
+    end   >?= (((L4_Word_t) phdr->p_paddr) + (L4_Word_t) phdr->p_filesz);
+
+`<?=` and `>?=` are GNU C++'s min-assign and max-assign operators, which gcc
+deprecated in 3.4 and removed in 4.0. This file has not compiled with any
+compiler released in the last twenty years.
+
+`globals.h` gave `elf64_install_image` a defaulted `bool copy=1`; the three
+call sites in `bootloader.cc` all took the default.
+
+`kip_manager_t` appears for the third time in this tree -- kickstart's,
+piggybacker's and now elf-loader's are three unrelated classes with the same
+name and overlapping method names. Each got its own prefix.
+
+The rest is what §172 and §173 describe: classes to structs, `extern "C"`
+dropped, nested enums to file scope, `struct X` tags needing typedefs.
+
+### Where it stands
+
+    user .cc:  95 -> 1
+
+The one is `util/piggybacker/ofppc64/donote.cc`, a host tool built with plain
+`g++` that never enters the target build.
+
+    kernel .cc: 5  (the unreachable set from §162 -- efi, simics, x64/init)
+    user .cc:   1  (a host tool)
+
+Verified this pass: amd64, ia32 and powerpc64 build the whole userland;
+`tools/boottest` passes.

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003,  University of New South Wales
  *
- * File path:     contrib/elf-loader/platform/pleb/main.cc
+ * File path:     contrib/elf-loader/platform/pleb2/main.c
  * Description:   Main file for elf loader
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: main.cc,v 1.6 2004/06/04 07:53:18 htuch Exp $
+ * $Id: main.cc,v 1.1 2004/12/02 22:06:38 cvansch Exp $
  *
  ********************************************************************/
 
@@ -37,9 +37,9 @@
 
 extern L4_KernelConfigurationPage_t *kip;
 
-extern "C" void print_byte(char c);
+void print_byte(char c);
 
-extern "C" void putc(int c)
+void putc(int c)
 {
     print_byte(c);
 
@@ -47,13 +47,13 @@ extern "C" void putc(int c)
         print_byte('\r');
 }
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
         *(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;
@@ -67,7 +67,7 @@ memcpy (void * dst, const void * src, unsigned int len)
 
 void start_kernel(L4_Word_t bootaddr)
 {
-    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0x2FB00000);
+    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0x4FF00000);
 
     /* XXX - Get this from boot loader FIXME
     kip->MainMem.high = 16UL * 1024 * 1024; */

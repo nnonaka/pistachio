@@ -20,8 +20,8 @@
 static unsigned long cons_dev;
 
 /* Takes a varied number of args */
-extern "C" unsigned long dispatch(L4_Word_t a0, L4_Word_t a1, L4_Word_t a2, L4_Word_t a3, hwrpb_struct *hwrpb);
-extern "C" void halt(void);
+unsigned long dispatch(L4_Word_t a0, L4_Word_t a1, L4_Word_t a2, L4_Word_t a3, hwrpb_struct *hwrpb);
+void halt(void);
 
 static hwrpb_struct *hwrpb_to_use = INIT_HWRPB;
 
@@ -90,7 +90,7 @@ static long cons_puts(const char *str, long len)
 	return len;
 }
 
-extern "C" void putc(char c)
+void putc(char c)
 {
 	char buf[2];
 
@@ -102,7 +102,7 @@ extern "C" void putc(char c)
 	    putc('\r');
 }
 
-extern "C" char getc(void)
+char getc(void)
 {
 	long c;
 

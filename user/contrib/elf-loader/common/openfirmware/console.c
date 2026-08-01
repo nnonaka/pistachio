@@ -82,7 +82,7 @@ ofw_error(const char * msg)
 
 } // ofw_error()
 
-extern "C" void
+void
 putc(int c) {
   char ch = c;
 
@@ -94,7 +94,7 @@ putc(int c) {
   
 } // putc()
 
-extern "C" int
+int
 getc(void) {
   unsigned char ch = '\0';
   ofw_cell_t l;

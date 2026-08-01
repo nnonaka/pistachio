@@ -116,8 +116,13 @@ void elf64_install_image(Elf64_Ehdr *ehdr,  L4_Word64_t *image_start,  L4_Word64
 		   (L4_Word_t) phdr->p_filesz);
 	
        
-	start <?= ((L4_Word_t) phdr->p_paddr);
-	end >?= (((L4_Word_t) phdr->p_paddr) + (L4_Word_t) phdr->p_filesz);
+	/* were `start <?= x' and `end >?= y' -- GNU C++'s min/max-assign
+	   operators, which gcc removed in 4.x.  This file has not compiled
+	   with any modern compiler.  Notes §174. */
+	{ L4_Word_t __v = ((L4_Word_t) phdr->p_paddr);
+	  if (__v < start) start = __v; }
+	{ L4_Word_t __v = (((L4_Word_t) phdr->p_paddr) + (L4_Word_t) phdr->p_filesz);
+	  if (__v > end) end = __v; }
 	
 	*image_start = (L4_Word64_t) start;
 	*image_end = (L4_Word64_t) end;

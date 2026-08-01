@@ -52,14 +52,14 @@ TARGET=	$(ARCH)-loader
 PROGRAM_DEPS=	$(SIGMA0) $(ROOT_TASK) $(KERNEL)
 
 SRCS_powerpc=	ofppc/
-SRCS_mips64=	platform/$(PLAT)/main.cc platform/$(PLAT)/head.S
-SRCS_alpha=	platform/srm/main.cc platform/srm/head.S platform/srm/console.cc platform/srm/utils.cc platform/srm/alpha-divrem.S platform/srm/dispatch.S
-SRCS_arm=       platform/$(PLAT)/main.cc platform/$(PLAT)/head.S
-SRCS_sparc64=	platform/ofsparc64/main.cc platform/ofsparc64/head.S $(SRCS_openfirmware)
+SRCS_mips64=	platform/$(PLAT)/main.c platform/$(PLAT)/head.S
+SRCS_alpha=	platform/srm/main.c platform/srm/head.S platform/srm/console.c platform/srm/utils.c platform/srm/alpha-divrem.S platform/srm/dispatch.S
+SRCS_arm=       platform/$(PLAT)/main.c platform/$(PLAT)/head.S
+SRCS_sparc64=	platform/ofsparc64/main.c platform/ofsparc64/head.S $(SRCS_openfirmware)
 
-SRCS_openfirmware=	common/openfirmware/openfirmware.cc common/openfirmware/console.cc common/openfirmware/memory.cc common/openfirmware/device_tree.cc common/string.cc common/kip.cc
+SRCS_openfirmware=	common/openfirmware/openfirmware.c common/openfirmware/console.c common/openfirmware/memory.c common/openfirmware/device_tree.c common/string.c common/kip.c
 
-SRCS=	common/elf.cc common/loader.cc $(SRCS_$(ARCH))
+SRCS=	common/elf.c common/loader.c $(SRCS_$(ARCH))
 
 common/loader.o: kernel.img
 
@@ -96,7 +96,7 @@ OFORMAT_arm=$(OFORMAT_$(ARCH)_$(PLAT))
 LIBS+= -lgcc
 
 ifeq ($(PLAT),innovator)
-SRCS_arm+= platform/$(PLAT)/io_omap1510.cc
+SRCS_arm+= platform/$(PLAT)/io_omap1510.c
 endif
 endif
 

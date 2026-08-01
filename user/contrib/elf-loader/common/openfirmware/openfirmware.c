@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003, University of New South Wales
  *                
- * File path:    elf-loader/common/openfirmware/openfirmware.cc
+ * File path:    elf-loader/common/openfirmware/openfirmware.c
  * Description:  Open firmware (IEEE std 1275) function stubs.
  *                
  * Redistribution and use in source and binary forms, with or without

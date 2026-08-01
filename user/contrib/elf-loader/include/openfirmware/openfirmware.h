@@ -44,8 +44,8 @@ extern char buffer[BUFFER_SIZE];
 **********************/
 
 /* Archictecture specific functions */
-extern "C" void ofw_entry(void * args);       /* Entry point openfirmware */
-extern "C" void ofw_panic(ofw_panic_t error); /* Unrecoverable error      */
+void ofw_entry(void * args);       /* Entry point openfirmware */
+void ofw_panic(ofw_panic_t error); /* Unrecoverable error      */
 
 /* Device Tree */
 

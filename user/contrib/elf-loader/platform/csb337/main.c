@@ -1,10 +1,10 @@
 /*********************************************************************
- *                
- * Copyright (C) 2002,  University of New South Wales
- *                
- * File path:     elf-loader/src/platform/u4600/main.cc
- * Description:   Main file for elf loader 
- *                
+ *
+ * Copyright (C) 2003,  University of New South Wales
+ *
+ * File path:     contrib/elf-loader/platform/pleb/main.cc
+ * Description:   Main file for elf loader
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,75 +25,74 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *                
- * $Id: main.cc,v 1.3 2004/05/14 05:16:40 cvansch Exp $
- *                
+ *
+ * $Id: main.cc,v 1.1 2004/08/12 12:16:04 cvansch Exp $
+ *
  ********************************************************************/
 
-#include "elf-loader.h"
+#include <l4io.h>
+#include <elf-loader.h>
 
-#define PHYS_OFFSET 0xffffffff80000000
+#define PHYS_OFFSET 0x00000000
 
 extern L4_KernelConfigurationPage_t *kip;
 
-volatile unsigned int *propane_uart = (unsigned int *)0x900000001f100000;
+void print_byte(char c);
 
-extern "C" void putc(char c)
+void putc(int c)
 {
-    while ((propane_uart[2] & 0x0F) >= 0xD); /* fifo count */
-    propane_uart[1] = (unsigned char)c;
+    print_byte(c);
+
+    if (c == '\n')
+        print_byte('\r');
 }
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
-	*(p++)=c;
+        *(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;
     unsigned char *s = (unsigned char *) src;
 
-    while (len-- > 0)
-	*d++ = *s++;
+    while (len-- > 0)                    
+        *d++ = *s++;
 
-    return dst;
+    return dst;                          
 }
-
 
 void start_kernel(L4_Word_t bootaddr)
 {
-    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr | PHYS_OFFSET);
+    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0xD0000000);
 
-    /* XXX - Get this from boot loader */
-    kip->MainMem.high = 32UL * 1024 * 1024;
+    /* XXX - Get this from boot loader FIXME
+    kip->MainMem.high = 16UL * 1024 * 1024; */
     kip->MemoryInfo.n = 0;
-    
+
+    printf("Jumping to kernel @ %p\n", func);
+
     func(0);
 }
 
 int main(void)
 {
-    unsigned int temp;
-    /* Disable caches */
-    __asm__ __volatile__ (
-	"mfc0    %0,$16;    \n\t"
-	"li      $31,-8;    \n\t"
-	"and     %0,%0,$31;  \n\t"
-	"ori     %0,%0,0x2; \n\t"
-	"mtc0    %0,$16;    \n\t"
-	: "=r" (temp) : : "$31"
-    );
-
     L4_Word_t entry;
-    
-    if(load_modules(&entry, PHYS_OFFSET)) {
-	asm ("break\n\t");
+
+    if (load_modules(&entry, PHYS_OFFSET)) {
+        putc('!');
+        for (;;)
+            ;
     }
-    
+
     start_kernel(entry);
-    
-    asm ("break\n\t");
+
+    putc('!');
+    putc('!');
+    for (;;)
+        ;
 }
+

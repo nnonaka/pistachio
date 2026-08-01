@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2002,  University of New South Wales
  *                
- * File path:     elf-loader/src/platform/vr41xx/main.cc
+ * File path:     elf-loader/src/platform/u4600/main.c
  * Description:   Main file for elf loader 
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -26,93 +26,96 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: main.cc,v 1.1 2003/11/17 06:09:13 cvansch Exp $
+ * $Id: main.cc,v 1.3 2004/05/14 05:15:32 cvansch Exp $
  *                
  ********************************************************************/
 
 #include "elf-loader.h"
+#include "z85230.h"
 
 #define PHYS_OFFSET 0xffffffff80000000
 
 extern L4_KernelConfigurationPage_t *kip;
 
+
 #define CKSEG1          0xffffffffa0000000
+#define CS1_BASE	0x1c800000
+#define Z85230_BASE	(CS1_BASE | 0x30)
+#define MPSC_BASE	Z85230_BASE
 
-#define SIU_BASE	0x0c000010      /* serial i/o unit */
+#define PHYS_TO_CKSEG1(n)    (CKSEG1 | (n))
+#define PHYS_TO_K1(x) PHYS_TO_CKSEG1(x)
 
-/****************************************************************************
- *
- *    Serial console support
- *
- ****************************************************************************/
+typedef struct zsccdev *zsccdp;
 
-struct serial_ns16550 {
-    /* this struct must be packed */
-    unsigned char rbr;  /* 0 */
-    unsigned char ier;  /* 1 */
-    unsigned char fcr;  /* 2 */
-    unsigned char lcr;  /* 3 */
-    unsigned char mcr;  /* 4 */
-    unsigned char lsr;  /* 5 */
-    unsigned char msr;  /* 6 */
-    unsigned char scr;  /* 7 */
+typedef struct ConfigEntry {
+    void *devinfo;
+    int chan;
+    int (*handler)(int,char*,int,int);
+    int rxqsize;
+    int brate;
+} ConfigEntry;
+
+int pzscc (int op, char *dat, int chan, int data)
+{
+    volatile zsccdp dp = (zsccdp) dat;
+
+    switch (op) {
+//    case OP_INIT:
+//	return zsccinit (dp);
+//    case OP_BAUD:
+//	return zsccprogram (dp, data);
+    case OP_TXRDY:
+	return (dp->ucmd & zRR0_TXEMPTY);
+    case OP_TX:
+	dp->udata = data; //wbflush ();
+	break;
+//    case OP_RXRDY:
+//	return (dp->ucmd & zRR0_RXAVAIL);
+//    case OP_RX:
+//	return (dp->udata ); 
+//    case OP_FLUSH:
+//	zsccflush (dp);
+//	break;
+//    case OP_RXSTOP:
+	/* rx flow control */
+//	zsccputreg (dp, zWR5, zWR5_TXENABLE| zWR5_TX8BITCHAR | zWR5_DTR | 
+//		    (data ? 0 : zWR5_RTS));
+//	break;
+    }
+    return 0;
+}
+
+ConfigEntry     ConfigTable[] =
+{
+    /* p4000 has swapped mpsc ports */
+    {(void *)PHYS_TO_K1(MPSC_BASE+2), 0, pzscc, 256, 17},
+    {(void *)PHYS_TO_K1(MPSC_BASE+0), 1, pzscc, 256, 17},
+    {0}
 };
 
-#define thr rbr
-#define iir fcr
-#define dll rbr
-#define dlm ier
-#define dlab lcr
 
-#define LSR_DR		0x01	/* Data ready */
-#define LSR_OE		0x02	/* Overrun */
-#define LSR_PE		0x04	/* Parity error */
-#define LSR_FE		0x08	/* Framing error */
-#define LSR_BI		0x10	/* Break */
-#define LSR_THRE	0x20	/* Xmit holding register empty */
-#define LSR_TEMT	0x40	/* Xmitter empty */
-#define LSR_ERR		0x80	/* Error */
-
-static volatile struct serial_ns16550 *serial_regs = (struct serial_ns16550 *)(CKSEG1 | SIU_BASE);
-
-void init_serial_console()
+void putc(char c)
 {
-//    serial_regs = (struct serial_ns16550 *)(CKSEG1 | SIU_BASE);
+    ConfigEntry    *q;
+  
+    /*  TRACE(T_PROCS);*/
+    q = &ConfigTable[0];
 
-#if 0
-    serial_regs->lcr = 0x00;
-    serial_regs->ier = 0xFF;
-    serial_regs->ier = 0x00;
-    serial_regs->lcr = 0x80;	/* Access baud rate */
-    serial_regs->dll = 12;  	/* 1 = 115200,  2 = 57600, 3 = 38400, 12 = 9600 baud */
-    serial_regs->dlm = 0;   	/* dll >> 8 which should be zero for fast rates; */
-    serial_regs->lcr = 0x03;	/* 8 data, 1 stop, no parity */
-    serial_regs->mcr = 0x03;	/* RTS/DTR */
-    serial_regs->fcr = 0x07;	/* Clear & enable FIFOs */
-#endif
+    /* wait to transmit */
+    while(!(*q->handler) (OP_TXRDY, (char*)q->devinfo, 0, 0));
+	pzscc( OP_TX, (char*)q->devinfo, 0, c);
+    if (c == '\n')
+	putc('\r');
 }
 
-extern "C" void putc(char c)
-{
-    if ( serial_regs )
-    {
-	while (( serial_regs->lsr & LSR_THRE ) == 0 );
-
-	serial_regs->thr = c;
-	if ( c == '\n' )
-	    putc( '\r' );
-    }
-}
-
-extern "C" int printf(const char * format, ...);
- 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
 	*(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;
@@ -127,19 +130,18 @@ memcpy (void * dst, const void * src, unsigned int len)
 
 void start_kernel(L4_Word_t bootaddr)
 {
-    printf("Starting kernel...\n\n");
     void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr | PHYS_OFFSET);
 
     /* XXX - Get this from boot loader */
-    kip->MainMem.high = 8UL * 1024 * 1024;
+    kip->MainMem.high = 64UL * 1024 * 1024;
+
+    kip->MemoryInfo.n = 0;
     
     func(0);
 }
 
 int main(void)
 {
-    init_serial_console();
-
     unsigned int temp;
     /* Disable caches */
     __asm__ __volatile__ (

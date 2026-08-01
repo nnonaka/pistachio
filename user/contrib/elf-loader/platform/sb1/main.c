@@ -70,7 +70,7 @@ duart_in(unsigned long reg)
     return *((volatile unsigned long *)PHYS_TO_CKSEG1(DUART_REG_PHYS(0,reg)));
 }
 
-extern "C" void putc(char c)
+void putc(char c)
 {
     while ((duart_in(DUART_STATUS) & DUART_TX_RDY) == 0);
     duart_out(DUART_TX_HOLD, c);
@@ -79,13 +79,13 @@ extern "C" void putc(char c)
 	    putc('\r');
 }
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
 	*(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;

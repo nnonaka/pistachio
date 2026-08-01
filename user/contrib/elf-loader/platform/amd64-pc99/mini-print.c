@@ -36,12 +36,12 @@ void print_string(char* s);
 void print_dec(L4_Word_t val);
 
 
-extern "C" int puts (const char * str)
+int puts (const char * str)
 {
     return printf ("%s\n", str);
 }
 
-extern "C" int putchar (int c)
+int putchar (int c)
 {
     printf ("%c", c);
     return c;

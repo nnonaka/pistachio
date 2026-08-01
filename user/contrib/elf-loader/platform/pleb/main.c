@@ -1,10 +1,10 @@
 /*********************************************************************
- *                
- * Copyright (C) 2002,  University of New South Wales
- *                
- * File path:     elf-loader/src/platform/srm/main.cc
- * Description:   Main file for elf loader 
- *                
+ *
+ * Copyright (C) 2003,  University of New South Wales
+ *
+ * File path:     contrib/elf-loader/platform/pleb/main.c
+ * Description:   Main file for elf loader
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -25,61 +25,74 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *                
- * $Id: main.cc,v 1.2 2003/09/24 19:06:19 skoglund Exp $
- *                
+ *
+ * $Id: main.cc,v 1.6 2004/06/04 07:53:18 htuch Exp $
+ *
  ********************************************************************/
 
-#include "alpha/console.h"
-#include "alpha/hwrpb.h"
+#include <l4io.h>
+#include <elf-loader.h>
 
-#include "elf-loader.h"
+#define PHYS_OFFSET 0x00000000
 
-extern "C" int printf(const char *s, ...);
+extern L4_KernelConfigurationPage_t *kip;
 
-//#if CONFIG_ALPHA_ADDRESS_BITS == 43
-#define PHYS_OFFSET 0xfffffc0000000000
-//#else
-//#define PHYS_OFFSET 0xffff800000000000
-//#endif /* CONFIG_ALPHA_ADDRESS_BITS */
+void print_byte(char c);
 
+void putc(int c)
+{
+    print_byte(c);
 
-extern void init_console(void);
-extern void init_pal(void);
+    if (c == '\n')
+        print_byte('\r');
+}
 
-extern "C" void halt(void);
+void memset (char * p, char c, int size)
+{
+    for (;size--;)
+        *(p++)=c;
+}
 
-extern "C" void imb(void);
+__attribute__ ((weak)) void *
+memcpy (void * dst, const void * src, unsigned int len)
+{
+    unsigned char *d = (unsigned char *) dst;
+    unsigned char *s = (unsigned char *) src;
 
-#define pcb_va ((struct pcb_struct *) 0x20000000)
+    while (len-- > 0)                    
+        *d++ = *s++;
+
+    return dst;                          
+}
+
 void start_kernel(L4_Word_t bootaddr)
 {
-    void (*func)(unsigned long) = (void (*)(unsigned long)) bootaddr;
-    
-    imb();
+    void (*func)(unsigned long) = (void (*)(unsigned long)) (bootaddr - 0x2FB00000);
 
-    printf("elf-loader:\tJumping to kernel\n");
-    func(pcb_va->ptbr);
+    /* XXX - Get this from boot loader FIXME
+    kip->MainMem.high = 16UL * 1024 * 1024; */
+    kip->MemoryInfo.n = 0;
+
+    printf("Jumping to kernel @ %p\n", func);
+
+    func(0);
 }
 
 int main(void)
 {
     L4_Word_t entry;
 
-    init_console();
-       
-    printf("elf-loader:\tStarting.\n");
-    
-    init_pal();
-    
-    if(load_modules(&entry, PHYS_OFFSET)) {
-	printf("elf-loader:\tSomething went wrong, halting\n");
-	halt();
+    if (load_modules(&entry, PHYS_OFFSET)) {
+        putc('!');
+        for (;;)
+            ;
     }
-    
-    printf("elf-loader:\tentry is 0x%lx\n", entry);
-    
+
     start_kernel(entry);
-    
-    halt();
+
+    putc('!');
+    putc('!');
+    for (;;)
+        ;
 }
+

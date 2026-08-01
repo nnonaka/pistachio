@@ -38,106 +38,106 @@
 kip_manager_t kip_manager;
 
 bool
-kip_manager_t::init(void * kip_laddr)
+kip_manager_init(kip_manager_t *self, void * kip_laddr)
 {
-  kip = (L4_KernelConfigurationPage_t *) kip_laddr;
+  self->kip = (L4_KernelConfigurationPage_t *) kip_laddr;
 
-  boot_info     = 0;
-  total_memdesc = 0;
+  self->boot_info     = 0;
+  self->total_memdesc = 0;
 
   /* Init servers */
-  for(unsigned i = 0; i < kip_server_t::server_total; i++) {
-    servers[i].clear();
+  for(unsigned i = 0; i < server_total; i++) {
+    kip_server_clear (&self->servers[i]);
   }
 
   return true;
 
-} // kip_manager_t::init()
+} // kip_manager_init()
 
 bool
-kip_manager_t::update(void)
+kip_manager_update(kip_manager_t *self)
 {
   /* Copy memory descriptors. */
 
-  kip->MemoryInfo.n = total_memdesc;
+  self->kip->MemoryInfo.n = self->total_memdesc;
 
   L4_MemoryDesc_t * memdesc_dest =
-    (L4_MemoryDesc_t *)((L4_Word_t)kip + kip->MemoryInfo.MemDescPtr);
+    (L4_MemoryDesc_t *)((L4_Word_t)self->kip + self->kip->MemoryInfo.MemDescPtr);
 
-  for(int i = 0; i < (int)total_memdesc; i++) {
-    memdesc_dest[i].raw[0] = memdesc[i].raw[0];
-    memdesc_dest[i].raw[1] = memdesc[i].raw[1];
+  for(int i = 0; i < (int)self->total_memdesc; i++) {
+    memdesc_dest[i].raw[0] = self->memdesc[i].raw[0];
+    memdesc_dest[i].raw[1] = self->memdesc[i].raw[1];
   }
 
   /* Copy servers. */
 
   return true;
 
-} // kip_manager_t::update()
+} // kip_manager_update()
 
 bool
-kip_manager_t::add_server(kip_server_t::kip_server_e server,
+kip_manager_add_server(kip_manager_t *self, kip_server_e server,
 			  L4_Word_t sp, L4_Word_t ip,
 			  L4_Word_t low, L4_Word_t high)
 {
-  if(server >= kip_server_t::server_total) {
+  if(server >= server_total) {
 
     return false;
   }
 
-  servers[server].sp = sp;
-  servers[server].ip = ip;
-  servers[server].low = low;
-  servers[server].high = high;
+  self->servers[server].sp = sp;
+  self->servers[server].ip = ip;
+  self->servers[server].low = low;
+  self->servers[server].high = high;
 
   return true;
 
-} // kip_manager_t::add_server()
+} // kip_manager_add_server()
 
 int
-kip_manager_t::add_memdesc(bool is_virt, L4_Word_t low, L4_Word_t high, 
+kip_manager_add_memdesc(kip_manager_t *self, bool is_virt, L4_Word_t low, L4_Word_t high, 
 			   L4_Word_t type, L4_Word_t sub_type)
 {
-  if(total_memdesc == MAX_MEMDESC) {
+  if(self->total_memdesc == MAX_MEMDESC) {
 
     return -1; // Indicate error
 
   } else {
 
-    memdesc[total_memdesc].x.high = (high -1) >> 10;
-    memdesc[total_memdesc].x.low =  low >> 10; 
-    memdesc[total_memdesc].x.v =    is_virt;
-    memdesc[total_memdesc].x.type = type;
-    memdesc[total_memdesc].x.t =    sub_type;
+    self->memdesc[self->total_memdesc].x.high = (high -1) >> 10;
+    self->memdesc[self->total_memdesc].x.low =  low >> 10; 
+    self->memdesc[self->total_memdesc].x.v =    is_virt;
+    self->memdesc[self->total_memdesc].x.type = type;
+    self->memdesc[self->total_memdesc].x.t =    sub_type;
 
-    return total_memdesc++;
+    return self->total_memdesc++;
   }
 
-} // kip_manager_t::add_memdesc()
+} // kip_manager_add_memdesc()
 
 /**
- *  kip_manager_t::mem_base() returns the base address of the first memory bank
+ *  kip_manager_mem_base() returns the base address of the first memory bank
  *  of physical memory.
  *
  *  precondition: ofw_size_physmem() has been called.
  */
 L4_Word_t
-kip_manager_t::mem_base(void)
+kip_manager_mem_base(kip_manager_t *self)
 {
-  return memdesc[0].x.low << 10;
+  return self->memdesc[0].x.low << 10;
 
-} // kip_manager_t::mem_base()
+} // kip_manager_mem_base()
 
 /**
- *  kip_manager_t::first_avail_page()
+ *  kip_manager_first_avail_page()
  *  Finds first page of free memory.
  */
 L4_Word_t
-kip_manager_t::first_avail_page(void)
+kip_manager_first_avail_page(kip_manager_t *self)
 {
   extern char mod_root_end;
 
   return wrap_up(mod_root_end, PAGE_SIZE);
 
-} // kip_manager_t::first_avail_page()
+} // kip_manager_first_avail_page()
 

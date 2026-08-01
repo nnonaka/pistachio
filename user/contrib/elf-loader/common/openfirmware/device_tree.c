@@ -38,22 +38,22 @@
 #include <openfirmware/openfirmware.h>
 
 /**
- *  ofw_devtree_t::build()
+ *  ofw_devtree_build()
  *  Builds a copy of the Open Firmware device tree.
  *  
  *  Return value: Size of the device tree structure.
  */
 L4_Word_t
-ofw_devtree_t::build(char * devtree_start)
+ofw_devtree_build(ofw_devtree_t *self, char * devtree_start)
 {
   ofw_phandle_t next, node;
   ofw_devtree_device_t * device;
  
-  devtree = devtree_start;
+  self->devtree = devtree_start;
 
   node = ofw_peer(OFW_NULL_PHANDLE); /* Get root node. */
 
-  device = this->first();
+  device = ofw_devtree_device_first (self);
 
   while(node != OFW_NULL_PHANDLE) {
     /* Copy information of the current node. */
@@ -63,7 +63,7 @@ ofw_devtree_t::build(char * devtree_start)
       device->name_length  = length + 1; /* space for null character. */
       device->phandle = (L4_Word_t)node;
       add_device(device);
-      device = device->next();
+      device = ofw_devtree_device_next (device);
     }
 
     /* Copy children of the current node. */
@@ -94,14 +94,14 @@ ofw_devtree_t::build(char * devtree_start)
     }
   }
 
-  device->null(); /* Terminate the data structure with a null record. */
+  ofw_devtree_device_null (device); /* Terminate the data structure with a null record. */
 
   return (L4_Word_t)device - (L4_Word_t)devtree_start;
 
 } // ofw_device_tree_t::build()
 
 void
-ofw_devtree_t::add_device(ofw_devtree_device_t * device)
+ofw_devtree_add_device(ofw_devtree_t *self, ofw_devtree_device_t * device)
 {
   ofw_devtree_item_t * item, * prev_item, * property;
   ofw_cell_t finished; // Any more properties left.
@@ -110,7 +110,7 @@ ofw_devtree_t::add_device(ofw_devtree_device_t * device)
   device->properties_number = 0;
   device->properties_length = 0;
 
-  item = device->first();
+  item = ofw_devtree_device_first (device);
   start_offset = (L4_Word_t)item;
   
   /* Initialise data pointer */
@@ -130,7 +130,7 @@ ofw_devtree_t::add_device(ofw_devtree_device_t * device)
     item->length = strnlen(item->data, 32) + 1; /* space for null character. */
 
     /* Grab the property and its length. */
-    property = item->next();
+    property = ofw_devtree_item_next (item);
     property->length = ofw_getproplen(device->phandle,
 				      ADDR2OFW_STRING(item->data));
     if(property->length < 0) {
@@ -148,7 +148,7 @@ ofw_devtree_t::add_device(ofw_devtree_device_t * device)
     }
     
     /* Move to the next item. */
-    item = property->next();
+    item = ofw_devtree_item_next (property);
     /* Grab the next property name. */
     finished = ofw_nextprop(device->phandle, ADDR2OFW_STRING(prev_item->data),
 			    ADDR2OFW_BUFFER(item->data));
@@ -156,40 +156,40 @@ ofw_devtree_t::add_device(ofw_devtree_device_t * device)
   
   device->properties_length = (L4_Word_t)item - start_offset;
 
-} // ofw_devtree_t::add_device()
+} // ofw_devtree_add_device()
 
 ofw_devtree_device_t *
-ofw_devtree_t::first(void)
+ofw_devtree_first(ofw_devtree_t *self)
 {
-  return (ofw_devtree_device_t *)wrap_up((L4_Word_t)devtree, sizeof(L4_Word_t));
+  return (ofw_devtree_device_t *)wrap_up((L4_Word_t)self->devtree, sizeof(L4_Word_t));
 }
 
 void
-ofw_devtree_device_t::null(void)
+ofw_devtree_device_null(ofw_devtree_device_t *self)
 {
-  this->phandle = this->name_length = 0;
-  this->properties_number = this->properties_length = 0;
+  self->phandle = self->name_length = 0;
+  self->properties_number = self->properties_length = 0;
 }
 
 ofw_devtree_device_t *
-ofw_devtree_device_t::next(void)
+ofw_devtree_device_next(ofw_devtree_device_t *self)
 {
-  return (ofw_devtree_device_t *)wrap_up((L4_Word_t)this->name +
-					 this->name_length +
-					 this->properties_length,
+  return (ofw_devtree_device_t *)wrap_up((L4_Word_t)self->name +
+					 self->name_length +
+					 self->properties_length,
 					 sizeof(L4_Word_t));
 }
 
 ofw_devtree_item_t *
-ofw_devtree_device_t::first(void)
+ofw_devtree_device_first(ofw_devtree_device_t *self)
 {
-  return (ofw_devtree_item_t *)wrap_up((L4_Word_t)this->name +
-				       this->name_length, sizeof(L4_Word_t));
+  return (ofw_devtree_item_t *)wrap_up((L4_Word_t)self->name +
+				       self->name_length, sizeof(L4_Word_t));
 }
 
 ofw_devtree_item_t *
-ofw_devtree_item_t::next(void)
+ofw_devtree_item_next(ofw_devtree_item_t *self)
 {
-  return (ofw_devtree_item_t *)wrap_up((L4_Word_t)this->data +
-				       this->length, sizeof(L4_Word_t));
+  return (ofw_devtree_item_t *)wrap_up((L4_Word_t)self->data +
+				       self->length, sizeof(L4_Word_t));
 }

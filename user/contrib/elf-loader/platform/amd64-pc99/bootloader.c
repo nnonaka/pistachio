@@ -58,7 +58,7 @@ void spin(unsigned int pos)
     }
 }
 
-extern "C" void startup(struct multiboot_info *mb_info, unsigned int mb_magic ){
+void startup(struct multiboot_info *mb_info, unsigned int mb_magic ){
 
     printf("\033[2J\n");
     printf("Hello, I'm your Bootloader, ...\n");
@@ -77,7 +77,7 @@ extern "C" void startup(struct multiboot_info *mb_info, unsigned int mb_magic ){
     /* Load kernel */
     L4_Word64_t kernel_start;
     L4_Word64_t kernel_end;
-    elf64_install_image(kernel_ehdr, &kernel_start, &kernel_end);
+    elf64_install_image(kernel_ehdr, &kernel_start, &kernel_end, 1);
     
     kip_t *kip = 0;
     
@@ -152,7 +152,7 @@ extern "C" void startup(struct multiboot_info *mb_info, unsigned int mb_magic ){
     } 
 
     kip->sigma0.ip = sigma0_entry;
-    elf64_install_image(module_ehdr, &sigma0_start, &sigma0_end );						
+    elf64_install_image(module_ehdr, &sigma0_start, &sigma0_end , 1);						
 
     printf("sigma0_start = 0x%x, sigma0_end = 0x%x, sigma0_entry = %x\n",
 	   (L4_Word_t) sigma0_start, 
@@ -172,7 +172,7 @@ extern "C" void startup(struct multiboot_info *mb_info, unsigned int mb_magic ){
 	 	
     } 
 
-    elf64_install_image(module_ehdr, &root_start, &root_end );	 
+    elf64_install_image(module_ehdr, &root_start, &root_end , 1);	 
       
     printf("root_start = 0x%x, root_end = 0x%x, root_entry = %x\n",
 	   (L4_Word_t) root_start, 

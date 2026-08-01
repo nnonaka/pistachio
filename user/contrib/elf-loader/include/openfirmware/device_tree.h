@@ -37,42 +37,36 @@
 
 #include <l4/types.h>
 
-class ofw_devtree_item_t {
-public:
+/* Three classes; the members become ofw_devtree_* entry points.  Notes §174. */
+struct ofw_devtree_item_t {
   L4_Word_t length;
   char data[];
-
-public:
-  ofw_devtree_item_t * next(void);
-
 }; // ofw_devtree_item_t
+typedef struct ofw_devtree_item_t ofw_devtree_item_t;
 
-class ofw_devtree_device_t {
-public:
+ofw_devtree_item_t * ofw_devtree_item_next (ofw_devtree_item_t *self);
+
+struct ofw_devtree_device_t {
   L4_Word_t phandle;           /* Package handle, used for searches. */
   L4_Word_t properties_number; /* Number of properties node has.     */
   L4_Word_t properties_length; /* Length of properties buffer.       */
   L4_Word_t name_length;       /* Length of name.                    */
   char      name[];            /* Name of node.                      */
-
-public:
-  void null(void);
-  ofw_devtree_device_t * next(void);
-  ofw_devtree_item_t * first(void);
-
 }; // ofw_devtree_device_t
+typedef struct ofw_devtree_device_t ofw_devtree_device_t;
 
-class ofw_devtree_t {
+void ofw_devtree_device_null (ofw_devtree_device_t *self);
+ofw_devtree_device_t * ofw_devtree_device_next (ofw_devtree_device_t *self);
+ofw_devtree_item_t * ofw_devtree_device_first (ofw_devtree_device_t *self);
 
-private:
-  char * devtree; /* Device tree. */
-
-public:
-  L4_Word_t build(char * devtree_start);
-  void add_device(ofw_devtree_device_t * device);
-  ofw_devtree_device_t * first(void);
-
+struct ofw_devtree_t {
+  char * devtree; /* Device tree.  Was private. */
 }; // ofw_devtree_t
+typedef struct ofw_devtree_t ofw_devtree_t;
+
+L4_Word_t ofw_devtree_build (ofw_devtree_t *self, char * devtree_start);
+void ofw_devtree_add_device (ofw_devtree_t *self, ofw_devtree_device_t * device);
+ofw_devtree_device_t * ofw_devtree_first (ofw_devtree_t *self);
 
 
 #endif /* !__OPENFIRMWARE__DEVICE_TREE_H__ */

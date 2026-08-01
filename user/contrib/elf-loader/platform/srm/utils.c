@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 1999-2010,  Karlsruhe University
  *                
- * File path:     elf-loader/platform/srm/utils.cc
+ * File path:     elf-loader/platform/srm/utils.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -34,19 +34,19 @@
 #include <l4/types.h>
 
 
-extern "C" int printf(const char *s, ...);
+int printf(const char *s, ...);
 
 
-extern "C" int switch_to_osf_pal(L4_Word_t, L4_Word_t, L4_Word_t, L4_Word_t, L4_Word_t);
-extern "C" void halt(void);
+int switch_to_osf_pal(L4_Word_t, L4_Word_t, L4_Word_t, L4_Word_t, L4_Word_t);
+void halt(void);
 
-extern "C" void memset (char * p, char c, int size)
+void memset (char * p, char c, int size)
 {
     for (;size--;)
 	*(p++)=c;
 }
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;

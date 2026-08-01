@@ -37,7 +37,7 @@
 #include <l4/types.h>
 
 #if defined(__cplusplus)
-extern "C" {
+{
 #endif /* __cplusplus */
 
 extern void * memcpy(void *dst, void *src, L4_Size_t n);
