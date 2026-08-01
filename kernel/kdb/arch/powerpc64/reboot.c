@@ -41,7 +41,7 @@ DECLARE_CMD (cmd_reboot, root, '6', "reset", "Reset system");
 CMD (cmd_reboot, cg)
 {
 #if (CONFIG_PLAT_OFPOWER3 || CONFIG_PLAT_OFPOWER4)
-    get_rtas()->machine_restart();
+    rtas_machine_restart( get_rtas() );
 #else
 #error FIXME
 #endif
@@ -57,7 +57,7 @@ DECLARE_CMD (cmd_powerdown, root, '7', "poweroff", "Power-off the system");
 CMD (cmd_powerdown, cg)
 {
 #if (CONFIG_PLAT_OFPOWER3 || CONFIG_PLAT_OFPOWER4)
-    get_rtas()->machine_power_off();
+    rtas_machine_power_off( get_rtas() );
 #else
 #error FIXME
 #endif

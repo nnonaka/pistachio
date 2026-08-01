@@ -85,7 +85,7 @@ static u32_t putc_token = 0;
 SECTION( ".init" )
 void init_rtas_console()
 {
-    if (!get_rtas()->get_token( "display-character", &putc_token ))
+    if (!rtas_get_token( get_rtas(), "display-character", &putc_token ))
     {
 	printf( "Failed to open rtas console\r\n" );
 	return;
@@ -98,9 +98,9 @@ static void putc_rtas( char c )
     if (putc_token)
     {
 	if (c == '\n')
-	    get_rtas()->rtas_call( putc_token, 1, 1, NULL, '\r' );
+	    rtas_call( get_rtas(), putc_token, 1, 1, NULL, '\r' );
 
-	get_rtas()->rtas_call( putc_token, 1, 1, NULL, c );
+	rtas_call( get_rtas(), putc_token, 1, 1, NULL, c );
     }
 }
 
@@ -161,47 +161,47 @@ void init_serial_console()
 
     serial_regs = NULL;
  
-    aliases = get_of1275_tree()->find( "/aliases" );
+    aliases = of1275_tree_find( get_of1275_tree(), "/aliases" );
     if (!aliases) goto error;
 
-    if (!aliases->get_prop( "serial", &path, &len ))
+    if (!of1275_device_get_prop( aliases, "serial", &path, &len ))
 	goto error;
 
-    if (!(serial_dev = get_of1275_tree()->find( path )))
+    if (!(serial_dev = of1275_tree_find( get_of1275_tree(), path )))
 	goto error;
 
-    if (!serial_dev->get_prop( "reg", (char**)&isa_reg, &len ))
+    if (!of1275_device_get_prop( serial_dev, "reg", (char**)&isa_reg, &len ))
 	goto error;
 
-    if (!(isa_dev = get_of1275_tree()->get_parent( serial_dev )))
+    if (!(isa_dev = of1275_tree_get_parent( get_of1275_tree(), serial_dev )))
 	goto error;
 
-    if (!isa_dev->get_prop( "device_type", (char**)&type, &len ))
+    if (!of1275_device_get_prop( isa_dev, "device_type", (char**)&type, &len ))
 	goto error;
 
     if (strncmp(type, "isa", 3)) {
 	printf("\ninvalid parent"); goto error;
     }
 
-    if (!( pci_dev = get_of1275_tree()->get_parent( isa_dev ) ))
+    if (!( pci_dev = of1275_tree_get_parent( get_of1275_tree(), isa_dev ) ))
 	goto error;
 
-    if (!pci_dev->get_prop( "device_type", (char**)&type, &len ))
+    if (!of1275_device_get_prop( pci_dev, "device_type", (char**)&type, &len ))
 	goto error;
 
     if (strncmp(type, "pci", 3)) {
 	printf("\ninvalid parent"); goto error;
     }
 
-    if (!pci_dev->get_prop( "ranges", (char**)&pci_range, &len ))
+    if (!of1275_device_get_prop( pci_dev, "ranges", (char**)&pci_range, &len ))
 	goto error;
 
-    if (!pci_dev->get_prop( "#address-cells", (char **)&cellptr, &len ))
+    if (!of1275_device_get_prop( pci_dev, "#address-cells", (char **)&cellptr, &len ))
 	goto error;
 
     adrcells = *cellptr;
 
-    if (!pci_dev->get_prop( "#size-cells", (char **)&cellptr, &len ))
+    if (!of1275_device_get_prop( pci_dev, "#size-cells", (char **)&cellptr, &len ))
 	goto error;
 
     sizcells = *cellptr;
@@ -224,18 +224,18 @@ void init_serial_console()
 
 	/* XXX - we should lookup mapping first */
 //#ifdef CONFIG_POWERPC64_LARGE_PAGES
-//	pgent_t::pgsize_e size = pgent_t::size_16m;
+//	pgsize_e size = size_16m;
 //#else
-	pgent_t::pgsize_e size = pgent_t::size_4k;
+	pgsize_e size = size_4k;
 //#endif
 	/* Create a page table entry, noexecute, nocache */
-	pg.set_entry( get_kernel_space(), size, (addr_t)serial_regs,
-		      6, pgent_t::cache_inhibit, true );
+	pgent_set_entry( &pg, get_kernel_space(), size, (addr_t)serial_regs,
+		      6, cache_inhibit, true );
     
 	serial_regs = (struct serial_ns16550*)((word_t)serial_regs | DEVICE_AREA_START);
 
 	/* Insert the kernel mapping, bolted */
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)serial_regs, &pg, size, true );
     }
 

@@ -38,47 +38,50 @@
 
 DECLARE_KMEM_GROUP (kmem_stab);
 
-void ppc64_stab_t::init()
+void ppc64_stab_init( ppc64_stab_t *self )
 {
     word_t _stab;
+    ppc64_stab_t *stab;
+    word_t vsid, esid;
+    ppc64_ste_t *ste;
     addr_t page = kmem_alloc(&kmem,  kmem_stab, POWERPC64_STAB_SIZE );
     //TRACEF( "created segement table at %p\n", page );
 
-    base.raw = (word_t)virt_to_phys( page );
-    base.x.valid = 1;
+    self->base.raw = (word_t)virt_to_phys( page );
+    self->base.x.valid = 1;
 
     _stab = (word_t)virt_to_phys( page );
     /* Get the segment table */
-    ppc64_stab_t *stab = (ppc64_stab_t *)&_stab;
+    stab = (ppc64_stab_t *)&_stab;
 
-    word_t vsid = get_kernel_space()->get_vsid( (addr_t)KERNEL_OFFSET );
-    word_t esid = ESID( KERNEL_OFFSET );
+    vsid = space_get_vsid( get_kernel_space(), (addr_t)KERNEL_OFFSET );
+    esid = ESID( KERNEL_OFFSET );
 
-    ppc64_ste_t *ste = stab->find_insertion( vsid, esid );
-    ste->set_entry( esid, 0, 1, 0, vsid );
+    ste = ppc64_stab_find_insertion( stab, vsid, esid );
+    ppc64_ste_set_entry( ste, esid, 0, 1, 0, vsid );
  
     /* XXX hack hack - were should this happen */
-    vsid = get_kernel_space()->get_vsid( (addr_t)KTCB_AREA_START );
+    vsid = space_get_vsid( get_kernel_space(), (addr_t)KTCB_AREA_START );
     esid = ESID( KTCB_AREA_START );
-    ste = stab->find_insertion( vsid, esid );
-    ste->set_entry( esid, 0, 1, 0, vsid );
+    ste = ppc64_stab_find_insertion( stab, vsid, esid );
+    ppc64_ste_set_entry( ste, esid, 0, 1, 0, vsid );
 
     /* XXX hack hack - were should this happen */
-    vsid = get_kernel_space()->get_vsid( (addr_t)CPU_AREA_START );
+    vsid = space_get_vsid( get_kernel_space(), (addr_t)CPU_AREA_START );
     esid = ESID( CPU_AREA_START );
-    ste = stab->find_insertion( vsid, esid );
-    ste->set_entry( esid, 0, 1, 0, vsid );
+    ste = ppc64_stab_find_insertion( stab, vsid, esid );
+    ppc64_ste_set_entry( ste, esid, 0, 1, 0, vsid );
 
     /* XXX hack hack - were should this happen */
-    vsid = get_kernel_space()->get_vsid( (addr_t)0xfffd0000f80003fdul );
+    vsid = space_get_vsid( get_kernel_space(), (addr_t)0xfffd0000f80003fdul );
     esid = ESID( 0xfffd0000f80003fdul );
-    ste = stab->find_insertion( vsid, esid );
-    ste->set_entry( esid, 0, 1, 0, vsid );
+    ste = ppc64_stab_find_insertion( stab, vsid, esid );
+    ppc64_ste_set_entry( ste, esid, 0, 1, 0, vsid );
 }
 
-void ppc64_stab_t::free()
+void ppc64_stab_free( ppc64_stab_t *self )
 {
-    addr_t page = (addr_t)get_stab();
+    addr_t page = (addr_t)ppc64_stab_get_stab( self );
     kmem_free(&kmem,  kmem_stab, page, POWERPC64_STAB_SIZE );
 }
 

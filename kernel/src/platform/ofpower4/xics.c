@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:	platform/ofpower4/xics.cc
+ * File path:	platform/ofpower4/xics.c
  * Description:	IBM XICS interrupt controller.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,18 +63,21 @@ static xics_info_t xics_info;
 xics_interrupt_table_t xicp_table;
 
 
-SECTION(".init") void intctrl_t::init_arch()
+SECTION(".init") void intctrl_init_arch (void)
 {
     of1275_device_t *xicp;
+    of1275_device_t *cpu;
     u32_t *prop, len;
     word_t index;
+    pgent_t pg;
 
-    get_rtas()->get_token( "ibm,get-xive", &ibm_get_xive );
-    get_rtas()->get_token( "ibm,set-xive", &ibm_set_xive );
-    get_rtas()->get_token( "ibm,int-on", &ibm_int_on );
-    get_rtas()->get_token( "ibm,int-off", &ibm_int_off );
+    rtas_get_token( get_rtas(), "ibm,get-xive", &ibm_get_xive );
+    rtas_get_token( get_rtas(), "ibm,set-xive", &ibm_set_xive );
+    rtas_get_token( get_rtas(), "ibm,int-on", &ibm_int_on );
+    rtas_get_token( get_rtas(), "ibm,int-off", &ibm_int_off );
 
-    xicp = get_of1275_tree()->find_device_type( "PowerPC-External-Interrupt-Presentation" );
+    xicp = of1275_tree_find_device_type( get_of1275_tree(),
+		"PowerPC-External-Interrupt-Presentation" );
 
     if (!xicp)
 	enter_kdebug( "No external interrupt presentation node found" );
@@ -86,14 +89,14 @@ SECTION(".init") void intctrl_t::init_arch()
     xics_valid.high = 32;
 #endif
 
-    if (xicp->get_prop( "ibm,interrupt-server-ranges", (char **)&prop, &len ))
+    if (of1275_device_get_prop( xicp, "ibm,interrupt-server-ranges", (char **)&prop, &len ))
     {
 	xics_valid.low = *prop++;
 	if (*prop < xics_valid.high)
 	    xics_valid.high = *prop;
     }
     
-    if ( !xicp->get_prop( "reg", (char **)&prop, &len ))
+    if ( !of1275_device_get_prop( xicp, "reg", (char **)&prop, &len ))
 	enter_kdebug( "Cannot find interrupt reg property" );
 
     for ( index = xics_valid.low; index < xics_valid.high; index ++ )
@@ -106,19 +109,21 @@ SECTION(".init") void intctrl_t::init_arch()
 
     /* We assumed that we only have one xicp type node */
 
-    of1275_device_t *cpu;
     /* Find the interrupt server numbers for the boot cpu. */
-    for ( cpu = get_of1275_tree()->find_device_type("cpu"); cpu; cpu = cpu->next_by_type( "cpu" ) )
+    for ( cpu = of1275_tree_find_device_type( get_of1275_tree(), "cpu" ); cpu;
+	  cpu = of1275_device_next_by_type( cpu, "cpu" ) )
     {
-        if ( !cpu->get_prop( "reg", (char **)&prop, &len ))
+        if ( !of1275_device_get_prop( cpu, "reg", (char **)&prop, &len ))
 	    enter_kdebug( "Cannot find cpu reg property" );
 
 	if ( prop[0] == boot_cpuid )
 	{
-	    if ( !cpu->get_prop( "ibm,ppc-interrupt-gserver#s", (char **)&prop, &len ))
+	    word_t i;
+
+	    if ( !of1275_device_get_prop( cpu, "ibm,ppc-interrupt-gserver#s", (char **)&prop, &len ))
 		enter_kdebug( "Cannot find cpu gserver property" );
 
-            word_t i = len / sizeof(u32_t);
+            i = len / sizeof(u32_t);
 
 	    default_server = prop[0];
             default_distrib_server = prop[i-1];	/* last element */
@@ -133,19 +138,18 @@ SECTION(".init") void intctrl_t::init_arch()
 
     ASSERT( xicp_table.node[0].size == POWERPC64_PAGE_SIZE );
 
-    pgent_t pg;
-
     TRACE_INIT( "Found XICS at %p\n", xicp_table.node[0].addr );
 
     /* XXX - these should be created lazily for devices!! */
-    /* Create a dummy page table entry */
-    pg.set_entry( get_kernel_space(), pgent_t::size_16m,
+    /* Create a dummy page table entry.  set_entry took eight arguments here;
+       the pre-rwx signature again (§169), read|write no execute == 6. */
+    pgent_set_entry( &pg, get_kernel_space(), size_16m,
 		    (addr_t)xicp_table.node[0].addr,
-		    true, true, false, true, pgent_t::cache_inhibit );
+		    6, cache_inhibit, true );
     /* Insert the kernel mapping, bolted */
-    get_pghash()->insert_mapping( get_kernel_space(),
+    pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 		    (addr_t)(DEVICE_AREA_START | xicp_table.node[0].addr),
-		    &pg, pgent_t::size_16m, true );
+		    &pg, size_16m, true );
 
     for (index = xics_valid.low; index < xics_valid.high; index ++ )
     {
@@ -154,5 +158,5 @@ SECTION(".init") void intctrl_t::init_arch()
     }
 
     TRACE_INIT( "XICS initilized\n" );
-};
+}
 

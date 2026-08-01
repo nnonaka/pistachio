@@ -9292,3 +9292,45 @@ ofppc, ppc44x and x86-x64-p4 all still build. The ofg5 kernel links; whether
 it *runs* is a separate question and a separate section -- the interrupt
 controller for this platform is entirely `UNIMPLEMENTED()` (§164), so the
 answer is probably not yet.
+
+## §170 -- powerpc64: all three platforms
+
+`ofpower3` and `ofpower4` link too. The last three sources were
+`ofpower3/prom.cc`, `ofpower3/opic.cc` and `ofpower4/xics.cc`, plus their
+headers (`ofpower3/intctrl.h`, `ofpower3/opic.h`, `ofpower4/intctrl.h`,
+`ofpower4/xics.h`) and the two `stab.c`s.
+
+`ofpower4/intctrl.h` was byte-for-byte `ofpower3/intctrl.h` apart from the
+include guard, so the converted form is too.
+
+Four more things that had never been compiled:
+
+`kdb/arch/powerpc64/ofio.cc`, `ofpower3/opic.cc` and `ofpower4/xics.cc` all
+call `pg.set_entry()` with the eight-argument pre-rwx signature, the same one
+`kdb/platform/ofg5/reboot.cc` had (§169). Four sites, one reading:
+read|write, no execute, kernel is `rwx == 6`.
+
+`glue/v4-powerpc64/config.h` declares `user_rtas_call` inside
+`#if !defined(ASSEMBLY) && defined(__cplusplus)`. With the tree in C that
+guard excludes everyone, and `ARCH_SYSCALL0` -- which references it -- is
+outside the guard.
+
+`arch/powerpc64/pghash.cc` calls `ppc64_set_sdr1` without including
+`ppc64_registers.h`. `slb.h` includes it, so the two SLB platforms got it by
+accident; `seghash.h` does not, so on ofpower3 it was an implicit declaration
+and then an undefined symbol.
+
+`ofpower3/linker.lds` globs `*(.rodata)` where ofg5 and ofpower4 glob
+`*(.rodata*)`. gcc puts string literals in `.rodata.str1.8`, so every `printf`
+format in the kernel landed in a discarded section.
+
+### Where it stands
+
+    kernel .cc:  5, none of them powerpc64
+
+The five are the unreachable set from §162: `arch/x86/x64/init.cc` (dead),
+`platform/efi/*` and `kdb/platform/efi/*` (no config selects them),
+`kdb/platform/simics/io.cc`. The conversion of every architecture that can
+be built is done.
+
+Verified: ofg5, ofpower3, ofpower4, ofppc, ppc44x and x86-x64-p4 all build.

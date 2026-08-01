@@ -48,7 +48,7 @@ DECLARE_CMD (cmd_powerpc64_stab, arch, 's', "stab", "segment table management");
 
 CMD(cmd_powerpc64_stab, cg)
 {
-    return powerpc64_stab.interact (cg, "stab");
+    return cmd_group_interact (&powerpc64_stab, cg, "stab");
 }
 
 extern tcb_t * kdb_get_tcb();
@@ -65,15 +65,15 @@ CMD(cmd_powerpc64_stab_dump, cg)
 
     if (tcb)
     {
-	space_t *space = tcb->get_space();
+	space_t *space = tcb_get_space (tcb);
 	if (!space) space = get_kernel_space();
 
-	ppc64_stab_t *stab = space->get_seg_table();
+	ppc64_stab_t *stab = space_get_seg_table (space);
 
 	ppc64_ste_t *stegA, *stegB;
 
 	printf( "-------- Segment Table Dump --------\n" );
-	printf( "space = %p, segment table = %p\n\n", space, stab->get_stab() );
+	printf( "space = %p, segment table = %p\n\n", space, ppc64_stab_get_stab (stab) );
 
 	for( i = 0; i < 16; i ++ )
 	{
@@ -81,8 +81,8 @@ CMD(cmd_powerpc64_stab_dump, cg)
 	    printf( "  ----- Segment Group %2d -----      |", i );
 	    printf( "  ----- Segment Group %2d -----\n", j );
 
-	    stegA = &((ppc64_ste_t *)stab->get_stab())[i*8];
-	    stegB = &((ppc64_ste_t *)stab->get_stab())[j*8];
+	    stegA = &((ppc64_ste_t *)ppc64_stab_get_stab (stab))[i*8];
+	    stegB = &((ppc64_ste_t *)ppc64_stab_get_stab (stab))[j*8];
 
 	    for( int k = 0; k < 8; k ++ )
 	    {

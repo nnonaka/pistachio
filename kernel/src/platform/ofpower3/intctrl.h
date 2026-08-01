@@ -33,56 +33,55 @@
 #ifndef __PLATFORM__OFPOWER3__INTCTRL_H__
 #define __PLATFORM__OFPOWER3__INTCTRL_H__
 
-class intctrl_t : public generic_intctrl_t {
- public:
-	void init_arch();
-	void init_cpu();
-
-#if 0
-	void register_exception_handler (word_t vector, void *handler)
-	{
-	    ASSERT(vector < 32);
-	    exception_handlers[vector] = (word_t)handler;
-	    TRACE_INIT("exception vector[%d] = %p\n", vector, exception_handlers[vector]);
-	}
-
-	void register_interrupt_handler (word_t vector, void (*handler)(word_t, mips64_irq_context_t *))
-	{
-	    ASSERT(vector < 8);
-	    interrupt_handlers[vector] = (word_t) handler;
-	    TRACE_INIT("interrupt vector[%d] = %p\n", vector, interrupt_handlers[vector]);
-	}
-#endif
-
-	static inline void mask(word_t irq)
-	{
-	    UNIMPLEMENTED();
-	}
-	static inline bool unmask(word_t irq)
-	{
-	    UNIMPLEMENTED();
-	    return false;
-	}
-	static inline void disable(word_t irq)
-	{
-	    UNIMPLEMENTED();
-	}
-	static inline bool enable(word_t irq)
-	{
-	    UNIMPLEMENTED();
-	    return false;
-	}
-	static inline void mask_and_ack(word_t irq)        { UNIMPLEMENTED(); }
-	static inline void ack(word_t irq)                 { UNIMPLEMENTED(); }
-
-	/* For now, we only export 1 interrupt */
-	word_t get_number_irqs(void) 
-	{ return 1; }
-
-	bool is_irq_available(int irq) 
-	{ return (irq == 0); }
-
-	void set_cpu(word_t irq, word_t cpu) { UNIMPLEMENTED(); }
+/* generic_intctrl_t was an interface-description base with no members, so as
+   in platform/ofg5 (§164) the struct stands alone and the members become free
+   intctrl_* entry points.  This controller is a stub too: everything but the
+   irq count is UNIMPLEMENTED() upstream.  The #if 0 block held two MIPS
+   register-handler helpers that were never part of this port. */
+struct intctrl_t
+{
+    word_t _unused;
 };
+typedef struct intctrl_t intctrl_t;
+
+INLINE intctrl_t * get_interrupt_ctrl (void)
+{
+    extern intctrl_t intctrl;
+    return &intctrl;
+}
+
+INLINE void intctrl_mask (word_t irq)
+{
+    UNIMPLEMENTED();
+}
+INLINE bool intctrl_unmask (word_t irq)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+INLINE void intctrl_disable (word_t irq)
+{
+    UNIMPLEMENTED();
+}
+INLINE bool intctrl_enable (word_t irq)
+{
+    UNIMPLEMENTED();
+    return false;
+}
+INLINE void intctrl_mask_and_ack (word_t irq)	{ UNIMPLEMENTED(); }
+INLINE void intctrl_ack (word_t irq)		{ UNIMPLEMENTED(); }
+
+/* For now, we only export 1 interrupt */
+INLINE word_t intctrl_get_number_irqs (void)	{ return 1; }
+
+INLINE bool intctrl_is_irq_available (word_t irq)	{ return (irq == 0); }
+
+INLINE void intctrl_set_cpu (word_t irq, word_t cpu)	{ UNIMPLEMENTED(); }
+
+/* Out of line in platform/ofpower3/opic.c. */
+BEGIN_DECLS
+void intctrl_init_arch (void);
+void intctrl_init_cpu (void);
+END_DECLS
 
 #endif /* __PLATFORM__OFPOWER3__INTCTRL_H__ */

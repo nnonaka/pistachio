@@ -78,7 +78,10 @@ SECTIONS
 		kdb/*(.text) kdb/*(.rodata) *(.kdebug) kdb/*(.gnu*)
 	} : kernel
 	.text . : AT (ADDR(.text) - kernel_offset) {
-		*(.text) *(.rodata) *(.gnu*)
+		/* .rodata* not .rodata: gcc puts string literals in
+		   .rodata.str1.8, which this script alone dropped -- ofg5 and
+		   ofpower4 both glob.  Notes §170. */
+		*(.text) *(.rodata*) *(.gnu*)
 		*(.got1)
 	} : kernel
 

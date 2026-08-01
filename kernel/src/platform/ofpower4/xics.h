@@ -33,12 +33,12 @@
 #ifndef __ARCH__POWERPC64__XICS_H__
 #define __ARCH__POWERPC64__XICS_H__
 
-class xics_interrupt_node_t
+struct xics_interrupt_node_t
 {
-public:
     word_t addr;
     word_t size;
 };
+typedef struct xics_interrupt_node_t xics_interrupt_node_t;
 
 #if defined(CONFIG_SMP)
  #define NUM_XICS    CONFIG_SMP_MAX_CPUS
@@ -46,15 +46,14 @@ public:
  #define NUM_XICS    32
 #endif
 
-class xics_interrupt_table_t
+struct xics_interrupt_table_t
 {
-public:
     xics_interrupt_node_t node[NUM_XICS];
 };
+typedef struct xics_interrupt_table_t xics_interrupt_table_t;
 
-class xics_ipl_t
+struct xics_ipl_t
 {
-public:
     union {
 	u32_t	word;
 	u8_t	bytes[4];
@@ -69,11 +68,12 @@ public:
 	u8_t	bytes[4];
     } qirr;
 };
+typedef struct xics_ipl_t xics_ipl_t;
 
-class xics_info_t
+struct xics_info_t
 {
-public:
     volatile xics_ipl_t *per_cpu[NUM_XICS];
 };
+typedef struct xics_info_t xics_info_t;
 
 #endif /* __ARCH__POWERPC64__XICS_H__ */

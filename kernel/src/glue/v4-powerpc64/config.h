@@ -90,8 +90,9 @@
 #if (CONFIG_PLAT_OFPOWER4 || CONFIG_PLAT_OFPOWER3)
 #define ARCH_SYSCALL0		KIP_SYSCALL (user_rtas_call)
 
-#if !defined(ASSEMBLY) && defined(__cplusplus)
-extern "C" void SECTION (".user.rtas_call") user_rtas_call (void);
+/* was guarded on __cplusplus, which now excludes every consumer. */
+#if !defined(ASSEMBLY)
+EXTERN_C void SECTION (".user.rtas_call") user_rtas_call (void);
 #endif
 #endif
 

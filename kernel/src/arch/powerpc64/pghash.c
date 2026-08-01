@@ -39,6 +39,11 @@
 #include INC_GLUE(space.h)
 #include INC_ARCH(segment.h)
 #include INC_ARCH(msr.h)
+/* ppc64_set_sdr1 lives here.  arch/powerpc64/slb.h pulls this header in, so
+   the SLB platforms got it for free; the segment-table one (seghash.h, i.e.
+   ofpower3) did not, and the call below became an implicit declaration and
+   then an undefined symbol.  Notes §170. */
+#include INC_ARCH(ppc64_registers.h)
 
 
 static word_t pte_replace_next;

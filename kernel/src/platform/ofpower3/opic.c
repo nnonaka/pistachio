@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:	platform/ofpower3/opic.cc
+ * File path:	platform/ofpower3/opic.c
  * Description:	OpenPIC interrupt controller.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,23 +42,27 @@ intctrl_t intctrl;
 
 open_pic_t *opic = NULL;
 
-SECTION(".init") void intctrl_t::init_arch()
+SECTION(".init") void intctrl_init_arch (void)
 {
     of1275_device_t *root;
     u32_t *prop, *cells, len;
-    word_t n, address;
+    word_t n, address, i, freq;
+    pgent_t pg;
+    pgsize_e size;
+    open_pic_feature0_t f;
+    const char *version;
 
-    root = get_of1275_tree()->find( "/" );
+    root = of1275_tree_find( get_of1275_tree(), "/" );
     printf( "OpenPIC init\n" );
 
     /* Find the Open PIC if present */
-    if ( !root->get_prop( "platform-open-pic", (char **)&prop, &len ) )
+    if ( !of1275_device_get_prop( root, "platform-open-pic", (char **)&prop, &len ) )
     {
 	printf( "*** no open-pic interrupt controller found\n" );
 	return;
     }
 
-    root->get_prop( "#address-cells", (char **)&cells, &len );
+    of1275_device_get_prop( root, "#address-cells", (char **)&cells, &len );
 
     n = *cells;
 
@@ -68,28 +72,29 @@ SECTION(".init") void intctrl_t::init_arch()
     printf( "OpenPIC found at: %p\n", address);
     opic = (open_pic_t*)(address | DEVICE_AREA_START);
 
-    pgent_t pg;
     /* XXX - we should lookup mapping first */
 #ifdef CONFIG_POWERPC64_LARGE_PAGES
-    pgent_t::pgsize_e size = pgent_t::size_16m;
+    size = size_16m;
 #else
-    pgent_t::pgsize_e size = pgent_t::size_4k;
+    size = size_4k;
 #endif
 
     /* Insert mappings for hash page table */
-    for ( word_t i = 0; i < (sizeof(open_pic_t)); i += page_size(size))
+    for ( i = 0; i < (sizeof(open_pic_t)); i += page_size(size))
     {
-	/* Create a page table entry, noexecute, nocache */
-	pg.set_entry( get_kernel_space(), size,
-			(addr_t)(address + i), true, true, false, true, pgent_t::cache_inhibit );
+	/* Create a page table entry, noexecute, nocache.  set_entry took
+	   eight arguments here; the same pre-rwx signature as
+	   kdb/platform/ofg5/reboot.cc (§169), and the same translation:
+	   read|write, no execute, kernel, is rwx == 6. */
+	pgent_set_entry( &pg, get_kernel_space(), size,
+			(addr_t)(address + i), 6, cache_inhibit, true );
 
-	get_pghash()->insert_mapping( get_kernel_space(),
+	pghash_insert_mapping_bolted( get_pghash(), get_kernel_space(),
 			(addr_t)(((word_t)opic) + i), &pg, size, true );
     }
 
-    open_pic_feature0_t f = opic->get_feature0();
+    f = open_pic_get_feature0( opic );
 
-    char *version;
     switch (f.x.version)
     {
     case 1: version = "1.0"; break;
@@ -101,7 +106,7 @@ SECTION(".init") void intctrl_t::init_arch()
     printf( "OpenPIC version %s (%d CPUS, %d IRQ sources)\n", version,
 				    f.x.last_cpu + 1, f.x.last_source + 1 );
 
-    word_t freq  = opic->get_timer_frequency();
+    freq = open_pic_get_timer_frequency( opic );
     printf( "OpenPIC timer frequency = %d.%06d MHz\n", freq / 1000000, freq % 1000000 );
 }
 

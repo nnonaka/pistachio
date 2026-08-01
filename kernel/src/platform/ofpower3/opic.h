@@ -44,16 +44,15 @@
 #define OPEN_PIC_MAX_PROCESSORS		(32)
 
 /* OpenPIC registers are 128-bits in size, first 32-bits is the offset */
-class open_pic_reg_t
+struct open_pic_reg_t
 {
-public:
     u32_t   reg;
     u32_t   pad[3];
 };
+typedef struct open_pic_reg_t open_pic_reg_t;
 
-class open_pic_global_t
+struct open_pic_global_t
 {
-public:
     /* Features	    */
     open_pic_reg_t	feature_reporting0;		/* Read only	*/
     open_pic_reg_t	feature_reporting1;		/* Future	*/
@@ -76,18 +75,18 @@ public:
 
     u8_t	_pad[ OPEN_PIC_GLOBAL_PAD ];
 };
+typedef struct open_pic_global_t open_pic_global_t;
 
-class open_pic_source_t
+struct open_pic_source_t
 {
-public:
     open_pic_reg_t  vector_priority;			/* Read/write	*/
     open_pic_reg_t  destination;			/* Read/write	*/
 };
+typedef struct open_pic_source_t open_pic_source_t;
 
 /* register structures */
-class open_pic_feature0_t
+struct open_pic_feature0_t
 {
-public:
     union {
 	struct {
 	    BITFIELD5( u32_t, 
@@ -100,12 +99,12 @@ public:
 	} x;
 	u32_t raw;
     };
-};  
+};
+typedef struct open_pic_feature0_t open_pic_feature0_t;
 
 
-class open_pic_processor_t
+struct open_pic_processor_t
 {
-public:
     /* Private shadow registers	*/
     u32_t   ipi0_dispatch_shadow;			/* Write only	*/
     u8_t    _pad0[4];
@@ -122,13 +121,11 @@ public:
     open_pic_reg_t  EOI;				/* Read/write	*/
     u8_t    _pad3[0xf40];
 };
+typedef struct open_pic_processor_t open_pic_processor_t;
 
-class open_pic_t
+struct open_pic_t
 {
-public:
-    open_pic_feature0_t get_feature0();
-    word_t get_timer_frequency();
-private:
+    /* was private */
     u8_t    _pad[ OPEN_PIC_GLOBAL_OFFSET ];
     open_pic_global_t	global;
     /* Interrupt source config registers    */
@@ -136,17 +133,18 @@ private:
     /* Per processor registers		    */
     open_pic_processor_t    processor[ OPEN_PIC_MAX_PROCESSORS ];
 };
+typedef struct open_pic_t open_pic_t;
 
-INLINE open_pic_feature0_t open_pic_t::get_feature0()
+INLINE open_pic_feature0_t open_pic_get_feature0( open_pic_t *self )
 {
     open_pic_feature0_t t;
-    t.raw = in32le( &this->global.feature_reporting0 );
+    t.raw = in32le( &self->global.feature_reporting0 );
     return t;
 }
 
-INLINE word_t open_pic_t::get_timer_frequency()
+INLINE word_t open_pic_get_timer_frequency( open_pic_t *self )
 {
-    return in32le( &this->global.timer_frequency );
+    return in32le( &self->global.timer_frequency );
 }
 
 #endif /* __PLATFORM__OFPOWER3__OPIC_H__ */

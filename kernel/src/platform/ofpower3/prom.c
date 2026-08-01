@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:	platform/ofpower3/prom.cc
+ * File path:	platform/ofpower3/prom.c
  * Description:	OpenFirmware Power3 Setup.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@ SECTION(".init") void of1275_tree_map( addr_t low, addr_t high )
     prom_print_hex( "1275 tree found at", (word_t)vaddr );
     prom_puts( "\n\r" );
 
-    get_of1275_tree()->init( (char *)vaddr );
+    of1275_tree_init( get_of1275_tree(), (char *)vaddr );
 }
 
 
@@ -60,18 +60,22 @@ SECTION(".init") void of1275_tree_map( addr_t low, addr_t high )
  * Finds and installs the position-independent copy of the
  * OpenFirmware device tree.
  */
-SECTION(".init") void of1275_tree_init( kernel_interface_page_t *kip )
+/* Renamed, as in platform/ofpower4/prom.c: of1275_tree_init is now the C
+   entry point for the device tree object itself. */
+SECTION(".init") static void install_of1275_tree( kernel_interface_page_t *kip )
 {
+    word_t i;
+
     // Look for the position-independent copy of the OpenFirmware device tree
     // in the kip's memory descriptors.
-    for( word_t i = 0; i < kip->memory_info.get_num_descriptors(); i++ ) 
+    for( i = 0; i < memory_info_get_num_descriptors (&kip->memory_info); i++ )
     {
-	memdesc_t *mdesc = kip->memory_info.get_memdesc( i );
+	memdesc_t *mdesc = memory_info_get_memdesc( &kip->memory_info, i );
 
-	if( (mdesc->type() == OF1275_KIP_TYPE) && 
-		(mdesc->subtype() == OF1275_KIP_SUBTYPE) )
+	if( (memdesc_type (mdesc) == OF1275_KIP_TYPE) &&
+		(memdesc_subtype (mdesc) == OF1275_KIP_SUBTYPE) )
 	{
-	    of1275_tree_map( mdesc->low(), mdesc->high() );
+	    of1275_tree_map( memdesc_low (mdesc), memdesc_high (mdesc) );
 	    return;
 	}
     }
@@ -79,7 +83,7 @@ SECTION(".init") void of1275_tree_init( kernel_interface_page_t *kip )
     // Not found.  Things won't work, but ...
     prom_puts( "*** Error: the boot loader didn't supply a copy of the\n\r"
 	       "*** Open Firmware device tree!\n\r" );
-    get_of1275_tree()->init( NULL );
+    of1275_tree_init( get_of1275_tree(), NULL );
 }
 
 
@@ -89,16 +93,20 @@ SECTION(".init") void of1275_tree_init( kernel_interface_page_t *kip )
  */
 void SECTION(".init") init_plat( word_t ofentry )
 {
+    word_t pvr;
+    u32_t *prop_val, len, cpu, cpu_hz, bus_hz;
+    of1275_device_t *chosen;
+    of1275_phandle_t cpu_pkg;
+
     /* Initialise the Open Firmware interface used to setup the RTAS */
-    get_of1275()->init(ofentry);
+    of1275_init( get_of1275(), ofentry );
 
     /* Initialise position independant the device tree */
-    of1275_tree_init( get_kip() );
+    install_of1275_tree( get_kip() );
 
     /* Initialise the RTAS */
-    get_rtas()->init_arch();
+    rtas_init_arch( get_rtas() );
 
-    word_t pvr;
     asm volatile (
 	"mfpvr	    %0;"
 	: "=r" (pvr)
@@ -124,19 +132,18 @@ void SECTION(".init") init_plat( word_t ofentry )
 	prom_exit( "Unsupported CPU type\n\r" );
     }
 
-    u32_t *prop_val, len, cpu, cpu_hz, bus_hz;
-    of1275_device_t *chosen = get_of1275_tree()->find( "/chosen" );
+    chosen = of1275_tree_find( get_of1275_tree(), "/chosen" );
 
-    if ( !chosen->get_prop( "cpu", (char **)&prop_val, &len ))
+    if ( !of1275_device_get_prop( chosen, "cpu", (char **)&prop_val, &len ))
     {
 	prom_exit( "Unable get property \"cpu\" in /chosen\n\r" );
     }
-    of1275_phandle_t cpu_pkg = *prop_val;
-//    of1275_phandle_t cpu_pkg = get_of1275()->instance_to_package( *prop_val );
-    get_of1275()->get_prop( cpu_pkg, "reg", &cpu, sizeof(cpu));
+    cpu_pkg = *prop_val;
+//    cpu_pkg = of1275_instance_to_package( get_of1275(), *prop_val );
+    of1275_get_prop( get_of1275(), cpu_pkg, "reg", &cpu, sizeof(cpu));
 
-    get_of1275()->get_prop( cpu_pkg, "clock-frequency", &cpu_hz, sizeof(cpu_hz));
-    get_of1275()->get_prop( cpu_pkg, "bus-frequency", &bus_hz, sizeof(bus_hz));
+    of1275_get_prop( get_of1275(), cpu_pkg, "clock-frequency", &cpu_hz, sizeof(cpu_hz));
+    of1275_get_prop( get_of1275(), cpu_pkg, "bus-frequency", &bus_hz, sizeof(bus_hz));
     
     boot_cpuid = cpu;
     boot_cpukhz = cpu_hz/1000;
