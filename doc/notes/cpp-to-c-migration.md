@@ -9752,3 +9752,40 @@ That is `find . -name '*.cc'` from the top, not a subset. Some stale
 `print32.cc`/`amd6432.cc`/`get_hex32.cc` copies were sitting in build
 directories -- artefacts of kickstart's 32-bit sub-build from before the
 conversion, since regenerated as `.c` -- and have been removed.
+
+## §178 -- the full sweep, and a harness that only knew x86
+
+    tools/configsweep '*'      32 of 32 shipped configurations build
+
+Thirty-one x86 and `powerpc-bg-config`, the Blue Gene one. That is every tar
+in contrib/configs.
+
+The first run reported 31 OK and `powerpc-bg-config FAIL, 4 errors` in
+`api/v4/tcb.h` -- `unknown type name ctrlxfer_mask_t`, `ARCH_KTCB_FAULT_MAX
+undeclared`. Neither `api/v4/tcb.h` nor `glue/v4-powerpc/ktcb.h` (which
+defines both) had been touched since the session began; `diff` against the
+starting commit showed them byte-identical. The generated Makeconf.local
+explained it:
+
+    ARCH=x86  SUBARCH=x64  CPU=p4  PLATFORM=pc99
+
+against a config.h saying `CONFIG_ARCH_POWERPC`. configsweep copies its
+Makeconf.local from one donor build directory and rewrites only SUBARCH, CPU
+and SCHED -- never ARCH or PLATFORM -- so it was compiling a PowerPC
+configuration against `glue/v4-x86`. It was written for x86 (its default
+pattern is `x86-x64-*`, and it stat'd `$d/x86-kernel` for the size); passing
+`'*'` dragged in the one configuration it could not handle.
+
+It now picks a donor per architecture -- x86-x64-p4-smp, scratch-ppc,
+scratch-ofg5 -- derives ARCH from `CONFIG_ARCH_*`, CPU from
+`CONFIG_CPU_POWERPC*`, PLATFORM from `CONFIG_PLAT_*`, and reports the binary
+as `$arch-kernel`. A configuration whose donor directory does not exist is
+reported SKIP rather than silently built wrong.
+
+With that, `powerpc-bg-config` builds: 1349264 bytes. The failure was the
+harness throughout.
+
+Worth stating plainly, since §124 made the same point from the other
+direction: a sweep that silently substitutes the wrong architecture is worse
+than no sweep, because it produces a failure that looks like a code defect and
+costs a bisect to disbelieve.
