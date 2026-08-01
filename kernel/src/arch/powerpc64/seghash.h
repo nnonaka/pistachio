@@ -39,45 +39,39 @@
 #define POWERPC64_SEG_MASK	((1ul << 36)-1)
 #define ESID(x)			(((x) >> POWERPC64_SEG_SHIFT) & POWERPC64_SEG_MASK)
 
-class segment_t : public generic_segment_t
+INLINE void segment_flush_segments (void)
 {
-public:
-    static inline void init_cpu( space_t *kspace, addr_t kbase );
-
-    static inline void flush_segments()
-    {
-	__asm__ __volatile__("isync; slbia; isync":::"memory");
-    }
-
-    inline void flush_segment_entry( addr_t addr )
-    {
-	__asm__ __volatile__("sync; slbie %0; sync":: "r" (addr) :"memory");
-    }
-
-    static inline void insert_entry( space_t *space, word_t vsid, word_t esid, bool large );
-};
-
-
-INLINE void segment_t::init_cpu( space_t *kspace, addr_t kbase )
-{
-    /* Setup the kernel segment table */
-    __asm__ __volatile__ ( "mtasr %0;" :: "r" ( kspace->get_seg_table()->get_asr() ) );
-
-    flush_segments();
-
-    word_t vsid = kspace->get_vsid( kbase );
-
-    insert_entry( kspace, vsid, ESID((word_t)kbase), false );
+    __asm__ __volatile__("isync; slbia; isync":::"memory");
 }
 
-INLINE void segment_t::insert_entry( space_t *space, word_t vsid, word_t esid, bool large )
+INLINE void segment_flush_segment_entry( addr_t addr )
 {
-    ppc64_stab_t *stab = space->get_seg_table();
+    __asm__ __volatile__("sync; slbie %0; sync":: "r" (addr) :"memory");
+}
+
+INLINE void segment_insert_entry( space_t *space, word_t vsid, word_t esid, bool large )
+{
+    ppc64_stab_t *stab = space_get_seg_table (space);
 
     //printf( "segment: insert_entry: space = %p. vsid = %p, esid = %p \n", space, vsid, esid );
-    ppc64_ste_t *ste = stab->find_insertion( vsid, esid );
+    ppc64_ste_t *ste = ppc64_stab_find_insertion (stab, vsid, esid);
 
-    ste->set_entry( esid, 0, 1, 0, vsid );
+    ppc64_ste_set_entry (ste, esid, 0, 1, 0, vsid);
+}
+
+INLINE void segment_init_cpu( space_t *kspace, addr_t kbase )
+{
+    word_t vsid;
+
+    /* Setup the kernel segment table */
+    __asm__ __volatile__ ( "mtasr %0;"
+	:: "r" ( ppc64_stab_get_asr (space_get_seg_table (kspace)) ) );
+
+    segment_flush_segments();
+
+    vsid = space_get_vsid( kspace, kbase );
+
+    segment_insert_entry( kspace, vsid, ESID((word_t)kbase), false );
 }
 
 #endif	/* __ARCH__POWERPC64__PGHASH_H__ */

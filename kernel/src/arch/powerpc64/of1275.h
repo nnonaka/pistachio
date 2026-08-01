@@ -46,9 +46,12 @@ typedef s32_t ptr32_t;
 #define OF1275_INVALID_PHANDLE	((of1275_phandle_t)-1)
 #define OF1275_INVALID_IHANDLE	((of1275_ihandle_t)-1)
 
-class of1275_client_interface_t
+/* Was a class; the protected/public split disappears, so the members below
+   that were protected (entry, stdin/stdout, ci_lock, args) are now reachable
+   directly -- of1275.c is still their only writer.  The `call' helper was
+   private and stays file-static there. */
+struct of1275_client_interface_t
 {
-protected:
     word_t entry;
     of1275_phandle_t stdout;
     of1275_phandle_t stdin;
@@ -138,33 +141,40 @@ protected:
 	} claim;
     } args;
 
-    s32_t call( void *params );
-
-public:
-    of1275_phandle_t get_stdout() { return this->stdout; }
-    of1275_phandle_t get_stdin()  { return this->stdin;  }
-
-    void init( word_t entry );
-    of1275_phandle_t find_device( const char *name );
-    s32_t get_prop( of1275_phandle_t phandle, const char *name, void *buf, s32_t buflen );
-    of1275_ihandle_t open( const char *name );
-    s32_t write( of1275_phandle_t phandle, const void *buf, s32_t len );
-    s32_t read( of1275_phandle_t phandle, void *buf, s32_t len );
-    of1275_phandle_t instance_to_package( s32_t val );
-    s32_t claim( addr_t virt, u32_t size, u32_t align );
-
-    void puts(char *str, int len);
-    void call_method( of1275_phandle_t phandle, const char *method,
-		    s32_t *results, int nret, int nargs, ...);
-
-    void exit();
-    void quiesce();
-    void enter();
-    s32_t interpret( const char *forth );
 };
+typedef struct of1275_client_interface_t of1275_client_interface_t;
+
+INLINE of1275_phandle_t of1275_get_stdout (of1275_client_interface_t *self)
+    { return self->stdout; }
+INLINE of1275_phandle_t of1275_get_stdin (of1275_client_interface_t *self)
+    { return self->stdin; }
+
+/* Out of line in arch/powerpc64/of1275.c. */
+BEGIN_DECLS
+void of1275_init( of1275_client_interface_t *self, word_t entry );
+of1275_phandle_t of1275_find_device( of1275_client_interface_t *self, const char *name );
+s32_t of1275_get_prop( of1275_client_interface_t *self, of1275_phandle_t phandle,
+		       const char *name, void *buf, s32_t buflen );
+of1275_ihandle_t of1275_open( of1275_client_interface_t *self, const char *name );
+s32_t of1275_write( of1275_client_interface_t *self, of1275_phandle_t phandle,
+		    const void *buf, s32_t len );
+s32_t of1275_read( of1275_client_interface_t *self, of1275_phandle_t phandle,
+		   void *buf, s32_t len );
+of1275_phandle_t of1275_instance_to_package( of1275_client_interface_t *self, s32_t val );
+s32_t of1275_claim( of1275_client_interface_t *self, addr_t virt, u32_t size, u32_t align );
+
+void of1275_puts( of1275_client_interface_t *self, char *str, int len );
+void of1275_call_method( of1275_client_interface_t *self, of1275_phandle_t phandle,
+			 const char *method, s32_t *results, int nret, int nargs, ...);
+
+void of1275_exit( of1275_client_interface_t *self );
+void of1275_quiesce( of1275_client_interface_t *self );
+void of1275_enter( of1275_client_interface_t *self );
+s32_t of1275_interpret( of1275_client_interface_t *self, const char *forth );
+END_DECLS
 
 
-INLINE of1275_client_interface_t *get_of1275()
+INLINE of1275_client_interface_t *get_of1275(void)
 {
     extern of1275_client_interface_t of1275;
     return &of1275;

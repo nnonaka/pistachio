@@ -42,9 +42,8 @@
 
 #include INC_ARCH(ppc64_registers.h)
 
-class slbent_t
+struct slbent_t
 {
-public:
     union {
 	struct {
 	    word_t esid: 36;	/* Effective segment ID */
@@ -66,39 +65,30 @@ public:
 	} X;
 	word_t raw;
     } vsid;
-
-private:
 };
+typedef struct slbent_t slbent_t;
 
-class segment_t : public generic_segment_t
+INLINE void segment_flush_segments (void)
 {
-public:
-    static inline void init_cpu( space_t *kspace, addr_t kbase );
+    __asm__ __volatile__("isync; slbia; isync":::"memory");
+}
 
-    static inline void flush_segments()
-    {
-	__asm__ __volatile__("isync; slbia; isync":::"memory");
-    }
-
-    inline void flush_segment_entry( addr_t addr )
-    {
-	__asm__ __volatile__("sync; slbie %0; sync":: "r" (addr) :"memory");
-    }
-
-    static inline void insert_entry( space_t *space, word_t vsid, word_t esid, bool large );
-};
+INLINE void segment_flush_segment_entry( addr_t addr )
+{
+    __asm__ __volatile__("sync; slbie %0; sync":: "r" (addr) :"memory");
+}
 
 
-INLINE void segment_t::init_cpu( space_t *kspace, addr_t kbase )
+INLINE void segment_init_cpu( space_t *kspace, addr_t kbase )
 {
     slbent_t kern_ent;
 
-    word_t k_vsid = kspace->get_vsid( kbase );
+    word_t k_vsid = space_get_vsid( kspace, kbase );
 
     /* Setup the kernel VSID_ASID */
     __asm__ __volatile__ ( "mtasr %0;" :: "r" (0) );
 
-    flush_segments();
+    segment_flush_segments();
 
     /* Create an entry for the first kernel segment (256MB)
      * in SLB index 0. This entry is not evicted by a TLBIA
@@ -126,7 +116,7 @@ INLINE void segment_t::init_cpu( space_t *kspace, addr_t kbase )
 
 /* Insert an entry into the SLB
  */
-INLINE void segment_t::insert_entry( space_t *space, word_t vsid, word_t esid, bool large )
+INLINE void segment_insert_entry( space_t *space, word_t vsid, word_t esid, bool large )
 {
     word_t index;
     slbent_t entry;

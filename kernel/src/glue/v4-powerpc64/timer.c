@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     glue/v4-powerpc64/timer.cc
+ * File path:     glue/v4-powerpc64/timer.c
  * Description:   Timer management functions
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -41,12 +41,12 @@ timer_t timer UNIT("cpulocal");
 static word_t timer_interval;
 
 SECTION(".init")
-void timer_t::init_global()
+void timer_init_global (void)
 {
     u32_t *prop_val, len, timebase_hz;
-    of1275_device_t *cpu = get_of1275_tree()->find_device_type( "cpu" );
+    of1275_device_t *cpu = of1275_tree_find_device_type (get_of1275_tree(), "cpu");
 
-    cpu->get_prop( "timebase-frequency", (char **)&prop_val, &len);
+    of1275_device_get_prop (cpu, "timebase-frequency", (char **)&prop_val, &len);
 
     timebase_hz = *prop_val;
 
@@ -56,14 +56,14 @@ void timer_t::init_global()
 }
 
 SECTION(".init")
-void timer_t::init_cpu()
+void timer_init_cpu (timer_t *self)
 {
     // Initialize the time base to 0. */
     ppc64_set_tbl( 0 );	// Make sure that tbu won't be upset by a carry.
     ppc64_set_tbu( 0 );	// Clear the tbu.
     ppc64_set_tbl( 0 );	// Clear the tbl.
 
-    this->last_time_base = 0;
+    self->last_time_base = 0;
 }
 
 #define except_return()			\
@@ -80,7 +80,7 @@ do {					\
 } while(0)
 
 
-extern "C" void decrementer_handler( powerpc64_irq_context_t *context )
+void decrementer_handler( powerpc64_irq_context_t *context )
 {
     word_t tb, next_dec;
 
@@ -93,7 +93,7 @@ extern "C" void decrementer_handler( powerpc64_irq_context_t *context )
     ppc64_set_dec(next_dec);
 
     /* Do this last as we may reschedule */
-    get_current_scheduler()->handle_timer_interrupt();
+    sched_handle_timer_interrupt ();
 
     except_return();
 }

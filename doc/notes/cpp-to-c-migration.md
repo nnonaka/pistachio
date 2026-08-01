@@ -9129,3 +9129,37 @@ the callers no longer know which branch they are on.
     now:   every `.c` compiles; the remainder is 13 `.cc` files
 
 ofppc, ppc44x and x86-x64-p4 all still build. Kernel `.cc` count 37 -> 36.
+
+## §166 -- powerpc64: Open Firmware, the segment abstraction, the timer
+
+Four more headers and four sources. Nothing structurally new after §165; two
+things are worth recording.
+
+`arch/powerpc64/segment.h` declared `generic_segment_t`, a base with no members
+and four `static inline` declarations that neither it nor anyone else defines
+-- an interface description, exactly like `generic_intctrl_t` in §164. The two
+implementations (`slb.h` for the SLB machines, `seghash.h` for the segment-table
+ones) each define all four, and every caller went through `segment_t::`, never
+through a base pointer. So the base is gone and the implementations define
+`segment_init_cpu`, `segment_flush_segments`, `segment_flush_segment_entry`
+and `segment_insert_entry` directly. Only one of the two headers is ever
+included; the config picks it.
+
+`arch/powerpc64/of1275.cc` ends with
+
+    s32_t SECTION (".init")
+    interpret( const char *forth )
+
+-- no class qualifier. So upstream defines a *free* function named `interpret`
+and leaves `of1275_client_interface_t::interpret` declared-but-undefined.
+Nothing calls either one, which is why it never came up. The header names it as
+a member, so the C version is `of1275_interpret` taking the interface pointer;
+the alternative reading (a genuinely free helper that happens to be dead) is
+not supported by anything.
+
+`spinlock_t` in `arch/powerpc64/sync.h` follows the 32-bit port's naming
+(`spinlock_init`/`_lock`/`_unlock`); `init`'s defaulted `val=0` is spelled
+out at the one call site.
+
+    §165:  every `.c` compiles
+    now:   17 `.cc` files left, all of them powerpc64's own

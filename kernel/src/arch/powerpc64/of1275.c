@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *
- * File path:	arch/powerpc64/of1275.cc
+ * File path:	arch/powerpc64/of1275.c
  * Description:	OpenFirmware Interface.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,10 @@ of1275_client_interface_t of1275 SECTION (".init.data");
 /* This function performs the actual call to Open Firmware.
  * For now, we must be in real-mode to make this call.
  */
-s32_t SECTION (".init")
-of1275_client_interface_t::call( void *params )
+/* Was the private member of1275_client_interface_t::call; nothing outside this
+   file used it. */
+static s32_t SECTION (".init")
+of1275_call( of1275_client_interface_t *self, void *params )
 {
     register s32_t result;
     s32_t args = (word_t)params;
@@ -161,7 +163,7 @@ of1275_client_interface_t::call( void *params )
 
 	"addi	1, 1, 1024;"	/* XXX fix stack */
 	: "=r" (result)
-	: "r" (entry),
+	: "r" (self->entry),
 	  "r" (args)
 	: "lr", "memory"
     );
@@ -174,284 +176,286 @@ of1275_client_interface_t::call( void *params )
  * not been initialised yet.
  */
 void SECTION (".init")
-of1275_client_interface_t::init( word_t entry )
+of1275_init( of1275_client_interface_t *self, word_t entry )
 {
-    this->entry = entry;
-    this->ci_lock.init();
+    of1275_phandle_t chosen;
+    static char init_msg[] = "\n\r" TXT_FG_RED "L4 PPC64 - Open Firmware Init" TXT_NORMAL "\n\r";
 
-    this->stdout = OF1275_INVALID_PHANDLE;
-    this->stdin = OF1275_INVALID_PHANDLE;
+    self->entry = entry;
+    spinlock_init (&self->ci_lock, 0);
 
-    of1275_phandle_t chosen = this->find_device( "/chosen" );
+    self->stdout = OF1275_INVALID_PHANDLE;
+    self->stdin = OF1275_INVALID_PHANDLE;
+
+    chosen = of1275_find_device( self, "/chosen" );
     if( chosen == OF1275_INVALID_PHANDLE )
 	return;
 
-    this->get_prop( chosen, "stdout", &this->stdout, sizeof(of1275_phandle_t) );
-    this->get_prop( chosen, "stdin", &this->stdin, sizeof(of1275_phandle_t) );
+    of1275_get_prop( self, chosen, "stdout", &self->stdout, sizeof(of1275_phandle_t) );
+    of1275_get_prop( self, chosen, "stdin", &self->stdin, sizeof(of1275_phandle_t) );
 
-    char init_msg[] = "\n\r" TXT_FG_RED "L4 PPC64 - Open Firmware Init" TXT_NORMAL "\n\r";
-    this->write(this->stdout, init_msg, sizeof(init_msg));
+    of1275_write( self, self->stdout, init_msg, sizeof(init_msg));
 }
 
 /* Find a device in the openfirmware tree
  */
 of1275_phandle_t SECTION (".init")
-of1275_client_interface_t::find_device( const char *name )
+of1275_find_device( of1275_client_interface_t *self, const char *name )
 {
     int namelen = strlen(name) + 1;
     
     // Is the request too large?
-    if( (sizeof(this->args.find_device) + namelen) > sizeof(this->args.shared) )
+    if( (sizeof(self->args.find_device) + namelen) > sizeof(self->args.shared) )
 	return OF1275_INVALID_PHANDLE;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Install all parameters in the shared data area.
-    this->args.find_device.service = (word_t) ("finddevice");
-    this->args.find_device.nargs = 1;
-    this->args.find_device.nret = 1;
-    this->args.find_device.name = (word_t)(this->args.shared + sizeof(this->args.find_device));
-    this->args.find_device.phandle = OF1275_INVALID_PHANDLE;
-    sstrncpy( (char *)(word_t)this->args.find_device.name, name, namelen );
+    self->args.find_device.service = (word_t) ("finddevice");
+    self->args.find_device.nargs = 1;
+    self->args.find_device.nret = 1;
+    self->args.find_device.name = (word_t)(self->args.shared + sizeof(self->args.find_device));
+    self->args.find_device.phandle = OF1275_INVALID_PHANDLE;
+    sstrncpy( (char *)(word_t)self->args.find_device.name, name, namelen );
 
     // Invoke OF.
-    this->call( &this->args.find_device );
+    of1275_call( self, &self->args.find_device );
 
-    of1275_phandle_t ret = this->args.find_device.phandle;
+    of1275_phandle_t ret = self->args.find_device.phandle;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
 /* Request the value of a property
  */
 s32_t SECTION (".init")
-of1275_client_interface_t::get_prop( of1275_phandle_t phandle,
+of1275_get_prop( of1275_client_interface_t *self, of1275_phandle_t phandle,
 		const char *name, void *buf, s32_t buflen )
 {
     int ret = -1;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Initialize the argument structure, fitting all data within our
     // shared memory region.
     int namelen = strlen(name) + 1;
-    this->args.get_prop.service = (word_t) ("getprop");
-    this->args.get_prop.nargs = 4;
-    this->args.get_prop.nret = 1;
-    this->args.get_prop.phandle = phandle;
-    this->args.get_prop.name = (word_t)(this->args.shared + sizeof(this->args.get_prop));
-    this->args.get_prop.buf = (word_t)addr_align_up((char *)(word_t)this->args.get_prop.name + namelen, sizeof(word_t) );
-    this->args.get_prop.buflen = buflen;
-    this->args.get_prop.size = ret;
+    self->args.get_prop.service = (word_t) ("getprop");
+    self->args.get_prop.nargs = 4;
+    self->args.get_prop.nret = 1;
+    self->args.get_prop.phandle = phandle;
+    self->args.get_prop.name = (word_t)(self->args.shared + sizeof(self->args.get_prop));
+    self->args.get_prop.buf = (word_t)addr_align_up((char *)(word_t)self->args.get_prop.name + namelen, sizeof(word_t) );
+    self->args.get_prop.buflen = buflen;
+    self->args.get_prop.size = ret;
 
     // If the data fits, then invoke Open Firmware.
-    word_t tot = (word_t)this->args.get_prop.buf - (s32_t)(word_t)&this->args.shared + 
+    word_t tot = (word_t)self->args.get_prop.buf - (s32_t)(word_t)&self->args.shared + 
 	buflen;
-    if( tot <= sizeof(this->args.shared) )
+    if( tot <= sizeof(self->args.shared) )
     {
 	// Copy the name into the shared buffer.
-	sstrncpy( (char *)(word_t)this->args.get_prop.name, name, namelen );
+	sstrncpy( (char *)(word_t)self->args.get_prop.name, name, namelen );
 
-	this->call( &this->args.get_prop ); // Call OF.
+	of1275_call( self, &self->args.get_prop ); // Call OF.
 
-	if( (this->args.get_prop.size > -1) && 
-		(this->args.get_prop.size <= buflen) )
+	if( (self->args.get_prop.size > -1) && 
+		(self->args.get_prop.size <= buflen) )
 	{
 	    // Copy the data into the outgoing buffer.
-	    memcpy( buf, (char*)(word_t) this->args.get_prop.buf, this->args.get_prop.size );
-	    ret = this->args.get_prop.size;
+	    memcpy( buf, (char*)(word_t) self->args.get_prop.buf, self->args.get_prop.size );
+	    ret = self->args.get_prop.size;
 	}
     }
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
 /* Open an Open Firmware device
  */
-of1275_ihandle_t SECTION (".init") of1275_client_interface_t::open( const char *name )
+of1275_ihandle_t SECTION (".init") of1275_open( of1275_client_interface_t *self, const char *name )
 {
     int namelen = strlen(name) + 1;
     
     // Is the request too large?
-    if( (sizeof(this->args.open) + namelen) > sizeof(this->args.shared) )
+    if( (sizeof(self->args.open) + namelen) > sizeof(self->args.shared) )
 	return OF1275_INVALID_PHANDLE;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
-    this->args.open.service = (word_t) ("open");
-    this->args.open.nargs = 1;
-    this->args.open.nret = 1;
-    this->args.open.name = (word_t)(this->args.shared + sizeof(this->args.open));
-    this->args.open.ihandle = OF1275_INVALID_PHANDLE;
+    self->args.open.service = (word_t) ("open");
+    self->args.open.nargs = 1;
+    self->args.open.nret = 1;
+    self->args.open.name = (word_t)(self->args.shared + sizeof(self->args.open));
+    self->args.open.ihandle = OF1275_INVALID_PHANDLE;
 
     // Copy the name into the shared buffer.
-    sstrncpy( (char *)(word_t)this->args.open.name, name, namelen );
+    sstrncpy( (char *)(word_t)self->args.open.name, name, namelen );
 
-    this->call( &this->args.open );
-    of1275_ihandle_t ret = this->args.open.ihandle;
+    of1275_call( self, &self->args.open );
+    of1275_ihandle_t ret = self->args.open.ihandle;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
 /* Write to an Open Firmware file descriptor
  */
 s32_t SECTION (".init")
-of1275_client_interface_t::write( of1275_phandle_t phandle,
+of1275_write( of1275_client_interface_t *self, of1275_phandle_t phandle,
 		const void *buf, s32_t len )
 {
     int ret = -1;
 
     // Adjust the amount of data to write as necessary.
-    if( (len + sizeof(this->args.write)) > sizeof(this->args.shared) )
-	len = sizeof(this->args.shared) - sizeof(this->args.write);
+    if( (len + sizeof(self->args.write)) > sizeof(self->args.shared) )
+	len = sizeof(self->args.shared) - sizeof(self->args.write);
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Initialize the argument structure, fitting all data within our
     // shared data region.
-    this->args.write.service = (word_t) ("write");
-    this->args.write.nargs = 3;
-    this->args.write.nret = 1;
-    this->args.write.phandle = phandle;
-    this->args.write.buf = (word_t)(this->args.shared + sizeof(this->args.write));
-    this->args.write.len = len;
-    this->args.write.actual = -1;
-    memcpy( (char *)(word_t)this->args.write.buf, buf, len );
+    self->args.write.service = (word_t) ("write");
+    self->args.write.nargs = 3;
+    self->args.write.nret = 1;
+    self->args.write.phandle = phandle;
+    self->args.write.buf = (word_t)(self->args.shared + sizeof(self->args.write));
+    self->args.write.len = len;
+    self->args.write.actual = -1;
+    memcpy( (char *)(word_t)self->args.write.buf, buf, len );
 
     // Invoke OF.
-    this->call( &this->args.write );
-    ret = this->args.write.actual;
+    of1275_call( self, &self->args.write );
+    ret = self->args.write.actual;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
 /* Read from an OpenFirmware file descriptor
  */
 s32_t SECTION (".init")
-of1275_client_interface_t::read( of1275_phandle_t phandle, void *buf, s32_t len )
+of1275_read( of1275_client_interface_t *self, of1275_phandle_t phandle, void *buf, s32_t len )
 {
     int ret = -1;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Adjust the size of the requested data to fit our shared buffer size.
-    if( (len + sizeof(this->args.read)) > sizeof(this->args.shared) )
-	len = sizeof(this->args.shared) - sizeof(this->args.read);
+    if( (len + sizeof(self->args.read)) > sizeof(self->args.shared) )
+	len = sizeof(self->args.shared) - sizeof(self->args.read);
 
     // Initialize the argument structure, fitting all data within our
     // shared data region.
-    this->args.read.service = (word_t) ("read");
-    this->args.read.nargs = 3;
-    this->args.read.nret = 1;
-    this->args.read.phandle = phandle;
-    this->args.read.buf = (word_t)(this->args.shared + sizeof(this->args.read));
-    this->args.read.len = len;
-    this->args.read.actual = -1;
+    self->args.read.service = (word_t) ("read");
+    self->args.read.nargs = 3;
+    self->args.read.nret = 1;
+    self->args.read.phandle = phandle;
+    self->args.read.buf = (word_t)(self->args.shared + sizeof(self->args.read));
+    self->args.read.len = len;
+    self->args.read.actual = -1;
 
     // Call OF.
-    this->call( &this->args.read );
+    of1275_call( self, &self->args.read );
 
     // If possible, copy the input data to the outgoing buffer.
-    ret = this->args.read.actual;
+    ret = self->args.read.actual;
     if( (ret >= 0) && (ret <= len) )
-	memcpy( buf, (char *)(word_t)this->args.read.buf, len );
+	memcpy( buf, (char *)(word_t)self->args.read.buf, len );
     else
 	ret = -1;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
     return ret;
 }
 
 /* Call an OpenFirmware method
  */
 void SECTION (".init")
-of1275_client_interface_t::call_method( of1275_phandle_t phandle, const char *method,
-		s32_t *results, int nret, int nargs, ...)
+of1275_call_method( of1275_client_interface_t *self, of1275_phandle_t phandle,
+		const char *method, s32_t *results, int nret, int nargs, ...)
 {
     va_list args;
     int namelen = strlen(method) + 1;
     
     // Is the request too large?
-    if( (sizeof(this->args.call) + namelen) > sizeof(this->args.shared) )
+    if( (sizeof(self->args.call) + namelen) > sizeof(self->args.shared) )
 	return;
     // Is there enough space for the args and rets?
-    if( ((int)sizeof(this->args.call.args) < (nargs+nret)))
+    if( ((int)sizeof(self->args.call.args) < (nargs+nret)))
 	return;
 
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.call.service = (word_t) ("call-method");
-    this->args.call.nargs = nargs+2;
-    this->args.call.nret = nret;
-    this->args.call.method = (word_t)(this->args.shared + sizeof(this->args.call));
-    this->args.call.phandle = phandle;
+    self->args.call.service = (word_t) ("call-method");
+    self->args.call.nargs = nargs+2;
+    self->args.call.nret = nret;
+    self->args.call.method = (word_t)(self->args.shared + sizeof(self->args.call));
+    self->args.call.phandle = phandle;
 
     // Copy the name into the shared buffer.
-    sstrncpy( (char *)(word_t)this->args.call.method, method, namelen );
+    sstrncpy( (char *)(word_t)self->args.call.method, method, namelen );
 
     va_start(args, nargs);
     for (int i=0; i < nargs; i++)
     {
-	this->args.call.args[i] = va_arg(args, s32_t);
+	self->args.call.args[i] = va_arg(args, s32_t);
     }
     va_end(args);
 
     // Invoke OF.
-    this->call( &this->args.call );
+    of1275_call( self, &self->args.call );
 
     for (int i=0; i < nret; i++)
     {
-	results[i] = this->args.call.args[nargs+i];
+	results[i] = self->args.call.args[nargs+i];
     }
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 }
 
 /* Exit to OpenFirmware
  */
 void SECTION (".init")
-of1275_client_interface_t::exit()
+of1275_exit( of1275_client_interface_t *self )
 {
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.simple.service = (word_t) ("exit");
-    this->args.simple.nargs = 0;
-    this->args.simple.nret = 0;
+    self->args.simple.service = (word_t) ("exit");
+    self->args.simple.nargs = 0;
+    self->args.simple.nret = 0;
 
     // Invoke OF.
-    this->call( &this->args.simple );
+    of1275_call( self, &self->args.simple );
 
     // Hopefully the Open Firmware will never return to us ...
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 }
 
 /* Convert an instance number to a package
  */
 of1275_phandle_t SECTION (".init")
-of1275_client_interface_t::instance_to_package( s32_t val )
+of1275_instance_to_package( of1275_client_interface_t *self, s32_t val )
 {
     of1275_phandle_t ret;
-    this->ci_lock.lock();
+    spinlock_lock (&self->ci_lock);
 
     // Pack the arguments into our shared data region.
-    this->args.simple_arg.service = (word_t) ("instance-to-package");
-    this->args.simple_arg.nargs = 1;
-    this->args.simple_arg.nret = 1;
-    this->args.simple_arg.val = val;
-    this->args.simple_arg.ret = -1;
+    self->args.simple_arg.service = (word_t) ("instance-to-package");
+    self->args.simple_arg.nargs = 1;
+    self->args.simple_arg.nret = 1;
+    self->args.simple_arg.val = val;
+    self->args.simple_arg.ret = -1;
 
     // Invoke OF.
-    this->call( &this->args.simple_arg );
+    of1275_call( self, &self->args.simple_arg );
 
-    ret = this->args.simple_arg.ret;
+    ret = self->args.simple_arg.ret;
 
-    this->ci_lock.unlock();
+    spinlock_unlock (&self->ci_lock);
 
     return ret;
 }
@@ -459,30 +463,30 @@ of1275_client_interface_t::instance_to_package( s32_t val )
 /* Claim memory from Open Firmware
  */
 s32_t SECTION (".init")
-of1275_client_interface_t::claim( addr_t virt, u32_t size, u32_t align )
+of1275_claim( of1275_client_interface_t *self, addr_t virt, u32_t size, u32_t align )
 {
     int ret = 0;
     word_t msr = ppc64_get_msr();
 
     if ((msr & MSR_IR) && (msr & MSR_DR))
     {
-	this->ci_lock.lock();
+	spinlock_lock (&self->ci_lock);
 
 	// Initialize the argument structure, fitting all data within our
 	// shared data region.
-	this->args.claim.service = (word_t) ("claim");
-	this->args.claim.nargs = 3;
-	this->args.claim.nret = 1;
-	this->args.claim.virt = (word_t)virt;
-	this->args.claim.size = size;
-	this->args.claim.align = align;
-	this->args.claim.retval = 0;
+	self->args.claim.service = (word_t) ("claim");
+	self->args.claim.nargs = 3;
+	self->args.claim.nret = 1;
+	self->args.claim.virt = (word_t)virt;
+	self->args.claim.size = size;
+	self->args.claim.align = align;
+	self->args.claim.retval = 0;
 
 	// Invoke OF.
-	this->call( &this->args.write );
-	ret = this->args.claim.retval;
+	of1275_call( self, &self->args.write );
+	ret = self->args.claim.retval;
 
-	this->ci_lock.unlock();
+	spinlock_unlock (&self->ci_lock);
     }
     return ret;
 }
@@ -490,29 +494,33 @@ of1275_client_interface_t::claim( addr_t virt, u32_t size, u32_t align )
 /* OpenFirmware put string
  */
 void SECTION (".init")
-of1275_client_interface_t::puts(char * str, int len)
+of1275_puts( of1275_client_interface_t *self, char * str, int len)
 {
-    this->write(this->stdout, str, len);
+    of1275_write( self, self->stdout, str, len);
 }
 
 /*
  */
 void SECTION (".init")
-of1275_client_interface_t::quiesce()
+of1275_quiesce( of1275_client_interface_t *self )
 {
 }
 
 /*
  */
 void SECTION (".init")
-of1275_client_interface_t::enter()
+of1275_enter( of1275_client_interface_t *self )
 {
 }
 
 /*
  */
+/* Upstream spelled this one without the class qualifier, so it defined a
+   free function called `interpret' and left of1275_client_interface_t::interpret
+   undefined.  Nothing calls either.  Given the name in the header, this is the
+   member.  Notes §166. */
 s32_t SECTION (".init")
-interpret( const char *forth )
+of1275_interpret( of1275_client_interface_t *self, const char *forth )
 {
     return 0;
 }
@@ -523,9 +531,9 @@ interpret( const char *forth )
 void SECTION (".init")
 prom_exit( char * msg )
 {
-    of1275.puts( msg, strlen(msg) );
-    of1275.puts( "\n\r", 2 );
-    of1275.exit();
+    of1275_puts( &of1275, msg, strlen(msg) );
+    of1275_puts( &of1275, "\n\r", 2 );
+    of1275_exit( &of1275 );
 }
 
 
@@ -537,7 +545,7 @@ prom_puts( char * msg )
     of1275_client_interface_t *of = get_of1275();
     of = PTRRELOC(of);
 
-    of->puts( msg, strlen(PTRRELOC(msg)) );
+    of1275_puts( of, msg, strlen(PTRRELOC(msg)) );
 }
 
 /* Print Hex

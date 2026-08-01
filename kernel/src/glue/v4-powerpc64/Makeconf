@@ -29,7 +29,7 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/glue/v4-powerpc64/, thread.c timer.cc \
+SOURCES += $(addprefix src/glue/v4-powerpc64/, thread.c timer.c \
 	space.cc init.cc resources.cc pghash.cc exception.cc user.S \
 	memcontrol.cc )
 

@@ -35,15 +35,18 @@
 
 #include INC_GLUE(space.h)
 
-class generic_segment_t
-{
-public:
-    static inline void init_cpu( space_t *kspace, addr_t kbase );
-    static inline void flush_segments();
-    static inline void flush_segment_entry( addr_t addr );
-    static inline void insert_entry( space_t *space, word_t vsid, word_t esid, bool large );
-private:
-};
+/* generic_segment_t was an interface description: a base with no members and
+   four static declarations that the SLB and STAB implementations below each
+   define for themselves.  In C the implementations simply define the four
+   segment_* entry points, which is what every caller used them as -- they were
+   all `segment_t::x()' calls, never through a base pointer.
+
+	void segment_init_cpu (space_t *kspace, addr_t kbase);
+	void segment_flush_segments (void);
+	void segment_flush_segment_entry (addr_t addr);
+	void segment_insert_entry (space_t *space, word_t vsid, word_t esid,
+				   bool large);
+ */
 
 
 #if CONFIG_POWERPC64_STAB

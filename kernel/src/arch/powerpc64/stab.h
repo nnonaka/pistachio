@@ -40,9 +40,8 @@
 #define STAB_HASH_MASK		0x1f
 #define STAB_STEG_BITS		7
 
-class ppc64_asr_t
+struct ppc64_asr_t
 {
-public:
     union {
 	struct {
 	    word_t staborg : 52;	/* Physical address of segment table */
@@ -52,11 +51,11 @@ public:
 	u64_t raw;
     };
 };
+typedef struct ppc64_asr_t ppc64_asr_t;
 
 
-class ppc64_ste_t 
+struct ppc64_ste_t
 {
-public:
     union {
 	struct {
 	    word_t esid : 36;		/* Effective segment ID */
@@ -76,63 +75,67 @@ public:
 	    u64_t word1;
 	} raw;
     };
-
-    void set_entry( word_t esid, word_t ks, word_t kp, word_t n, word_t vsid );
-    void invalidate( bool sync );
 };
+typedef struct ppc64_ste_t ppc64_ste_t;
 
 
-class ppc64_stab_t
+struct ppc64_stab_t
 {
-public:
-    void init();
-    void free();
-
-    ppc64_ste_t * lookup_ste( word_t virt );
-    ppc64_ste_t * find_insertion( word_t vsid, word_t esid );
-
-    word_t reverse_hash( ppc64_ste_t *seghash_ste );
-
-    ppc64_ste_t * get_steg( word_t hash )
-	{ return (ppc64_ste_t*)(get_stab() | ((hash & STAB_HASH_MASK) << STAB_STEG_BITS)); }
-
-    word_t get_asr() { return base.raw; }
-    word_t get_stab() { return phys_to_virt(base.x.staborg << POWERPC64_PAGE_BITS); }
-
-private:
-    word_t primary_hash( word_t esid )
-    {
-	return (esid & STAB_HASH_MASK);
-    }
-    
-    word_t secondary_hash( word_t esid )
-    {
-	return ((~esid) & STAB_HASH_MASK);
-    }
-
+    /* was private */
     ppc64_asr_t base;
 };
+typedef struct ppc64_stab_t ppc64_stab_t;
 
+/* Out of line in arch/powerpc64/stab.c (built only for CONFIG_POWERPC64_STAB,
+   i.e. platform ofpower3). */
+BEGIN_DECLS
+void ppc64_stab_init (ppc64_stab_t *self);
+void ppc64_stab_free (ppc64_stab_t *self);
+ppc64_ste_t * ppc64_stab_lookup_ste (ppc64_stab_t *self, word_t virt);
+word_t ppc64_stab_reverse_hash (ppc64_stab_t *self, ppc64_ste_t *seghash_ste);
+END_DECLS
 
-INLINE void ppc64_ste_t::set_entry( word_t esid, word_t ks, word_t kp, word_t n, word_t vsid )
+INLINE word_t ppc64_stab_get_asr (ppc64_stab_t *self) { return self->base.raw; }
+INLINE word_t ppc64_stab_get_stab (ppc64_stab_t *self)
+{ return phys_to_virt(self->base.x.staborg << POWERPC64_PAGE_BITS); }
+
+INLINE ppc64_ste_t * ppc64_stab_get_steg (ppc64_stab_t *self, word_t hash)
 {
-    this->raw.word1 = 0;
-    this->x.vsid = vsid;
+    return (ppc64_ste_t*)(ppc64_stab_get_stab (self) |
+			  ((hash & STAB_HASH_MASK) << STAB_STEG_BITS));
+}
+
+/* were private */
+INLINE word_t ppc64_stab_primary_hash( word_t esid )
+{
+    return (esid & STAB_HASH_MASK);
+}
+
+INLINE word_t ppc64_stab_secondary_hash( word_t esid )
+{
+    return ((~esid) & STAB_HASH_MASK);
+}
+
+
+INLINE void ppc64_ste_set_entry( ppc64_ste_t *self, word_t esid, word_t ks, word_t kp, word_t n, word_t vsid )
+{
+    self->raw.word1 = 0;
+    self->x.vsid = vsid;
     /* Order VSID updte */
     __asm__ __volatile__ ("eieio" : : : "memory");
-    this->raw.word0 = 0;
-    this->x.esid = esid;
-    this->x.v = 1;
-    this->x.ks = ks;
-    this->x.kp = kp;
-    this->x.n = n;
+    self->raw.word0 = 0;
+    self->x.esid = esid;
+    self->x.v = 1;
+    self->x.ks = ks;
+    self->x.kp = kp;
+    self->x.n = n;
     /* Order update     */
     __asm__ __volatile__ ("sync" : : : "memory");
 }
 
-INLINE void ppc64_ste_t::invalidate( bool sync )
+INLINE void ppc64_ste_invalidate( ppc64_ste_t *self, bool sync )
 {
-    this->x.v = 0;
+    self->x.v = 0;
 
     if ( sync )
     {
@@ -141,10 +144,10 @@ INLINE void ppc64_ste_t::invalidate( bool sync )
     }
 }
 
-INLINE ppc64_ste_t *ppc64_stab_t::find_insertion( word_t vsid, word_t esid )
+INLINE ppc64_ste_t *ppc64_stab_find_insertion( ppc64_stab_t *self, word_t vsid, word_t esid )
 {
     word_t group, entry, random;
-    ppc64_ste_t *ste = get_steg( primary_hash( esid ) );
+    ppc64_ste_t *ste = ppc64_stab_get_steg( self, ppc64_stab_primary_hash( esid ) );
 
     for( group = 0; group < 2; group ++ )
     {
@@ -156,7 +159,7 @@ INLINE ppc64_ste_t *ppc64_stab_t::find_insertion( word_t vsid, word_t esid )
 	    }
 	}
 	
-	ste = get_steg( secondary_hash( esid ) );
+	ste = ppc64_stab_get_steg( self, ppc64_stab_secondary_hash( esid ) );
     }
 
     /* No free entry found, need to evict one */
@@ -166,9 +169,9 @@ INLINE ppc64_ste_t *ppc64_stab_t::find_insertion( word_t vsid, word_t esid )
 
 
 	if (random & 0x8)
-	    ste = get_steg( primary_hash( esid ) );
+	    ste = ppc64_stab_get_steg( self, ppc64_stab_primary_hash( esid ) );
 	else
-	    ste = get_steg( secondary_hash( esid ) );
+	    ste = ppc64_stab_get_steg( self, ppc64_stab_secondary_hash( esid ) );
 
 	ste = &ste[random & 0x7];
     } while (((ste->x.esid >> 20) >= 0xfff0) && (!(random & 0x8))); /* Don't evict kernel entries */
@@ -176,7 +179,7 @@ INLINE ppc64_ste_t *ppc64_stab_t::find_insertion( word_t vsid, word_t esid )
     /* Force previous translations to complete. DRENG */
     __asm__ __volatile__ ("isync" : : : "memory" );
 
-    ste->invalidate( true );
+    ppc64_ste_invalidate( ste, true );
 
     return ste;
 }

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003,  National ICT Australia (NICTA)
  *                
- * File path:     arch/powerpc64/vsid_asid.cc
+ * File path:     arch/powerpc64/vsid_asid.c
  * Description:   PowerPC64 specific reverse lookup ASID management
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -35,23 +35,23 @@
 
 vsid_asid_cache_t vsid_asid_cache;
 
-word_t vsid_asid_cache_t::alloc( space_t *space )
+word_t vsid_asid_cache_alloc (vsid_asid_cache_t *self, space_t *space)
 {
-    word_t asid = first_free << (VSID_REVERSE_SHIFT + 12);  /* SLB entry vsid is shifted by 12 */
+    word_t asid = self->first_free << (VSID_REVERSE_SHIFT + 12);  /* SLB entry vsid is shifted by 12 */
 
-    if ( first_free < (s64_t)ASID_MAX )
+    if ( self->first_free < (s64_t)ASID_MAX )
     {
 	/* SLB vsid entry format of power4 */
 	/* | UNIMPL  | VSID_ASID | ESID | other bits | */
 	/* 63       49          40     12            0 */
-	cache[first_free].asid = asid;
-	cache[first_free].space = space;
+	self->cache[self->first_free].asid = asid;
+	self->cache[self->first_free].space = space;
 
 	/* Find the next free ASID */
 	do {
-	    first_free++;
-	} while (( cache[first_free].asid != ASID_INVALID ) &&
-			(first_free < (s64_t)ASID_MAX));
+	    self->first_free++;
+	} while (( self->cache[self->first_free].asid != ASID_INVALID ) &&
+			(self->first_free < (s64_t)ASID_MAX));
     } else {
 	/* We need to preempt ASIDs */
 	UNIMPLEMENTED();
@@ -60,12 +60,12 @@ word_t vsid_asid_cache_t::alloc( space_t *space )
     return asid;
 }
 
-void vsid_asid_cache_t::release( word_t asid )
+void vsid_asid_cache_release (vsid_asid_cache_t *self, word_t asid)
 {
     word_t entry = asid >> (VSID_REVERSE_SHIFT + 12);
-    cache[ entry ].asid = ASID_INVALID;
+    self->cache[ entry ].asid = ASID_INVALID;
 
-    if ( (s64_t)entry < first_free )
-	first_free = entry;
+    if ( (s64_t)entry < self->first_free )
+	self->first_free = entry;
 }
 

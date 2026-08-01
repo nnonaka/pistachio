@@ -35,14 +35,21 @@
 
 #include <timer.h>
 
-class timer_t : public generic_periodic_timer_t {
-public:
-    void init_global();
-    void init_cpu();
+/* generic_periodic_timer_t is an empty base class, so the layout is just the
+   one member; the two methods become the timer_* entry points in timer.c.
+   init_cpu takes no cpu argument on this port -- glue/v4-powerpc64/init.c is
+   its only caller. */
+struct timer_t {
     u64_t last_time_base;
 };
+typedef struct timer_t timer_t;
 
-INLINE timer_t * get_timer()
+BEGIN_DECLS
+void timer_init_global (void);
+void timer_init_cpu (timer_t *self);
+END_DECLS
+
+INLINE timer_t * get_timer(void)
 {
     extern timer_t timer;
     return &timer;
