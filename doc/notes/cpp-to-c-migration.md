@@ -9383,3 +9383,96 @@ float is safe.
 
 With those, the ofg5 userland builds: sigma0, l4test, and the ofppc64
 piggybacker loader.
+
+## §172 -- the userland, part one
+
+The kernel is done; the userland is 95 `.cc` files with its own autoconf build.
+44 are converted: `lib/l4`, `lib/io`, `serv/sigma0`, `apps/l4test`,
+`apps/grabmem`, `apps/bench/pingpong`. What remains is `util/kickstart` (15),
+`util/piggybacker` (9) and `contrib/elf-loader` (27).
+
+### The shape of it: two bindings, not one
+
+The L4 X.2 headers in `user/include/l4` already define *both* language
+bindings the spec calls for. The C binding is the whole file; the C++ binding
+is a set of `#if defined(__cplusplus)` blocks adding short names, overloads and
+default arguments on top, each forwarding to a uniquely-named C function. So
+converting the userland is mostly not editing headers -- it is calling the C
+names. The table, extracted from those blocks:
+
+    L4_KernelInterface()  L4_GetKernelInterface     L4_Store    L4_MsgStore
+    L4_IsVirtual          L4_IsMemoryDescVirtual    L4_Load     L4_MsgLoad
+    L4_Type/Low/High(m)   L4_MemoryDesc{Type,Low,High}
+    L4_Type/Next(bootrec) L4_BootRec_{Type,Next}    L4_Clear    L4_MsgClear
+    L4_ExternalFreq       L4_ProcDescExternalFreq   L4_Get      L4_MsgWord
+    L4_GlobalId/L4_LocalId    L4_{Global,Local}IdOf L4_Put      L4_MsgPut*
+    L4_Pager/L4_Set_Pager     L4_{Pager,Set_Pager}Of L4_Append  L4_MsgAppend*
+    L4_UserDefinedHandle      L4_UserDefinedHandleOf
+    L4_Start(t,sp,ip[,f]) L4_Start_SpIp[Flags]      L4_MapItem  L4_IsMapItem
+    L4_Stop(t,...)        L4_Stop_SpIpFlags         L4_SndFpage L4_MapItemSndFpage
+    L4_Call/Send/Receive/Wait/ReplyWait with timeouts -> *_Timeout[s]
+    L4_Unmap(f)/(n,f)     L4_UnmapFpage/L4_UnmapFpages
+    L4_Flush(n,f)         L4_FlushFpages
+    operator+ on L4_Fpage_t   L4_FpageAddRights
+    operator+= on L4_StringItem_t  L4_AddSubstring[Address]To
+    operator==/!= on L4_ThreadId_t L4_IsThreadEqual
+    L4_Tbuf_RecordEvent(id,str,...) L4_Tbuf_RecordEvent_0 .. _4
+
+Overloads resolve by argument *count* in most cases, which is mechanisable, but
+three do not: `L4_Label` is overloaded across two argument types and on a
+`L4_MsgTag_t` it is already the C function; `L4_Clear` and `L4_Append` depend on
+whether the first argument is a `L4_Msg_t` or a `L4_MsgBuffer_t`; and
+`L4_Get`'s third argument decides between the word, map, grant and string
+forms. Those were done by reading each call site.
+
+The one trap worth naming: a script that splits `f ()` on commas yields `['']`,
+one empty argument, and every by-arity table then picks the *one*-argument
+overload. `L4_Pager ()` and `L4_GlobalId ()` -- which take no argument in the C
+binding too, and are different functions from the `_Of` forms -- were silently
+renamed in eight files before this showed up.
+
+### What the headers themselves needed
+
+`L4_HasFeature` had its whole body inside a `__cplusplus` block although it is
+plain C, so the C binding could not ask. The guard is gone.
+
+`l4/types.h` now spells `bool`/`true`/`false` for C, as
+`kernel/src/generic/types.h` does. `<stdbool.h>` is not an option: the build is
+freestanding, `-nostdinc` is on, and configure locates only `stdarg.h` -- the
+ia32 configuration has no gcc include directory on its path at all.
+
+The powerpc64 headers used the bare `asm` keyword in 66 places, which
+`-std=c99` does not provide. The powerpc headers already used `__asm__`, so
+they now agree.
+
+`l4/powerpc/arch.h` defines `L4_ConfigCtrlXferItemSet` twice -- the second
+taking a `L4_DebugCtrlXferItem_t`, the name copied from thirty lines up and not
+changed. C++ made that an overload and hid it.
+
+### One silent hazard, caught by the linker
+
+`create_thread` was overloaded on whether a start routine is given. After
+splitting, `create_thread (unhandled_exception_thread, false, -1)` in
+`powerpc/tests.cc` still matched the *other* overload -- a function pointer
+converts to `bool` -- so it compiled, the static thread function became
+unreferenced, gcc dropped it, and the link failed on the `__trigger` label
+defined inside its inline asm. Nothing about the source looked wrong. Every
+`create_thread` and `start_thread` call site was then checked by hand.
+
+### powerpc cannot link here, and could not before
+
+`apps/bench/pingpong` and then `serv/sigma0` fail to link on ofppc: the powerpc
+cross toolchain ships no soft-float libgcc multilib (`-print-multi-lib` gives
+only `.` and `64;@m64`), and `lib/io/print`'s `%f` support needs `__muldf3`,
+`__gedf2` and friends. This is not conversion damage -- building 4fe1d32 in a
+clean worktree fails identically, and the pre-C++ and post-C objects have
+byte-identical undefined-symbol lists. The objects sitting in
+`build/scratch-ofppc/user` predate the current toolchain, which is why the
+directory looked healthy. Everything there still *compiles*.
+
+### Where it stands
+
+    user .cc:  95 -> 51
+
+Verified: amd64, ia32 and powerpc64 build the whole userland; powerpc compiles
+all of it.
