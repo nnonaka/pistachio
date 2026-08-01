@@ -38,6 +38,12 @@
 #include INC_ARCH(page.h)
 #include INC_PLAT(config.h)
 
+/* api/v4/schedule.h pads schedule_request_queue_t out to a cache line and so
+   needs this; upstream never defined it here because CONFIG_SMP -- the only
+   consumer -- was never built on powerpc64.  Spelled as in
+   glue/v4-powerpc/config.h. */
+#define CACHE_LINE_SIZE		(POWERPC64_CACHE_LINE_SIZE)
+
 /**
  * Size of a kernel TCB in bytes
  */

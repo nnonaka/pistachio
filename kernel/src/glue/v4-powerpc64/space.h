@@ -38,6 +38,7 @@
 #include INC_ARCH(vsid_asid.h)
 #include INC_ARCH(pghash.h)
 
+#include INC_API(types.h)	/* for cpuid_t */
 #include INC_API(fpage.h)
 #include INC_API(thread.h)
 
@@ -114,8 +115,10 @@ BEGIN_DECLS
 /* glue -- out of line in glue/v4-powerpc64/space.c */
 void	 space_init (space_t *self, fpage_t utcb_area, fpage_t kip_area);
 void	 space_free (space_t *self);
+/* access is space_t::access_e, a signed int enum, so it is passed as int --
+   api/v4/space.c defines this one and spells it that way. */
 void	 space_handle_pagefault (space_t *self, addr_t addr, addr_t ip,
-				 word_t access, bool kernel);
+				 int access, bool kernel);
 bool	 space_is_initialized (space_t *self);
 void	 space_map_sigma0 (space_t *self, addr_t addr);
 void	 space_map_fpage (space_t *self, fpage_t snd_fp, word_t base,
@@ -194,7 +197,12 @@ INLINE pgent_t * space_get_pdir (space_t *self) { return self->pdir; }
 
 INLINE pgent_t * space_pgent_cpu (space_t *self, word_t num, word_t cpu)
 {
-    return pgent_next (space_get_pdir (self), self, size_max, num);
+    /* Was get_pdir()->next(this, size_max, num).  pgent_next lives in
+       pgent_inline.h, which includes this header, so it is not declared yet
+       at this point -- and for a page directory it is just pointer
+       arithmetic, which is all pgent_next does.  Same resolution as
+       glue/v4-powerpc/space.h. */
+    return space_get_pdir (self) + num;
 }
 
 INLINE pgent_t * space_pgent (space_t *self, word_t num)

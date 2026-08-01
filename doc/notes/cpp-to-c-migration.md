@@ -9048,3 +9048,84 @@ and the count will keep rising before it falls.
 
 Remaining: 15 headers and 13 `.cc` files for OFG5; the other two platforms and
 the eleven kdb files after that. ofppc, ppc44x and x86-x64 all still build.
+
+## §165 -- powerpc64: the TCB, and the last of the C side
+
+With `hwspace.h`, `string.h` and `intctrl.h` out of the way the build reached
+the core: `tcb.h`, `utcb.h`, `ktcb.h`, `resources.h`. Those converted, *every
+`.c` file in the OFG5 configuration now compiles*. What is left is the thirteen
+remaining `.cc` files, and the errors they produce are all of the same kind:
+C++ sources calling members of structs that are no longer classes.
+
+### The TCB split
+
+Upstream defined nearly all of powerpc64's `tcb_t` inline in
+`glue/v4-powerpc64/tcb.h` -- 672 lines of it, including both thread-switch
+assembly blocks. `api/v4/tcb.h` declares those operations as out-of-line
+`tcb_*` prototypes *after* it includes the glue header, so the definitions
+cannot stay inline: they moved to `glue/v4-powerpc64/thread.c` (was
+`thread.cc`), which is exactly the arrangement the 32-bit port already uses.
+tcb.h keeps 155 lines: `tcb_stack_top`, the new `tcb_irq_context` helper that
+every user-context accessor had spelled out longhand, `initial_switch_to`,
+`get_current_tcb`, and the SMP `get_current_cpu`.
+
+`tcb_t::notify` had three overloads, one per argument count. They cannot be
+collapsed the way `ppc64_pte_t::create` could (§164): the frame is *not*
+cleared first, so the fields a shorter form omits keep whatever was on the
+stack. `api/v4/tcb.h` already names all three -- `tcb_notify`,
+`tcb_notify_word`, `tcb_notify_word2`.
+
+### Macro hygiene, and a real capture
+
+`return_exchange_registers` in `glue/v4-powerpc64/syscalls.h` declares locals
+named `tid`, `ctrl`, `sp_r` ... and the converted `api/v4/exregs.c` now passes
+`ctrl.raw` for the control word. The macro's own `register word_t ctrl` was
+declared before that argument expanded, so `= ctrl.raw` read the macro's local
+and failed. The locals are underscore-prefixed now. In C++ this never bit
+because master's exregs.cc passed a `schedule_ctrl_t` object, not `.raw`.
+
+Same file: `register threadid_t tid asm("r3") = result` could not be
+initialised from `threadid_get_raw()`'s word. `tid` is a `word_t` now; `pgr`
+stays a `threadid_t` because that is still what the caller hands over.
+
+### Three gaps upstream never had to face
+
+None of these are conversion damage; they are places where powerpc64 has been
+carried along without being compiled.
+
+`glue/v4-powerpc64/ipc.h` **does not exist** upstream, but both
+`api/v4/sched-rr/ktcb.h` and `api/v4/sched-hs/ktcb.h` include it
+unconditionally. Those schedulers and the ctrlxfer protocol that gave the
+header its contents both postdate the powerpc64 port. Nothing in it would be
+powerpc64-specific -- `CONFIG_X_CTRLXFER_MSG` is x86-only -- so the file is
+new and deliberately empty.
+
+`CACHE_LINE_SIZE` is undefined for powerpc64, and `api/v4/schedule.h` pads
+`schedule_request_queue_t` out to one. `POWERPC64_CACHE_LINE_SIZE` (128) has
+been in `arch/powerpc64/cache.h` all along; the glue config.h just never
+forwarded it, because CONFIG_SMP was never built here.
+
+`debug_param_t` is likewise undefined for powerpc64 -- the port puts a
+`powerpc64_irq_context_t` in `kdb.kdb_param`, as its own frame.cc and disas.cc
+show -- yet generic `kdb/api/v4/tcb.c` casts `kdb_param` to `debug_param_t *`.
+So master does not compile here either, and had it compiled it would have
+misread the pointer. The generic file is guarded on a new
+`HAVE_DEBUG_PARAM_T`, which the two ports that define the type now announce.
+The space it recovers is only the default value in a `get_hex` prompt.
+
+### resource_bits_t's other half
+
+`api/v4/resources.h` has always had two forms: a bitmask class when the glue
+header defines `resource_type_e`, and a bare `word_t` when it does not.
+powerpc64 is the only port taking the second branch, and the conversion had
+given the `resource_bits_*` accessors only to the first -- so `api/v4/thread.c`
+reached `->resource_bits.maskvalue` through a `word_t`. Both branches now
+carry the same five entry points plus `resource_bits_raw` for kdb's dump, and
+the callers no longer know which branch they are on.
+
+### Where it stands
+
+    §164:  35 errors
+    now:   every `.c` compiles; the remainder is 13 `.cc` files
+
+ofppc, ppc44x and x86-x64-p4 all still build. Kernel `.cc` count 37 -> 36.

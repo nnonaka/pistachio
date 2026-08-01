@@ -36,14 +36,17 @@
 #include <intctrl.h>
 #include INC_PLAT(intctrl.h)
 
-INLINE intctrl_t *get_interrupt_ctrl()
-{
-    extern intctrl_t intctrl;
-    return &intctrl;
-}
+/* get_interrupt_ctrl is defined by the platform interrupt-controller header
+   included above, which needs it for its own inline entry points; upstream's
+   duplicate definition here was harmless only because C++ tolerated the
+   identical inline.  Same resolution as glue/v4-powerpc/intctrl.h. */
 
 #if defined(CONFIG_SMP)
-void handle_smp_ipi( intctrl_t::vector_e ipi_vec );
+/* Was intctrl_t::vector_e, a member enum of the platform controller.  ofg5's
+   controller is the UNIMPLEMENTED() stub and declares no such enum -- and no
+   powerpc64 source defines or calls handle_smp_ipi at all, so this declaration
+   has never had to agree with anything.  int, as in the 32-bit port. */
+void handle_smp_ipi( int vector );
 #endif
 
 #endif	/* __GLUE__V4_POWERPC64__INTCTRL_H__ */

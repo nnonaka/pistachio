@@ -898,7 +898,7 @@ void handle_ipc_error (void)
 
     // We're going to skip the last part of the switch_to() function invoked
     // when switching from the current thread.
-    if (EXPECT_FALSE (current->resource_bits.resource_bits.maskvalue != 0))
+    if (EXPECT_FALSE (resource_bits_have_resources (&current->resource_bits)))
 	tcb_resources_load (&current->resources, current);
 
     if (current->misc.saved_state[0].state == THREAD_STATE_RUNNING)

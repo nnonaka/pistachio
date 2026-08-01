@@ -33,49 +33,55 @@
 #ifndef __GLUE__V4_POWERPC64__RESOURCES_H__
 #define __GLUE__V4_POWERPC64__RESOURCES_H__
 
-class thread_resources_t : public generic_thread_resources_t
-{
-public:
-    void save(tcb_t * tcb);
-    void load(tcb_t * tcb);
-    void purge(tcb_t * tcb);
-    void init(tcb_t * tcb);
-    void free(tcb_t * tcb);
-
-public:
-    void powerpc64_fpu_unavail_exception( tcb_t *tcb );
-    void powerpc64_fpu_spill( tcb_t *tcb );
-
-private:
-    void spill_fpu( tcb_t *tcb );
-    void restore_fpu( tcb_t *tcb );
-    void deactivate_fpu( tcb_t *tcb );
-    void activate_fpu( tcb_t *tcb );
-
-private:
+/* Was a class deriving from generic_thread_resources_t, which is empty and no
+   longer defined anywhere, so as on powerpc and x86 the base is simply not
+   embedded.  The five virtual-looking members become the tcb_resources_*
+   entry points api/v4/thread.c calls; the private spill/restore/activate/
+   deactivate helpers have no callers outside resources.c and are static
+   there. */
+struct thread_resources_t {
     u64_t fpu_gprs[32];	/* 32 FPRs */
     u64_t fpu_fpscr;	/* FPU status/condition register */
 };
+typedef struct thread_resources_t thread_resources_t;
+
+/* Was inherited unchanged from the empty generic_thread_resources_t, so it has
+   nothing to print; kdb/api/v4/tcb.c calls it unconditionally. */
+INLINE void tcb_resources_dump (thread_resources_t *self, tcb_t *tcb) { }
+
+BEGIN_DECLS
+/* Defined in resources.c. */
+void tcb_resources_save (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_load (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_purge (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_init (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_free (thread_resources_t *self, tcb_t *tcb);
+
+/* powerpc64 specific; called from glue/v4-powerpc64/exception.c and
+   kdb/arch/powerpc64/frame.c respectively. */
+void tcb_resources_powerpc64_fpu_unavail_exception (thread_resources_t *self, tcb_t *tcb);
+void tcb_resources_powerpc64_fpu_spill (thread_resources_t *self, tcb_t *tcb);
+END_DECLS
 
 
-class processor_resources_t {
- public:
-    void init_cpu(void) { fp_lazy_tcb = NULL; }
-
- public:
-    tcb_t *get_fp_lazy_tcb() { return fp_lazy_tcb; }
-
-    void set_fp_lazy_tcb( tcb_t *tcb ) { fp_lazy_tcb = tcb; }
-    void clear_fp_lazy_tcb() { fp_lazy_tcb = NULL; }
-    
- private:
+struct processor_resources_t {
     tcb_t *fp_lazy_tcb;
 };
+typedef struct processor_resources_t processor_resources_t;
 
-INLINE processor_resources_t *get_resources(void) 
+INLINE processor_resources_t *get_resources(void)
 {
     extern processor_resources_t processor_resources;
     return &processor_resources;
 }
+
+INLINE void processor_resources_init_cpu (processor_resources_t *self)
+    { self->fp_lazy_tcb = NULL; }
+INLINE tcb_t * processor_resources_get_fp_lazy_tcb (processor_resources_t *self)
+    { return self->fp_lazy_tcb; }
+INLINE void processor_resources_set_fp_lazy_tcb (processor_resources_t *self, tcb_t *tcb)
+    { self->fp_lazy_tcb = tcb; }
+INLINE void processor_resources_clear_fp_lazy_tcb (processor_resources_t *self)
+    { self->fp_lazy_tcb = NULL; }
 
 #endif /* !__GLUE__V4_POWERPC64__RESOURCES_H__ */

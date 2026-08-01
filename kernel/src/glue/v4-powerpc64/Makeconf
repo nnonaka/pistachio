@@ -29,10 +29,10 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/glue/v4-powerpc64/, thread.cc timer.cc \
+SOURCES += $(addprefix src/glue/v4-powerpc64/, thread.c timer.cc \
 	space.cc init.cc resources.cc pghash.cc exception.cc user.S \
 	memcontrol.cc )
 
-SOURCES += $(addprefix src/generic/, linear_ptab_walker.cc mapping.cc \
+SOURCES += $(addprefix src/generic/, linear_ptab_walker.c mapping.c \
 	mapping_alloc.c )
 

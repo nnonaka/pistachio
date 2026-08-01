@@ -37,15 +37,17 @@
 
 #include INC_GLUE(offsets.h)
 
-template<typename T> INLINE T virt_to_phys( T x )
-{
-    return (T) ((u64_t)x - KERNEL_OFFSET);
-}
+/* Was a template on T, and the return type is T, not void*: callers pass a
+   pointer, a word_t and an addr_t, and each expects its own type back.  Fixing
+   the parameter at void* would make the word_t callers implicit int/pointer
+   conversions.  __typeof__ restores the template, exactly as the 32-bit port's
+   glue/v4-powerpc/hwspace.h already does for the same pair.  Notes §140.
 
-template<typename T> INLINE T phys_to_virt( T x )
-{
-    return (T) ((u64_t)x + KERNEL_OFFSET);
-}
+   The `+ 0' is the array-to-pointer decay that binding an array to the
+   template's by-value `T x' used to perform; __typeof__ alone keeps the array
+   type, which is not castable to. */
+#define virt_to_phys(x)	((__typeof__((x) + 0)) ((u64_t) (x) - KERNEL_OFFSET))
+#define phys_to_virt(x)	((__typeof__((x) + 0)) ((u64_t) (x) + KERNEL_OFFSET))
 
 
 #endif /* __GLUE__V4_POWERPC64__HWSPACE_H__ */

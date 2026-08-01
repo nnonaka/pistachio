@@ -37,8 +37,8 @@
 #include INC_ARCH(pgtab.h)
 #include INC_ARCH(pghash.h)
 
-class space_t;
-class mapnode_t;
+struct space_t;   typedef struct space_t space_t;
+struct mapnode_t; typedef struct mapnode_t mapnode_t;
 
 /* Page table tree layout
  *

@@ -33,9 +33,13 @@
 #include INC_API(thread.h)
 #include INC_API(types.h)
 
-class utcb_t
+/* Was a class; the accessors it declared were never defined anywhere for
+   powerpc64 -- generic-utcb.h, included below, supplies the utcb_* entry
+   points the rest of the kernel calls, and they reach these fields directly.
+   Upstream had the packed attribute commented out; the explicit padding
+   already fixes every offset, so leaving it off keeps the C++ layout. */
+struct utcb_t
 {
-public:
     threadid_t		my_global_id;		/* 0 */
     word_t		processor_no;		/* 8 */
     word_t		user_defined_handle;	/* 16 */
@@ -53,26 +57,8 @@ public:
     word_t		mr[IPC_NUM_MR];		/* 128 .. 640 */
     word_t		br[IPC_NUM_BR];		/* 640 .. 904 */
     word_t              __padding1[15];         /* 904 .. 1024 */
-
-public:
-    void set_my_global_id(threadid_t tid);
-    word_t get_user_defined_handle();
-    void set_user_defined_handle(word_t handle);
-    threadid_t get_pager();
-    void set_pager(threadid_t tid);
-    threadid_t get_exception_handler();
-    void set_exception_handler(threadid_t tid);
-    u8_t get_preempt_flags();
-    void set_preempt_flags(u8_t flags);
-    u8_t get_cop_flags();
-    word_t get_error_code();
-    void set_error_code(word_t err);
-    timeout_t get_xfer_timeout();
-    threadid_t get_intended_receiver();
-    threadid_t get_virtual_sender();
-    void set_virtual_sender(threadid_t tid);
-
 }; // __attribute__((packed));
+typedef struct utcb_t utcb_t;
 
 #include INC_API(generic-utcb.h)
 

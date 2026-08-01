@@ -46,6 +46,23 @@ typedef struct tcb_t tcb_t;
 
 #if !defined(HAVE_RESOURCE_TYPE_E)
 typedef word_t	resource_bits_t;
+
+/* Same five entry points over the plain-word form, so callers do not have to
+   know which branch their architecture took.  powerpc64 is the one port that
+   declares no resource_type_e; upstream reached the word directly (`if
+   (current->resource_bits)'), which the struct form below cannot serve. */
+INLINE void resource_bits_init (resource_bits_t *self)
+    { *self = 0; }
+INLINE bool resource_bits_have_resource (resource_bits_t *self, word_t t)
+    { return (*self & (1UL << t)) != 0; }
+INLINE void resource_bits_add (resource_bits_t *self, word_t t)
+    { *self |= (1UL << t); }
+INLINE void resource_bits_remove (resource_bits_t *self, word_t t)
+    { *self &= ~(1UL << t); }
+INLINE bool resource_bits_have_resources (resource_bits_t *self)
+    { return *self != 0; }
+INLINE word_t resource_bits_raw (const resource_bits_t *self)
+    { return *self; }
 #else
 
 
@@ -74,6 +91,8 @@ INLINE void resource_bits_remove (resource_bits_t *self, word_t t)
     { self->resource_bits.maskvalue &= ~(1UL << t); }
 INLINE bool resource_bits_have_resources (resource_bits_t *self)
     { return self->resource_bits.maskvalue != 0; }
+INLINE word_t resource_bits_raw (const resource_bits_t *self)
+    { return self->resource_bits.maskvalue; }
 
 #endif
 

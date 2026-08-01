@@ -81,7 +81,11 @@ INLINE word_t pgent_get_linknode (pgent_t *self, space_t * s, pgsize_e pgsize)
     return *(word_t *) ((word_t) self + PPC64_SIZE_4k_LEVEL ); 
 }
 
-INLINE void pgent_set_linknode (pgent_t *self, space_t * s, pgsize_e pgsize, word_t val)
+/* Was one of two overloads of pgent_t::set_linknode; C keeps the raw-word one
+   under the _raw suffix the 32-bit port already uses (see
+   arch/powerpc/pgent-pghash_functions.h).  The generic mapping database calls
+   only the five-argument form. */
+INLINE void pgent_set_linknode_raw (pgent_t *self, space_t * s, pgsize_e pgsize, word_t val)
 { 
 //    *(word_t *) ((word_t) self + (pgsize == size_4k) ? PPC64_SIZE_4k_LEVEL : PPC64_SIZE_16m_LEVEL ) = val; 
     /* Presently, large pages are only supported for kernel */
@@ -188,7 +192,7 @@ INLINE void pgent_clear (pgent_t *self, space_t * s, pgsize_e pgsize, bool kerne
 
     self->raw = 0;
     if( !kernel )
-	pgent_set_linknode (self, s, pgsize, 0);
+	pgent_set_linknode_raw (self, s, pgsize, 0);
     
     pgent_flush( &tmp, s, pgsize, kernel, vaddr );
 }
@@ -268,7 +272,7 @@ INLINE void pgent_set_dirty (pgent_t *self, space_t *s, pgsize_e pgsize, word_t 
 INLINE void pgent_set_linknode (pgent_t *self, space_t * s, pgsize_e pgsize,
 	mapnode_t * map, addr_t vaddr)
 { 
-    pgent_set_linknode (self, s, pgsize, (word_t) map ^ (word_t) vaddr); 
+    pgent_set_linknode_raw (self, s, pgsize, (word_t) map ^ (word_t) vaddr); 
 }
 
 // Movement

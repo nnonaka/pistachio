@@ -32,8 +32,15 @@
 #ifndef __GLUE__V4_POWERPC64__KTCB_H__
 #define __GLUE__V4_POWERPC64__KTCB_H__
 
-class arch_ktcb_t
+struct arch_ktcb_t
 {
+    /* Upstream's class is empty and powerpc64 has no arch-specific ktcb state.
+       An empty struct is a GNU C extension of size 0, which would shift every
+       tcb_t field after `arch' relative to the C++ build, so the placeholder
+       byte keeps the layout the compiler chose before.  Same as the 32-bit
+       port's !CONFIG_X_PPC_SOFTHVM case. */
+    char __empty;
 };
+typedef struct arch_ktcb_t arch_ktcb_t;
 
 #endif /* !__GLUE__V4_POWERPC64__KTCB_H__ */

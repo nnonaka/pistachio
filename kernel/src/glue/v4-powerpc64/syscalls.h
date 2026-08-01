@@ -181,23 +181,28 @@ do {									\
 #define return_space_control( result, control )	return_user_2param( result, control )
 #define return_schedule( result, time_control )	return_user_2param( result, time_control )
 
+/* The locals are underscore-prefixed: upstream named them tid/ctrl/sp_r/...,
+   and api/v4/exregs.c now passes `ctrl.raw' for the control word, whose
+   leading `ctrl' the macro's own declaration captured.  `tid' is a word_t
+   rather than a threadid_t for the same reason -- the C caller hands over
+   threadid_get_raw()'s result, not the object. */
 #define return_exchange_registers( result, control, sp, ip, flags, pager, handle )  \
 {									\
-    register threadid_t tid asm("r3") = result;				\
-    register word_t ctrl asm("r4") = control;				\
-    register word_t sp_r asm("r5") = sp;				\
-    register word_t ip_r asm("r6") = ip;				\
-    register word_t flg asm("r7") = flags;				\
-    register threadid_t pgr asm("r8") = pager;				\
-    register word_t hdl asm("r9") = handle;				\
+    register word_t __tid asm("r3") = result;				\
+    register word_t __ctrl asm("r4") = control;				\
+    register word_t __sp asm("r5") = sp;				\
+    register word_t __ip asm("r6") = ip;				\
+    register word_t __flg asm("r7") = flags;				\
+    register threadid_t __pgr asm("r8") = pager;			\
+    register word_t __hdl asm("r9") = handle;				\
     asm volatile (							\
 	    "mtlr %0 ;"							\
 	    "ld %%r1, 0 (%%r1);"					\
 	    "blr ;"							\
 	    : 								\
 	    : "r" (__builtin_return_address(0)),			\
-	      "r" (tid), "r" (ctrl), "r" (sp_r), "r" (ip_r),		\
-	      "r" (flg), "r" (pgr), "r" (hdl)				\
+	      "r" (__tid), "r" (__ctrl), "r" (__sp), "r" (__ip),		\
+	      "r" (__flg), "r" (__pgr), "r" (__hdl)			\
 	    );								\
     while(1);								\
 }

@@ -137,7 +137,7 @@ void SECTION(SEC_KDEBUG) dump_tcb(tcb_t * tcb, bool extended)
 	   tcb->stack, tcb->send_head, tcb->send_list.next, tcb->send_list.prev,
 	   TID(tcb_get_utcb (tcb) ? tcb_get_pager (tcb) : threadid_nilthread ()));
     sched_ktcb_dump (sched_state, sched_get_current_time ());
-    printf("resources: %p [", tcb->resource_bits.resource_bits.maskvalue);
+    printf("resources: %p [", resource_bits_raw (&tcb->resource_bits));
     tcb_resources_dump (&tcb->resources, tcb);
     printf("]");
     printf("   flags: %p [", tcb->flags.maskvalue);
@@ -346,8 +346,16 @@ static void SECTION(SEC_KDEBUG) dump_buffer_registers(tcb_t * tcb)
 
 tcb_t SECTION(SEC_KDEBUG) * kdb_get_tcb()
 {
+    /* powerpc64 puts a powerpc64_irq_context_t in kdb_param and declares no
+       debug_param_t at all, so the space -- which only supplies the prompt's
+       default value -- is unavailable there.  Upstream did not compile for
+       that port. */
+#if defined(HAVE_DEBUG_PARAM_T)
     debug_param_t * param = (debug_param_t*)kdb.kdb_param;
     space_t *space = param->space;
+#else
+    space_t *space = NULL;
+#endif
     word_t val = get_hex ("tcb/tid", (word_t) space, "current");
 
     if (val == ABORT_MAGIC)

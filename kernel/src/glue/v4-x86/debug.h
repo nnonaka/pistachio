@@ -62,6 +62,7 @@ struct debug_param_t
     x86_exceptionframe_t * frame;
 };
 typedef struct debug_param_t debug_param_t;
+#define HAVE_DEBUG_PARAM_T
 
 
 #define enter_kdebug(arg...)                    \

@@ -65,6 +65,7 @@ struct debug_param_t
     word_t dsisr;
 };
 typedef struct debug_param_t debug_param_t;
+#define HAVE_DEBUG_PARAM_T
 
 #define enter_kdebug(arg...)					\
     asm volatile (						\
