@@ -37,31 +37,30 @@
 #include "kickstart.h"
 #include "fdt.h"
 
-extern inline void dcbi(void* ptr)
+static inline void dcbi(void* ptr)
 {
-    asm volatile ("dcbi  0,%0" : : "r" (ptr) : "memory");
+    __asm__ __volatile__ ("dcbi  0,%0" : : "r" (ptr) : "memory");
 }
 
 
-extern inline void mtdcrx(unsigned int dcrn, unsigned int value)
+static inline void mtdcrx(unsigned int dcrn, unsigned int value)
 {
-    asm volatile("mtdcrx %0,%1": :"r" (dcrn), "r" (value) : "memory");
+    __asm__ __volatile__("mtdcrx %0,%1": :"r" (dcrn), "r" (value) : "memory");
 }
 
 
 
-class bgp_mailbox_t 
+struct bgp_mailbox_t
 {
-public:
     volatile unsigned short command;	// comand; upper bit=ack
     unsigned short len;			// length (does not include header)
     unsigned short result;		// return code from reader
     unsigned short crc;			// 0=no CRC
     char data[0];
 };
+typedef struct bgp_mailbox_t bgp_mailbox_t;
 
-class bgp_cons_t {
-public:
+struct bgp_cons_t {
     bgp_mailbox_t *mb;
     unsigned size;
     unsigned dcr_set;
@@ -69,70 +68,74 @@ public:
     unsigned dcr_mask;
     bool verbose;
 
-    void send_command(int command)
-	{ 
-	    mb->command = command;
-	    asm volatile("sync");
-	    mtdcrx(dcr_set, dcr_mask);
-	    
-	    do {
-		dcbi((void*)&mb->command);
-	    } while(!(mb->command & 0x8000));
-	}
-
-    bool init(fdt_t *fdt)
-	{
-	    fdt_property_t *prop;
-	    fdt_node_t *node = fdt->find_subtree("/jtag/console0");
-
-	    if (! (prop = fdt->find_property_node(node, "reg")) )
-		return false;
-
-	    // addr is 64 bit with upper part 0
-	    mb = (bgp_mailbox_t*)prop->get_word(1);
-	    size = prop->get_word(2);
-	    
-	    if (! (prop = fdt->find_property_node(node, "dcr-reg")) )
-		return false;
-
-	    dcr_set = prop->get_word(0);
-	    dcr_clear = prop->get_word(1);
-	    
-	    if (! (prop = fdt->find_property_node(node, "dcr-mask")) )
-		return false;
-	    dcr_mask = prop->get_word(0);
-
-	    verbose = false;
-	    fdt_node_t *l4node = fdt->find_subtree("/l4");
-	    if ((prop = fdt->find_property_node(l4node, "kickstart")))
-	    {
-		if (strstr(prop->get_string(), "verbose"))
-		    verbose = true;
-	    }
-
-	    return true;
-	}
-
-    void putc(int c)
-	{
-	    if (!mb || !verbose)
-		return;
-
-	    mb->data[mb->len++] = c;
-	
-	    if (mb->len >= size || c == '\n')
-	    {
-		send_command(2);
-		mb->len = 0;
-	    }
-	}
 };
+typedef struct bgp_cons_t bgp_cons_t;
+
+
+/* were members of bgp_cons_t. */
+static void bgp_cons_send_command (bgp_cons_t *self, int command)
+{
+    self->mb->command = command;
+    __asm__ __volatile__("sync");
+    mtdcrx(self->dcr_set, self->dcr_mask);
+    
+    do {
+	dcbi((void*)&self->mb->command);
+    } while(!(self->mb->command & 0x8000));
+}
+
+static bool bgp_cons_init (bgp_cons_t *self, fdt_t *fdt)
+{
+    fdt_property_t *prop;
+    fdt_node_t *node = fdt_find_subtree (fdt, "/jtag/console0");
+
+    if (! (prop = fdt_find_property_node (fdt, node, "reg")) )
+	return false;
+
+    // addr is 64 bit with upper part 0
+    self->mb = (bgp_mailbox_t*)fdt_property_get_word (prop, 1);
+    self->size = fdt_property_get_word (prop, 2);
+    
+    if (! (prop = fdt_find_property_node (fdt, node, "dcr-reg")) )
+	return false;
+
+    self->dcr_set = fdt_property_get_word (prop, 0);
+    self->dcr_clear = fdt_property_get_word (prop, 1);
+    
+    if (! (prop = fdt_find_property_node (fdt, node, "dcr-mask")) )
+	return false;
+    self->dcr_mask = fdt_property_get_word (prop, 0);
+
+    self->verbose = false;
+    fdt_node_t *l4node = fdt_find_subtree (fdt, "/l4");
+    if ((prop = fdt_find_property_node (fdt, l4node, "kickstart")))
+    {
+	if (strstr(fdt_property_get_string (prop), "self->verbose"))
+	    self->verbose = true;
+    }
+
+    return true;
+}
+
+static void bgp_cons_putc (bgp_cons_t *self, int c)
+{
+    if (!self->mb || !self->verbose)
+	return;
+
+    self->mb->data[self->mb->len++] = c;
+
+    if (self->mb->len >= self->size || c == '\n')
+    {
+	bgp_cons_send_command (self, 2);
+	self->mb->len = 0;
+    }
+}
 
 bgp_cons_t bgp_cons;
 
-extern "C" void putc(int c)
+void putc(int c)
 {
-    bgp_cons.putc(c);
+    bgp_cons_putc (&bgp_cons, c);
 #if defined(CONFIG_COMPORT)
     extern void __l4_putc(int c);
     __l4_putc(c);
@@ -143,6 +146,9 @@ extern "C" void putc(int c)
 /*
  * Loader formats supported for PowerPC
  */
+bool fdt_probe (void);
+L4_Word_t fdt_init (void);
+
 loader_format_t loader_formats[] = {
     { "Flattened device tree", fdt_probe, fdt_init },
     NULL_LOADER
@@ -159,10 +165,10 @@ void flush_dcache_range(L4_Word_t start, L4_Word_t end)
 {
     printf("invalidate dcache %x-%x\n", start, end);
     for (; start < end; start += 32)
-	asm("dcbf 0, %0" : : "b"(start));
+	__asm__("dcbf 0, %0" : : "b"(start));
 }
 
-void flush_cache()
+void flush_cache (void)
 {
     /* Should we flush the cache??? */
     flush_dcache_range((L4_Word_t)get_fdt_ptr(), 
@@ -170,7 +176,7 @@ void flush_cache()
 }
 
 static fdt_t *fdt_ptr;
-fdt_t *get_fdt_ptr()
+fdt_t *get_fdt_ptr (void)
 {
     return fdt_ptr;
 }
@@ -182,12 +188,12 @@ void launch_kernel(L4_Word_t entry)
     void (*kernel)(void) = (void(*)(void))entry;
 
     entry_secondary = kernel; /* release APs */
-    asm("msync; dcbi 0, %0" : : "b"(&entry_secondary));
+    __asm__("msync; dcbi 0, %0" : : "b"(&entry_secondary));
     (*kernel)();
 }
 
-extern "C" void loader();
-extern "C" void __loader(L4_Word_t r3, L4_Word_t r4, L4_Word_t r5, 
+void loader();
+void __loader(L4_Word_t r3, L4_Word_t r4, L4_Word_t r5, 
 			 L4_Word_t r6, L4_Word_t r7)
 {
     fdt_ptr = (fdt_t*)r3;
@@ -196,6 +202,6 @@ extern "C" void __loader(L4_Word_t r3, L4_Word_t r4, L4_Word_t r5,
     __l4_dtree = fdt_ptr;
 #endif
     
-    bgp_cons.init(fdt_ptr);
+    bgp_cons_init (&bgp_cons, fdt_ptr);
     loader();
 }

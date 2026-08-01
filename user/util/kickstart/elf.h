@@ -72,9 +72,8 @@
  * ELF header
  */
 
-class ehdr_t 
+struct ehdr_t
 {
-public:
     unsigned char ident[16];
     L4_Word16_t type;
     L4_Word16_t machine;
@@ -90,18 +89,19 @@ public:
     L4_Word16_t shnum;
     L4_Word16_t shstrndx;
 
-    bool is_32bit (void) { return ident[4] == 1; }
-    bool is_64bit (void) { return ident[4] == 2; }
 };
+typedef struct ehdr_t ehdr_t;
+
+L4_INLINE bool ehdr_is_32bit (ehdr_t *self) { return self->ident[4] == 1; }
+L4_INLINE bool ehdr_is_64bit (ehdr_t *self) { return self->ident[4] == 2; }
 
 
 /*
  * Program header
  */
 
-class phdr_t
+struct phdr_t
 {
-public:
     L4_Word32_t type;
 #if defined(L4_64BIT)
     L4_Word32_t flags;
@@ -116,6 +116,7 @@ public:
 #endif
     L4_Word_t   align;
 };
+typedef struct phdr_t phdr_t;
 
 enum phdr_type_e 
 {
@@ -134,9 +135,8 @@ enum phdr_flags_e
  * Section header
  */
 
-class shdr_t
+struct shdr_t
 {
-public:
     L4_Word32_t	name;
     L4_Word32_t	type;
     L4_Word_t	flags;
@@ -148,6 +148,7 @@ public:
     L4_Word_t	addralign;
     L4_Word_t	entsize;
 };
+typedef struct shdr_t shdr_t;
 
 enum shdr_type_e
 {
@@ -188,11 +189,13 @@ bool elf_load (L4_Word_t file_start,
 	       L4_Word_t *type,
 	       L4_MemCheck_Func_t check);
 
-bool elf_find_sections (L4_Word_t addr,
-			BI32::L4_Boot_SimpleExec_t * exec);
+/* Was one overloaded name taking either bootinfo width; C needs two.  elf.c
+   picks which of them is `native' and which is `other'. */
+bool elf_find_sections_bi32 (L4_Word_t addr,
+			     BI32_L4_Boot_SimpleExec_t * exec);
 
-bool elf_find_sections (L4_Word_t addr,
-			BI64::L4_Boot_SimpleExec_t * exec);
+bool elf_find_sections_bi64 (L4_Word_t addr,
+			     BI64_L4_Boot_SimpleExec_t * exec);
 
 
 #endif /* !__KICKSTART__ELF_H__ */

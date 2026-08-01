@@ -86,7 +86,7 @@ void launch_kernel(L4_Word_t entry)
 #define COMPORT CONFIG_COMPORT
 #endif
 
-extern inline L4_Word8_t inb(const L4_Word16_t port)
+static inline L4_Word8_t inb(const L4_Word16_t port)
 {
     L4_Word8_t val;
 
@@ -95,7 +95,7 @@ extern inline L4_Word8_t inb(const L4_Word16_t port)
     return val;
 }
 
-extern inline void outb(const L4_Word16_t port, const L4_Word8_t val)
+static inline void outb(const L4_Word16_t port, const L4_Word8_t val)
 {
     __asm__ __volatile__ ("outb %0, %w1" : : "a"(val), "dN"(port));
 }
@@ -172,7 +172,7 @@ void __vga_putc(int c)
     }
 }
 	
-extern "C" void putc(int c)
+void putc(int c)
 {
     static bool do_init = true;
 

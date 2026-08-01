@@ -42,8 +42,7 @@
  */
 
 
-class mbi_module_t {
-public:
+struct mbi_module_t {
     L4_Word_t   start;          // Address of first byte of module
     L4_Word_t   end;            // Address of first byte after module
     char*       cmdline;        // Pointer to the command line
@@ -51,9 +50,9 @@ public:
                                 // padding field to make the structure
                                 // 16 bytes large, but we abuse it
 };
+typedef struct mbi_module_t mbi_module_t;
 
-class mbi_t {
-public:
+struct mbi_t {
     struct {
         L4_BITFIELD6(L4_Word_t,
             mem         :1,
@@ -91,15 +90,14 @@ public:
     L4_Word_t           boot_loader_name;
     L4_Word_t           apm_table;
     L4_Word_t           vbe[4];
-    
-
-public:
-    static mbi_t* prepare();
-
-    L4_Word_t get_size();
-    void copy( mbi_t *target );
-    bool is_mem_region_free( L4_Word_t start, L4_Word_t size );
 };
+typedef struct mbi_t mbi_t;
+
+/* were members; prepare() was static, so it keeps no receiver. */
+mbi_t * mbi_prepare (void);
+L4_Word_t mbi_get_size (mbi_t *self);
+void mbi_copy (mbi_t *self, mbi_t *target);
+bool mbi_is_mem_region_free (mbi_t *self, L4_Word_t start, L4_Word_t size);
 
 
 /*

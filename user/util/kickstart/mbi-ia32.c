@@ -9,9 +9,9 @@
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ *    notice, self list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
+ *    notice, self list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
@@ -42,23 +42,23 @@ extern unsigned int max_phys_mem;
 extern unsigned int additional_kmem_size;
 
 
-// The kernel cannot use memory beyond this limit
+// The kernel cannot use memory beyond self limit
 #define MAX_KMEM_END            (240*1024*1024)
 
 L4_Word_t grub_mbi_ptr;
 L4_Word_t grub_mbi_flags;
 
 
-class mmap_t {
-public:
+struct mmap_t {
     L4_Word32_t   desc_size;
     L4_Word64_t   base;
     L4_Word64_t   size;
     L4_Word32_t   type;
 };
+typedef struct mmap_t mmap_t;
 
 
-mbi_t* mbi_t::prepare(void)
+mbi_t* mbi_prepare (void)
 {
     if (grub_mbi_flags == 0x2BADB002)
         return (mbi_t*) grub_mbi_ptr;
@@ -71,7 +71,7 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip)
 {
     // Mark all physical memory as shared by default to allow for
     // device access
-    kip->dedicate_memory(0x0, ~0UL, L4_SharedMemoryType, 0);
+    kip_manager_dedicate_memory (kip, 0x0, ~0UL, L4_SharedMemoryType, 0);
     
     // Does the MBI contain a reference to the BIOS memory map?
     if (mbi->flags.mmap)
@@ -91,7 +91,7 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip)
             /* Mark "usable" memory (type=1) as conventional physical
                memory, everything else as architecture specific with
                the BIOS memory map type as subtype */
-	    kip->dedicate_memory(m->base, m->base + m->size - 1,
+	    kip_manager_dedicate_memory (kip, m->base, m->base + m->size - 1,
                                  (m->type == 1)
                                  ? L4_ConventionalMemoryType
                                  : L4_ArchitectureSpecificMemoryType,
@@ -151,7 +151,7 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip)
 			}
 		    }
                     // Mark the memory block as in use by the kernel
-                    kip->dedicate_memory(base, end - 1, 
+                    kip_manager_dedicate_memory (kip, base, end - 1, 
                                          L4_ReservedMemoryType, 0);
                     // Stop looking
                     break;
@@ -168,7 +168,7 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip)
         printf("No BIOS memory map. Using old-style MBI fields.\n");
 
         // mbi.mem_lower is the number of KBs below 1MB starting at 0
-        kip->dedicate_memory(0x00000000ULL,
+        kip_manager_dedicate_memory (kip, 0x00000000ULL,
                              mbi->mem_lower * 1024ULL - 1, 
                              L4_ConventionalMemoryType, 0);
 
@@ -179,25 +179,25 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip)
         if (max_phys_mem != 0)
             end = max_phys_mem;
 
-        kip->dedicate_memory(0x00100000ULL, end - 1, 
+        kip_manager_dedicate_memory (kip, 0x00100000ULL, end - 1, 
                              L4_ConventionalMemoryType, 0);
 
         if (additional_kmem_size)
         {
             /* Mark a memory block of appropriate size at the end of
                conventional memory as reserved for the kernel */
-            kip->dedicate_memory(end - additional_kmem_size, end - 1,
+            kip_manager_dedicate_memory (kip, end - additional_kmem_size, end - 1,
                                  L4_ReservedMemoryType, 0);
         }
     }
 
     /* The standard PC's VGA memory hasn't been seen in any BIOS
      * memory map so far. So we fake an entry for it. */
-    kip->dedicate_memory(0xA0000, 0xC0000 - 1, 
+    kip_manager_dedicate_memory (kip, 0xA0000, 0xC0000 - 1, 
                          L4_SharedMemoryType, 0);
     
     /* Standard PC's may have VGA and Extension ROMs -- fake
      * another entry */
-    kip->dedicate_memory(0xC0000, 0xF0000 - 1, 
+    kip_manager_dedicate_memory (kip, 0xC0000, 0xF0000 - 1, 
                          L4_SharedMemoryType, 0);
 }

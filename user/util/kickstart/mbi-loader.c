@@ -44,7 +44,7 @@ void install_memory(mbi_t * mbi, kip_manager_t* kip);
 #define MAX_MBI_MODULES		32
 #define STRING_BUFFER_SIZE	4096
 
-static mbi_t mbi_copy;
+static mbi_t saved_mbi;
 static mbi_module_t mbi_modules[MAX_MBI_MODULES];
 static mbi_module_t orig_mbi_modules[MAX_MBI_MODULES];
 static char strings_copy[STRING_BUFFER_SIZE];
@@ -201,12 +201,12 @@ L4_Word_t find_free_mem_region (L4_Word_t size, kip_manager_t *kip)
 {
     L4_Word64_t phys_start, phys_end;
 
-    phys_end = kip->get_phys_mem_max();
+    phys_end = kip_manager_get_phys_mem_max (kip);
     for (phys_start = 0; phys_start < (phys_end - size); phys_start += size)
     {
-	if( !mbi->is_mem_region_free(phys_start, size) )
+	if( !kip_manager_is_mem_region_free (mbi, phys_start, size) )
 	    continue;
-	if( !kip->is_mem_region_free(phys_start, size) )
+	if( !kip_manager_is_mem_region_free (kip, phys_start, size) )
 	    continue;
 	return phys_start;
     }
@@ -232,19 +232,19 @@ L4_Word_t find_free_mem_region (L4_Word_t size, kip_manager_t *kip)
 mbi_t * install_mbi (kip_manager_t* kip)
 {
     // Make a copy of the mbi, and protect it.  First calculate its size.
-    L4_Word_t mbi_size = mbi->get_size();
+    L4_Word_t mbi_size = mbi_get_size (mbi);
     if( mbi_size % 4096 )
 	mbi_size = (mbi_size + 4096) & ~(4096-1);
 
     L4_Word_t target_mbi = find_free_mem_region( mbi_size, kip );
     if( target_mbi == 0 )
 	FAIL();
-    mbi->copy( (mbi_t *)target_mbi );
+    mbi_copy (mbi,  (mbi_t *)target_mbi );
 
     // Protect the mbi.
-    kip->dedicate_memory( target_mbi, target_mbi - 1 + mbi_size, 
+    kip_manager_dedicate_memory (kip,  target_mbi, target_mbi - 1 + mbi_size, 
 	    L4_BootLoaderSpecificMemoryType, 
-	    kip_manager_t::desc_init_table );
+	    desc_init_table );
 
     return (mbi_t *)target_mbi;
 }
@@ -265,17 +265,17 @@ mbi_t * install_mbi (kip_manager_t* kip)
  */
 void * create_bootinfo (kip_manager_t * kip)
 {
-    max_bootinfo_size = kip->get_min_pagesize ();
+    max_bootinfo_size = kip_manager_get_min_pagesize (kip);
     L4_Word_t bi = find_free_mem_region (max_bootinfo_size, kip);
 
     if (!bi)
 	return NULL;
 
     // Protect bootinfo structure
-    kip->dedicate_memory (bi,
+    kip_manager_dedicate_memory (kip, bi,
 			  bi + max_bootinfo_size - 1,
 			  L4_BootLoaderSpecificMemoryType, 
-			  kip_manager_t::desc_init_table);
+			  desc_init_table);
 
     return (void *) bi;
 }
@@ -286,14 +286,14 @@ void * create_bootinfo (kip_manager_t * kip)
  */
 bool mbi_probe (void)
 {
-    mbi_t * _mbi = mbi_t::prepare();
+    mbi_t * _mbi = mbi_prepare ();
 
     if (_mbi == NULL)
 	return false;
 
     // Make a safe copy of the MBI structure itself.
-    memcopy (&mbi_copy, _mbi, sizeof (mbi_t));
-    mbi = &mbi_copy;
+    memcopy (&saved_mbi, _mbi, sizeof (mbi_t));
+    mbi = &saved_mbi;
 
     return true;
 }
@@ -323,7 +323,7 @@ L4_Word_t mbi_init (void)
     bool use_mbi = true;
 
     // The KIP is somewhere in the kernel (module 0)
-    if (!kip.find_kip(mbi->mods[0].start, mbi->mods[0].end))
+    if (!kip_manager_find_kip (&kip, mbi->mods[0].start, mbi->mods[0].end))
     {
         // Bail out if we couldn't find a KIP
         FAIL();
@@ -397,7 +397,7 @@ L4_Word_t mbi_init (void)
         PARSENUM("kmem",
                  additional_kmem_size,
                  "Reserving %d%sB for kernel memory\n",
-                 additional_kmem_size &= ~(kip.get_min_pagesize()-1));
+                 additional_kmem_size &= ~(kip_manager_get_min_pagesize (&kip)-1));
 
 	PARSEBOOL ("bootinfo", use_bootinfo, "generic bootinfo");
 	PARSEBOOL ("mbi", use_mbi, "multiboot info");
@@ -438,31 +438,31 @@ L4_Word_t mbi_init (void)
     }
 
     // Update with location of KIP in loader kernel
-    if (!kip.find_kip(mbi->mods[0].start, mbi->mods[0].end))
+    if (!kip_manager_find_kip (&kip, mbi->mods[0].start, mbi->mods[0].end))
         FAIL();
 
     // Set up the memory descriptors in the KIP
     install_memory(mbi, &kip);
 
     // Install sigma0's memory region and entry point in the KIP
-    kip.install_sigma0(mbi->mods[1].start, mbi->mods[1].end,
+    kip_manager_install_sigma0 (&kip, mbi->mods[1].start, mbi->mods[1].end,
                        mbi->mods[1].entry, sigma0_type);
     // Install the root_task's memory region and entry point in the KIP
-    kip.install_root_task(mbi->mods[2].start, mbi->mods[2].end,
+    kip_manager_install_root_task (&kip, mbi->mods[2].start, mbi->mods[2].end,
 			  mbi->mods[2].entry, root_task_type);
 
     // Protect all user-level modules.
     for (L4_Word_t i = 3; i < mbi->modcount; i++)
     {
-	kip.dedicate_memory (mbi->mods[i].start, mbi->mods[i].end - 1,
+	kip_manager_dedicate_memory (&kip, mbi->mods[i].start, mbi->mods[i].end - 1,
 			     L4_BootLoaderSpecificMemoryType, 
-			     kip_manager_t::desc_boot_module);
+			     desc_boot_module);
     }
 
 #if defined(L4_32BIT) || defined(ALSO_BOOTINFO32)
     if (root_task_type == 1)
     {
-	BI32::L4_BootRec_t * rec = NULL;
+	BI32_L4_BootRec_t * rec = NULL;
 
 	if (use_bootinfo)
 	{
@@ -472,11 +472,11 @@ L4_Word_t mbi_init (void)
 	    if (bi)
 	    {
 		// Initialize it
-		rec = BI32::init_bootinfo ((BI32::L4_BootInfo_t *) bi);
+		rec = BI32_init_bootinfo ((BI32_L4_BootInfo_t *) bi);
 
 		// Record MBI modules
-		rec = BI32::record_bootinfo_modules
-				((BI32::L4_BootInfo_t *) bi,
+		rec = BI32_record_bootinfo_modules
+				((BI32_L4_BootInfo_t *) bi,
 				 rec, mbi, orig_mbi_modules,
 				 decode_all_executables ? mbi->modcount : 3);
 	    }
@@ -490,7 +490,7 @@ L4_Word_t mbi_init (void)
 	{
 	    // Make sure that we record MBI location after we have
 	    // installed it
-	    rec = BI32::record_bootinfo_mbi ((BI32::L4_BootInfo_t *) bi,
+	    rec = BI32_record_bootinfo_mbi ((BI32_L4_BootInfo_t *) bi,
 					     rec, mbi);
 	}
     }
@@ -499,7 +499,7 @@ L4_Word_t mbi_init (void)
 #if defined(L4_64BIT) || defined(ALSO_BOOTINFO64)
     if (root_task_type == 2)
     {
-	BI64::L4_BootRec_t * rec = NULL;
+	BI64_L4_BootRec_t * rec = NULL;
 
 	if (use_bootinfo)
 	{
@@ -509,11 +509,11 @@ L4_Word_t mbi_init (void)
 	    if (bi)
 	    {
 		// Initialize it
-		rec = BI64::init_bootinfo ((BI64::L4_BootInfo_t *) bi);
+		rec = BI64_init_bootinfo ((BI64_L4_BootInfo_t *) bi);
 
 		// Record MBI modules
-		rec = BI64::record_bootinfo_modules
-				((BI64::L4_BootInfo_t *) bi,
+		rec = BI64_record_bootinfo_modules
+				((BI64_L4_BootInfo_t *) bi,
 				 rec, mbi, orig_mbi_modules,
 				 decode_all_executables ? mbi->modcount : 3);
 	    }
@@ -527,14 +527,14 @@ L4_Word_t mbi_init (void)
 	{
 	    // Make sure that we record MBI location after we have
 	    // installed it
-	    rec = BI64::record_bootinfo_mbi ((BI64::L4_BootInfo_t *) bi,
+	    rec = BI64_record_bootinfo_mbi ((BI64_L4_BootInfo_t *) bi,
 					     rec, mbi);
 	}
     }
 #endif
 
     // Install the bootinfo or MBI into the KIP
-    kip.update_kip (bi ? (L4_Word_t) bi :
+    kip_manager_update_kip (&kip, bi ? (L4_Word_t) bi :
 		    use_mbi ? (L4_Word_t) mbi : 0);
     
     return mbi_modules[0].entry;

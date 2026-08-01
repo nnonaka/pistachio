@@ -40,8 +40,8 @@
 	(((L4_Word_t) (&((L4_KernelConfigurationPage_t *) 0)->field)) / \
 	 sizeof (L4_Word_t))
 
-#define SET_KIP(field, value)	set_val (KCP_OFFSET (field), value)
-#define GET_KIP(field)		get_val (KCP_OFFSET (field))
+#define SET_KIP(field, value)	kip_manager_set_val (self, KCP_OFFSET (field), value)
+#define GET_KIP(field)		kip_manager_get_val (self, KCP_OFFSET (field))
 
 typedef union {
     L4_Word64_t	raw[2];
@@ -61,11 +61,11 @@ typedef union {
 } memdesc_t;
 
 
-kip_manager_t::kip_manager_t (void)
+void kip_manager_init (kip_manager_t *self)
 {
-    mem_desc_cnt = 0;
-    mem_desc_offset = 0;
-    word_size = 0;
+    self->mem_desc_cnt = 0;
+    self->mem_desc_offset = 0;
+    self->word_size = 0;
 }
 
 
@@ -78,7 +78,7 @@ kip_manager_t::kip_manager_t (void)
  *
  * @returns true if KIP found and init succeeded, false otherwise
  */
-bool kip_manager_t::find_kip (L4_Word_t start, L4_Word_t end)
+bool kip_manager_find_kip (kip_manager_t *self, L4_Word_t start, L4_Word_t end)
 {
     /*
      * Search for location of KIP.
@@ -89,20 +89,20 @@ bool kip_manager_t::find_kip (L4_Word_t start, L4_Word_t end)
     {
         if (((L4_KernelConfigurationPage_t*) p)->magic == L4_MAGIC)
         {
-            kip = (L4_KernelConfigurationPage_t*) p;
+            self->kip = (L4_KernelConfigurationPage_t*) p;
 
 	    if (((L4_Word32_t *) p)[1] != 0)
-		word_size = 4;
+		self->word_size = 4;
 	    else
-		word_size = 8;
+		self->word_size = 8;
 
 	    L4_Word64_t meminfo = GET_KIP (MemoryInfo);
-	    if (word_size == 4)
-		mem_desc_offset = (meminfo >> 16) / 4;
+	    if (self->word_size == 4)
+		self->mem_desc_offset = (meminfo >> 16) / 4;
 	    else
-		mem_desc_offset = (meminfo >> 32) / 8;
+		self->mem_desc_offset = (meminfo >> 32) / 8;
 
-            if ( mem_desc_offset == 0 )
+            if ( self->mem_desc_offset == 0 )
                 return false;
 
             return true;
@@ -112,55 +112,55 @@ bool kip_manager_t::find_kip (L4_Word_t start, L4_Word_t end)
     return false;
 }
 
-void kip_manager_t::install_sigma0 (L4_Word_t mod_start, L4_Word_t mod_end,
+void kip_manager_install_sigma0 (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end,
                                     L4_Word_t entry, L4_Word_t type)
 {
     SET_KIP (sigma0.low, mod_start);
     SET_KIP (sigma0.high, mod_end);
     SET_KIP (sigma0.ip, entry);
-    if (word_size > 4 && type == 1)
+    if (self->word_size > 4 && type == 1)
 	SET_KIP (sigma0.sp, 1ULL << 63);
 
-    this->dedicate_memory(mod_start, mod_end,
+    kip_manager_dedicate_memory (self, mod_start, mod_end,
 			  L4_BootLoaderSpecificMemoryType,
-			  kip_manager_t::desc_init_server);
+			  desc_init_server);
 }
 
-void kip_manager_t::install_root_task (L4_Word_t mod_start, L4_Word_t mod_end,
+void kip_manager_install_root_task (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end,
 				       L4_Word_t entry, L4_Word_t type)
 {
     SET_KIP (root_server.low, mod_start);
     SET_KIP (root_server.high, mod_end);
     SET_KIP (root_server.ip, entry);
-    if (word_size > 4 && type == 1)
+    if (self->word_size > 4 && type == 1)
 	SET_KIP (root_server.sp, 1ULL << 63);
 
-    this->dedicate_memory(mod_start, mod_end,
+    kip_manager_dedicate_memory (self, mod_start, mod_end,
 			  L4_BootLoaderSpecificMemoryType,
-			  kip_manager_t::desc_init_server);
+			  desc_init_server);
 }
 
-void kip_manager_t::update_kip (L4_Word_t boot_info)
+void kip_manager_update_kip (kip_manager_t *self, L4_Word_t boot_info)
 {
     SET_KIP (BootInfo, boot_info);
 
     L4_Word64_t meminfo = GET_KIP (MemoryInfo);
-    if (word_size == 4)
-	meminfo = (meminfo & ~0xffffUL) + mem_desc_cnt;
-    else if (word_size == 8)
-	meminfo = (meminfo & ~0xffffffffULL) + mem_desc_cnt;
+    if (self->word_size == 4)
+	meminfo = (meminfo & ~0xffffUL) + self->mem_desc_cnt;
+    else if (self->word_size == 8)
+	meminfo = (meminfo & ~0xffffffffULL) + self->mem_desc_cnt;
 
     SET_KIP (MemoryInfo, meminfo);
 }
 
-bool kip_manager_t::dedicate_memory (L4_Word64_t start,
+bool kip_manager_dedicate_memory (kip_manager_t *self, L4_Word64_t start,
 				     L4_Word64_t end,
 				     L4_Word64_t type,
 				     L4_Word64_t sub_type)
 {
     memdesc_t mdesc;
-    mdesc.raw[0] = get_val (mem_desc_offset + mem_desc_cnt*2 + 0);
-    mdesc.raw[1] = get_val (mem_desc_offset + mem_desc_cnt*2 + 1);
+    mdesc.raw[0] = kip_manager_get_val (self, self->mem_desc_offset + self->mem_desc_cnt*2 + 0);
+    mdesc.raw[1] = kip_manager_get_val (self, self->mem_desc_offset + self->mem_desc_cnt*2 + 1);
 
     mdesc.x.type = type;
     mdesc.x.t = sub_type;
@@ -168,9 +168,9 @@ bool kip_manager_t::dedicate_memory (L4_Word64_t start,
     mdesc.x.low = start >> 10;
     mdesc.x.high = end >> 10;
 
-    set_val (mem_desc_offset + mem_desc_cnt*2 + 0, mdesc.raw[0]);
-    set_val (mem_desc_offset + mem_desc_cnt*2 + 1, mdesc.raw[1]);
-    mem_desc_cnt++;
+    kip_manager_set_val (self, self->mem_desc_offset + self->mem_desc_cnt*2 + 0, mdesc.raw[0]);
+    kip_manager_set_val (self, self->mem_desc_offset + self->mem_desc_cnt*2 + 1, mdesc.raw[1]);
+    self->mem_desc_cnt++;
 
     return true;
 }
@@ -182,15 +182,15 @@ bool kip_manager_t::dedicate_memory (L4_Word64_t start,
  *
  * @returns physical memory size in bytes
  */
-L4_Word64_t kip_manager_t::get_phys_mem_max (void)
+L4_Word64_t kip_manager_get_phys_mem_max (kip_manager_t *self)
 {
     L4_Word64_t max = 0;
 
-    for (L4_Word_t i = 0; i < mem_desc_cnt; i++)
+    for (L4_Word_t i = 0; i < self->mem_desc_cnt; i++)
     {
 	memdesc_t mdesc;
-	mdesc.raw[0] = get_val (mem_desc_offset + i*2 + 0);
-	mdesc.raw[1] = get_val (mem_desc_offset + i*2 + 1);
+	mdesc.raw[0] = kip_manager_get_val (self, self->mem_desc_offset + i*2 + 0);
+	mdesc.raw[1] = kip_manager_get_val (self, self->mem_desc_offset + i*2 + 1);
 
 	L4_Word64_t high = (mdesc.x.high << 10) | 0x3ff;
 	if (mdesc.x.type == L4_ConventionalMemoryType
@@ -210,9 +210,9 @@ L4_Word64_t kip_manager_t::get_phys_mem_max (void)
  *
  * @returns size of smallest supported page size (in bytes)
  */
-L4_Word_t kip_manager_t::get_min_pagesize (void)
+L4_Word_t kip_manager_get_min_pagesize (kip_manager_t *self)
 {
-    L4_Word_t psmask = get_val (50);
+    L4_Word_t psmask = kip_manager_get_val (self, 50);
     L4_Word_t min_pgsize = 10;
 
     if (psmask == 0)
@@ -237,7 +237,7 @@ L4_Word_t kip_manager_t::get_min_pagesize (void)
  *
  * @returns true if no conflict, otherwise false
  */
-bool kip_manager_t::is_mem_region_free (L4_Word_t start, L4_Word_t size)
+bool kip_manager_is_mem_region_free (kip_manager_t *self, L4_Word_t start, L4_Word_t size)
 {
     L4_Word_t i;
     L4_Word_t end = start - 1 + size;
@@ -247,17 +247,17 @@ bool kip_manager_t::is_mem_region_free (L4_Word_t start, L4_Word_t size)
     for (i = 0; i < 4; i++)
     {
 	if (is_intersection (start, end,
-			     get_val (off + i*4 + 2),
-			     get_val (off + i*4 + 3)))
+			     kip_manager_get_val (self, off + i*4 + 2),
+			     kip_manager_get_val (self, off + i*4 + 3)))
 	    return false;
     }
 
     // Look for conflicts with memory descriptors.
-    for (i = 0; i < mem_desc_cnt; i++)
+    for (i = 0; i < self->mem_desc_cnt; i++)
     {
 	memdesc_t mdesc;
-	mdesc.raw[0] = get_val (mem_desc_offset + i*2 + 0);
-	mdesc.raw[1] = get_val (mem_desc_offset + i*2 + 1);
+	mdesc.raw[0] = kip_manager_get_val (self, self->mem_desc_offset + i*2 + 0);
+	mdesc.raw[1] = kip_manager_get_val (self, self->mem_desc_offset + i*2 + 1);
 
 	if (mdesc.x.type == L4_ConventionalMemoryType
 	    || mdesc.x.v == 1)
@@ -274,7 +274,7 @@ bool kip_manager_t::is_mem_region_free (L4_Word_t start, L4_Word_t size)
 	// comparison is done in 32-bit terms (as is_intersection() operates
 	// on L4_Word_t) so descriptors whose 64-bit base has stray high bits
 	// but cover the whole 32-bit space are still recognised.
-	if ((L4_Word32_t (low) == 0) && (L4_Word32_t (high) == L4_Word32_t (-1)))
+	if ((((L4_Word32_t)(low)) == 0) && (((L4_Word32_t)(high)) == ((L4_Word32_t)(-1))))
 	    continue;
 
 	if (is_intersection (start, end, low, high))

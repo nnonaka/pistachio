@@ -33,42 +33,34 @@
 #include <l4/types.h>
 
 
-#if defined(__cplusplus)
-template<typename T> inline const T& min(const T& a, const T& b)
-{
-    if (b < a)
-        return b;
-    return a;
-}
-
-template<typename T> inline const T& max(const T& a, const T& b)
-{
-    if (a < b)
-        return b;
-    return a;
-}
-#endif /* defined(__cplusplus) */
+/* were function templates over T.  Every use here is on L4_Word_t; macros
+   keep that generality without needing a type. */
+#define min(a,b)	({ __typeof__(a) __a = (a), __b = (b); __b < __a ? __b : __a; })
+#define max(a,b)	({ __typeof__(a) __a = (a), __b = (b); __a < __b ? __b : __a; })
 
 /*
  * We declare functions weak to allow architecture-specific 
  * implementations to take precedence.
  */
-extern "C" unsigned strlen( const char *src ) __attribute__((weak));
-extern "C" void strcpy( char *dst, const char *src ) __attribute__((weak));
-extern "C" int strcmp( const char *s1, const char *s2 ) __attribute__((weak));
-extern "C" int strncmp( const char *s1, const char *s2, unsigned int n ) __attribute__((weak));
-extern "C" char *strstr(const char *s, const char *find) __attribute__((weak));
-extern "C" unsigned long strtoul(const char *cp, char **endp, int base) __attribute__((weak));
-extern "C" char *strchr(const char *p, int ch) __attribute__((weak));
-extern "C" void memcopy(L4_Word_t dst, L4_Word_t src, L4_Word_t len) __attribute__((weak));
-extern "C" void memset(L4_Word_t dst, L4_Word8_t val, L4_Word_t len) __attribute__((weak));
+unsigned strlen( const char *src ) __attribute__((weak));
+void strcpy( char *dst, const char *src ) __attribute__((weak));
+int strcmp( const char *s1, const char *s2 ) __attribute__((weak));
+int strncmp( const char *s1, const char *s2, unsigned int n ) __attribute__((weak));
+char *strstr(const char *s, const char *find) __attribute__((weak));
+unsigned long strtoul(const char *cp, char **endp, int base) __attribute__((weak));
+char *strchr(const char *p, int ch) __attribute__((weak));
+void memcopy(L4_Word_t dst, L4_Word_t src, L4_Word_t len) __attribute__((weak));
+void memset(L4_Word_t dst, L4_Word8_t val, L4_Word_t len) __attribute__((weak));
 
-extern inline void memcopy(void *dst, void *src, L4_Word_t len)
+/* was an overload of memcopy taking pointers. */
+/* was extern inline: that is an external definition in C99. */
+static inline void memcopy_ptr(void *dst, void *src, L4_Word_t len)
 {
-    memcopy( L4_Word_t(dst), L4_Word_t(src), len );
+    memcopy( (L4_Word_t)(dst), (L4_Word_t)(src), len );
 }
 
-extern inline bool is_intersection( 
+/* was extern inline: that is an external definition in C99. */
+static inline bool is_intersection( 
 	L4_Word_t start1, L4_Word_t end1, 
 	L4_Word_t start2, L4_Word_t end2 
 	)

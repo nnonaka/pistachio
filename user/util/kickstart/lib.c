@@ -31,7 +31,7 @@
  ********************************************************************/
 #include "lib.h"
 
-extern "C" unsigned strlen( const char *src )
+unsigned strlen( const char *src )
 {
     unsigned cnt = 0;
 
@@ -40,7 +40,7 @@ extern "C" unsigned strlen( const char *src )
     return cnt;
 }
 
-extern "C" void strcpy( char *dst, const char *src )
+void strcpy( char *dst, const char *src )
 {
     unsigned cnt = 0;
    
@@ -64,7 +64,7 @@ extern "C" void strcpy( char *dst, const char *src )
  * address to the destination address. The function does not check for
  * overlapping of source and destination region.
  */
-extern "C" void memcopy(L4_Word_t dst, L4_Word_t src, L4_Word_t len)
+void memcopy(L4_Word_t dst, L4_Word_t src, L4_Word_t len)
 {
     L4_Word8_t* s = (L4_Word8_t*) src;
     L4_Word8_t* d = (L4_Word8_t*) dst;
@@ -84,7 +84,7 @@ extern "C" void memcopy(L4_Word_t dst, L4_Word_t src, L4_Word_t len)
  * The memset() function fills the first len bytes of the memory
  * block pointed to by dst with the constant byte val.
  */
-extern "C" void memset(L4_Word_t dst, L4_Word8_t val, L4_Word_t len)
+void memset(L4_Word_t dst, L4_Word8_t val, L4_Word_t len)
 {
     L4_Word8_t* d = (L4_Word8_t*) dst;
 
@@ -111,7 +111,7 @@ extern "C" void memset(L4_Word_t dst, L4_Word8_t val, L4_Word_t len)
 /*
  * Compare strings.
  */
-extern "C" int
+int
 strcmp(const char *s1, const char *s2)
 {
 	while (*s1 == *s2++)
@@ -120,7 +120,7 @@ strcmp(const char *s1, const char *s2)
 	return (*(unsigned char *)s1 - *(unsigned char *)--s2);
 }
 
-extern "C" int
+int
 strncmp(const char *s1, const char *s2, unsigned int n)
 {
 	if (n == 0)
@@ -137,7 +137,7 @@ strncmp(const char *s1, const char *s2, unsigned int n)
 /*
  * Find the first occurrence of find in s.
  */
-extern "C" char *
+char *
 strstr(const char *s, const char *find)
 {
 	char c, sc;
@@ -163,7 +163,7 @@ strstr(const char *s, const char *find)
  * Ignores `locale' stuff.  Assumes that the upper and lower case
  * alphabets and digits are each contiguous.
  */
-extern "C" unsigned long
+unsigned long
 strtoul(const char* nptr, char** endptr, int base)
 {
 	const char *s;
@@ -224,7 +224,7 @@ strtoul(const char* nptr, char** endptr, int base)
 	return (acc);
 }
 
-extern "C" char *
+char *
 strchr(const char *p, int ch)
 {
     for (;; ++p) {

@@ -40,14 +40,14 @@
 void flush_dcache_range(L4_Word_t start, L4_Word_t end);
 void install_memory(fdt_t * fdt, kip_manager_t* kip);
 
-class module_t {
-public:
+struct module_t {
     L4_Word_t elfimage;
     L4_Word_t start;
     L4_Word_t end;
     L4_Word_t entry;
     L4_Word_t type;
 };
+typedef struct module_t module_t;
 
 #define MAX_MODULES	32
 static module_t modules[MAX_MODULES];
@@ -55,7 +55,7 @@ static module_t modules[MAX_MODULES];
 
 bool fdt_probe (void)
 {
-    return get_fdt_ptr()->is_valid();
+    return fdt_is_valid (get_fdt_ptr());
 }
 
 bool check_memory (L4_Word_t start, L4_Word_t end)
@@ -63,9 +63,10 @@ bool check_memory (L4_Word_t start, L4_Word_t end)
     return true;
 }
 
-static bool fdt_load_image(fdt_t *fdt, char *name, module_t &module)
+/* module was a reference parameter. */
+static bool fdt_load_image(fdt_t *fdt, char *name, module_t *module)
 {
-    fdt_property_t *image = fdt->find_property_node(name);
+    fdt_property_t *image = fdt_find_property_node_path (fdt, name);
     if (!image)
     {
         printf("Could'nt find FDT entry %s\n", name);
@@ -77,15 +78,15 @@ static bool fdt_load_image(fdt_t *fdt, char *name, module_t &module)
 	return false;
     }
 
-    module.elfimage = image->get_word(0);
+    module->elfimage = fdt_property_get_word (image, 0);
 
-    printf("image address %s: %lx\n", name, module.elfimage);
+    printf("image address %s: %lx\n", name, module->elfimage);
 
-    bool res = elf_load(module.elfimage, 0, &module.start, &module.end, 
-			&module.entry, &module.type, check_memory);
+    bool res = elf_load(module->elfimage, 0, &module->start, &module->end, 
+			&module->entry, &module->type, check_memory);
 
     if (res)
-	flush_dcache_range(module.start, module.end);
+	flush_dcache_range(module->start, module->end);
     
     return res;
 }
@@ -111,11 +112,11 @@ L4_Word_t fdt_init (void)
     kip_manager_t kip;
     fdt_t *fdt = get_fdt_ptr();
 
-    fdt_load_image(fdt, "/l4/kernel", modules[0]);
-    fdt_load_image(fdt, "/l4/sigma0", modules[1]);
-    fdt_load_image(fdt, "/l4/roottask", modules[2]);
+    fdt_load_image(fdt, "/l4/kernel", &modules[0]);
+    fdt_load_image(fdt, "/l4/sigma0", &modules[1]);
+    fdt_load_image(fdt, "/l4/roottask", &modules[2]);
 
-    if (!kip.find_kip(modules[0].start, modules[0].end)) {
+    if (!kip_manager_find_kip (&kip, modules[0].start, modules[0].end)) {
 	printf("Couldn't find KIP...\n");
 	FAIL();
     }
@@ -124,18 +125,18 @@ L4_Word_t fdt_init (void)
     install_memory(fdt, &kip);
 
     // Install sigma0's memory region and entry point in the KIP
-    kip.install_sigma0(modules[1].start, modules[1].end,
+    kip_manager_install_sigma0 (&kip, modules[1].start, modules[1].end,
                        modules[1].entry, modules[1].type);
 
     // Install the root_task's memory region and entry point in the KIP
-    kip.install_root_task(modules[2].start, modules[2].end,
+    kip_manager_install_root_task (&kip, modules[2].start, modules[2].end,
 			  modules[2].entry, modules[2].type);
 
-    kip.dedicate_memory((L4_Word64_t) fdt, (L4_Word64_t) fdt + fdt->size, L4_BootLoaderSpecificMemoryType, 0xf );
+    kip_manager_dedicate_memory (&kip, (L4_Word64_t) fdt, (L4_Word64_t) fdt + fdt->size, L4_BootLoaderSpecificMemoryType, 0xf );
 
     // MUST BE LAST: store the fdt in the bootinfo field and update
     // all descriptors
-    kip.update_kip((L4_Word_t)fdt);
+    kip_manager_update_kip (&kip, (L4_Word_t)fdt);
 
     return modules[0].entry;
 }

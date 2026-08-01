@@ -42,9 +42,8 @@
 /**
  * A particular type of loader format (e.g., MBI compiant loader).
  */
-class loader_format_t
+struct loader_format_t
 {
-public:
 
     /**
      * String describing current loader format.
@@ -63,6 +62,7 @@ public:
      */
     L4_Word_t (*init)(void);
 };
+typedef struct loader_format_t loader_format_t;
 
 #define NULL_LOADER { "null", NULL, NULL }
 

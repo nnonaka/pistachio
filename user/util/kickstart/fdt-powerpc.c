@@ -3,7 +3,7 @@
  * Copyright (C) 1999-2010,  Karlsruhe University
  * Copyright (C) 2008-2009,  Volkmar Uhlig, IBM Corporation
  *                
- * File path:     util/kickstart/fdt-powerpc.cc
+ * File path:     util/kickstart/fdt-powerpc.c
  * Description:   
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -48,8 +48,8 @@ void install_memory(fdt_t * fdt, kip_manager_t* kip)
 {
     // Mark all physical memory as shared by default to allow for
     // device access
-    kip->dedicate_memory(0x0, ~0UL, L4_SharedMemoryType, 0);
+    kip_manager_dedicate_memory (kip, 0x0, ~0UL, L4_SharedMemoryType, 0);
 
-    kip->dedicate_memory(0, 0x80000000 - 1,
+    kip_manager_dedicate_memory (kip, 0, 0x80000000 - 1,
 			 L4_ConventionalMemoryType, 0);
 }

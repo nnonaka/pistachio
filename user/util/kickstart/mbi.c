@@ -40,17 +40,17 @@
  *
  * @returns The total size of the mbi.
  */
-L4_Word_t mbi_t::get_size()
+L4_Word_t mbi_get_size (mbi_t *self)
 {
     L4_Word_t tot = sizeof(mbi_t);
     L4_Word_t alignment_space = sizeof(L4_Word_t);
 
-    tot += 1 + strlen(this->cmdline) + alignment_space;
+    tot += 1 + strlen(self->cmdline) + alignment_space;
 
-    for( L4_Word_t i = 0; i < this->modcount; i++ )
+    for( L4_Word_t i = 0; i < self->modcount; i++ )
     {
 	tot += sizeof(mbi_module_t);
-	tot += 1 + strlen(this->mods[i].cmdline) + alignment_space;
+	tot += 1 + strlen(self->mods[i].cmdline) + alignment_space;
     }
 
     return tot;
@@ -63,37 +63,37 @@ L4_Word_t mbi_t::get_size()
  * 			space to store the copy.  The space is calculated
  * 			via the get_size() method.
  */
-void mbi_t::copy( mbi_t *target )
+void mbi_copy (mbi_t *self, mbi_t *target)
 {
     // Put strings after the target mbi and after the modules.
-    char *strings = (char *)( L4_Word_t(target) + sizeof(mbi_t) + 
-	    sizeof(mbi_module_t)*this->modcount );
+    char *strings = (char *)( ((L4_Word_t)(target)) + sizeof(mbi_t) + 
+	    sizeof(mbi_module_t)*self->modcount );
 
     // Copy the structure.
-    memcopy( target, this, sizeof(mbi_t) );
+    memcopy( target, self, sizeof(mbi_t) );
     // Copy the command line.
-    if( this->cmdline )
+    if( self->cmdline )
     {
 	target->cmdline = strings;
-	strcpy( target->cmdline, this->cmdline );
-	strings = strings + 1 + strlen(this->cmdline);
+	strcpy( target->cmdline, self->cmdline );
+	strings = strings + 1 + strlen(self->cmdline);
 	// TODO: align the strings pointer.
     }
 
-    // Put modules at end of the target mbi.  Assume this will get
+    // Put modules at end of the target mbi.  Assume self will get
     // proper aligment.
-    target->mods = (mbi_module_t *)( L4_Word_t(target) + sizeof(mbi_t) );
+    target->mods = (mbi_module_t *)( ((L4_Word_t)(target)) + sizeof(mbi_t) );
 
-    for( L4_Word_t i = 0; i < this->modcount; i++ )
+    for( L4_Word_t i = 0; i < self->modcount; i++ )
     {
 	// Copy the structure.
-	memcopy( &target->mods[i], &this->mods[i], sizeof(mbi_module_t) );
+	memcopy( &target->mods[i], &self->mods[i], sizeof(mbi_module_t) );
 	// Copy the command line.
-	if( this->mods[i].cmdline )
+	if( self->mods[i].cmdline )
 	{
 	    target->mods[i].cmdline = strings;
-	    strcpy( target->mods[i].cmdline, this->mods[i].cmdline );
-	    strings = strings + 1 + strlen(this->mods[i].cmdline);
+	    strcpy( target->mods[i].cmdline, self->mods[i].cmdline );
+	    strings = strings + 1 + strlen(self->mods[i].cmdline);
 	    // TODO: align the strings pointer.
 	}
     }
@@ -108,23 +108,23 @@ void mbi_t::copy( mbi_t *target )
  *
  * @returns true if there is no conflict, otherwise false.
  */
-bool mbi_t::is_mem_region_free( L4_Word_t start, L4_Word_t size )
+bool mbi_is_mem_region_free (mbi_t *self, L4_Word_t start, L4_Word_t size)
 {
     L4_Word_t end = start - 1 + size;
 
     // Look for conflicts with modules.
-    for( L4_Word_t i = 0; i < this->modcount; i++ )
+    for( L4_Word_t i = 0; i < self->modcount; i++ )
     {
-	L4_Word_t mod_start = this->mods[i].start;
-	L4_Word_t mod_end = this->mods[i].end;
+	L4_Word_t mod_start = self->mods[i].start;
+	L4_Word_t mod_end = self->mods[i].end;
 	if( is_intersection(start, end, mod_start, mod_end) )
 	    return false;
     }
 
     // Look for a conflict with the bootloader.
     extern char _kickstart_begin[], _kickstart_end[];
-    L4_Word_t kick_begin = L4_Word_t(_kickstart_begin);
-    L4_Word_t kick_end = L4_Word_t(_kickstart_end);
+    L4_Word_t kick_begin = ((L4_Word_t)(_kickstart_begin));
+    L4_Word_t kick_end = ((L4_Word_t)(_kickstart_end));
     return !is_intersection( start, end, kick_begin, kick_end );
 }
 

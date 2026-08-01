@@ -44,7 +44,7 @@
  * Main kickstart loader function.  Parses through all loader formats
  * to find a valid one.
  */
-extern "C" void loader (void)
+void loader (void)
 {
     loader_format_t * fmt = NULL;
 

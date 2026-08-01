@@ -32,7 +32,7 @@
 #ifndef __USER__LIB__IO__AMD64_PORT_H__
 #define __USER__LIB__IO__AMD64_PORT_H__
 
-extern inline L4_Word8_t inb(const L4_Word16_t port)
+static inline L4_Word8_t inb(const L4_Word16_t port)
 {
     L4_Word8_t val;
 
@@ -41,7 +41,7 @@ extern inline L4_Word8_t inb(const L4_Word16_t port)
     return val;
 }
 
-extern inline void outb(const L4_Word16_t port, const L4_Word8_t val)
+static inline void outb(const L4_Word16_t port, const L4_Word8_t val)
 {
     __asm__ __volatile__ ("outb %0, %w1" : : "a"(val), "dN"(port));
 }

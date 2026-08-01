@@ -49,8 +49,16 @@
 #define BI_NS BI64
 #endif
 
-namespace BI_NS
-{
+/* Upstream put this file's three functions in `namespace BI_NS'.  BI_NS is now
+   the name prefix bootinfo.h's two preprocessor-renamed inclusions produce,
+   and NS() pastes it on.  Notes §173. */
+#define __NS_CAT2(a,b)	a##_##b
+#define __NS_CAT(a,b)	__NS_CAT2(a,b)
+#define NS(x)		__NS_CAT(BI_NS,x)
+
+/* elf.h declares the two widths as elf_find_sections_bi32/_bi64. */
+#define BI32_elf_find_sections	elf_find_sections_bi32
+#define BI64_elf_find_sections	elf_find_sections_bi64
 
 /**
  * Initialize bootinfo structure
@@ -61,7 +69,7 @@ namespace BI_NS
  *
  * @returns pointer to first bootinfo record
  */
-L4_BootRec_t * init_bootinfo (L4_BootInfo_t * bi)
+NS(L4_BootRec_t) * NS(init_bootinfo) (NS(L4_BootInfo_t) * bi)
 {
     bi->magic		= L4_BOOTINFO_MAGIC;
     bi->version		= L4_BOOTINFO_VERSION;
@@ -69,7 +77,7 @@ L4_BootRec_t * init_bootinfo (L4_BootInfo_t * bi)
     bi->first_entry	= sizeof (*bi);
     bi->num_entries	= 0;
 
-    return L4_BootInfo_FirstEntry (bi);
+    return NS(L4_BootInfo_FirstEntry) (bi);
 }
 
 
@@ -88,13 +96,13 @@ L4_BootRec_t * init_bootinfo (L4_BootInfo_t * bi)
  *
  * @returns pointer to next free bootinfo record
  */
-L4_BootRec_t * record_bootinfo_modules (L4_BootInfo_t * bi,
-					L4_BootRec_t * rec,
+NS(L4_BootRec_t) * NS(record_bootinfo_modules) (NS(L4_BootInfo_t) * bi,
+					NS(L4_BootRec_t) * rec,
 					mbi_t * mbi,
 					mbi_module_t orig_mbi_modules[],
 					unsigned int decode_count)
 {
-    L4_Word_t sz;
+    NS(L4_Word_t) sz;
 
     // XXX Make sure that we do not overflow the allocated memory for
     // the bootinfo structure.
@@ -103,10 +111,10 @@ L4_BootRec_t * record_bootinfo_modules (L4_BootInfo_t * bi,
     {
 	for (unsigned int i = 1; i < mbi->modcount; i++)
 	{
-	    L4_Boot_SimpleExec_t * exec = (L4_Boot_SimpleExec_t *) rec;
+	    NS(L4_Boot_SimpleExec_t) * exec = (NS(L4_Boot_SimpleExec_t) *) rec;
 
 	    if (i < decode_count &&
-		elf_find_sections (orig_mbi_modules[i].start, exec))
+		NS(elf_find_sections) (orig_mbi_modules[i].start, exec))
 	    {
 		// Found en ELF module.  Copy commandline into
 		// bootinfo.
@@ -114,13 +122,13 @@ L4_BootRec_t * record_bootinfo_modules (L4_BootInfo_t * bi,
 		exec->cmdline_offset = sz;
 		strcpy ((char *) exec + sz, mbi->mods[i].cmdline);
 		sz += strlen (mbi->mods[i].cmdline) + 1;
-		sz = align_up (sz, sizeof (L4_Word_t));
+		sz = align_up (sz, sizeof (NS(L4_Word_t)));
 		exec->offset_next = sz;
 	    }
 	    else
 	    {
 		// Record module as a simple module.
-		L4_Boot_Module_t * mod = (L4_Boot_Module_t *) rec;
+		NS(L4_Boot_Module_t) * mod = (NS(L4_Boot_Module_t) *) rec;
 		sz = sizeof (*mod);
 
 		mod->type	 = L4_BootInfo_Module;
@@ -133,11 +141,11 @@ L4_BootRec_t * record_bootinfo_modules (L4_BootInfo_t * bi,
 		mod->cmdline_offset = sz;
 		strcpy ((char *) exec + sz, mbi->mods[i].cmdline);
 		sz += strlen (mbi->mods[i].cmdline) + 1;
-		sz = align_up (sz, sizeof (L4_Word_t));
+		sz = align_up (sz, sizeof (NS(L4_Word_t)));
 		mod->offset_next = sz;
 	    }
 
-	    rec = (L4_BootRec_t *) ((L4_Word_t) rec + sz);
+	    rec = (NS(L4_BootRec_t) *) ((NS(L4_Word_t)) rec + sz);
 	    bi->num_entries++;
 	    bi->size += sz;
 	}
@@ -158,20 +166,19 @@ L4_BootRec_t * record_bootinfo_modules (L4_BootInfo_t * bi,
  *
  * @returns pointer to next free bootinfo record
  */
-L4_BootRec_t * record_bootinfo_mbi (L4_BootInfo_t * bi,
-				    L4_BootRec_t * rec,
+NS(L4_BootRec_t) * NS(record_bootinfo_mbi) (NS(L4_BootInfo_t) * bi,
+				    NS(L4_BootRec_t) * rec,
 				    mbi_t * mbi)
 {
-    L4_Boot_MBI_t * bimbi = (L4_Boot_MBI_t *) rec;
+    NS(L4_Boot_MBI_t) * bimbi = (NS(L4_Boot_MBI_t) *) rec;
 
     bimbi->type		= L4_BootInfo_Multiboot;
     bimbi->version	= 1;
     bimbi->offset_next	= sizeof (*bimbi);
-    bimbi->address	= (L4_Word_t) mbi;
+    bimbi->address	= (NS(L4_Word_t)) mbi;
 
     bi->num_entries++;
     bi->size += sizeof (*bimbi);
-    return L4_Next (rec);
+    return NS(L4_BootRec_Next) (rec);
 }
 
-}

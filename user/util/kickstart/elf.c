@@ -36,6 +36,24 @@
 #include "elf.h"
 #include "lib.h"
 
+/* BI_NS / BI_NS2 named the bootinfo namespace; they are now the name prefix
+   bootinfo.h's two preprocessor-renamed inclusions produce.  Notes §173. */
+#define __NS_CAT2(a,b)	a##_##b
+#define __NS_CAT(a,b)	__NS_CAT2(a,b)
+#define NS(x)		__NS_CAT(BI_NS,x)
+#define NS2(x)		__NS_CAT(BI_NS2,x)
+
+/* elf_find_sections was overloaded on the bootinfo width: one definition for
+   the native one and, where a second width is also wanted, one that converts.
+   C needs the two names, so they are chosen here. */
+#if defined(L4_32BIT)
+# define elf_find_sections_native	elf_find_sections_bi32
+# define elf_find_sections_other	elf_find_sections_bi64
+#else
+# define elf_find_sections_native	elf_find_sections_bi64
+# define elf_find_sections_other	elf_find_sections_bi32
+#endif
+
 #if defined(L4_32BIT)
 #define BI_NS BI32
 #elif defined(L4_64BIT)
@@ -50,7 +68,7 @@ bool elf_load32 (L4_Word_t file_start,
 		 L4_MemCheck_Func_t check);
 
 bool elf_find_sections32 (L4_Word_t addr,
-			  BI_NS::L4_Boot_SimpleExec_t * exec);
+			  NS(L4_Boot_SimpleExec_t) * exec);
 
 bool elf_load64 (L4_Word_t file_start,
 		 L4_Word_t file_end,
@@ -60,7 +78,7 @@ bool elf_load64 (L4_Word_t file_start,
 		 L4_MemCheck_Func_t check);
 
 bool elf_find_sections64 (L4_Word_t addr,
-			  BI_NS::L4_Boot_SimpleExec_t * exec);
+			  NS(L4_Boot_SimpleExec_t) * exec);
 
 
 
@@ -147,7 +165,7 @@ bool __elf_func(elf_load) (L4_Word_t file_start,
 
 
 bool __elf_func(elf_find_sections) (L4_Word_t addr,
-				    BI_NS::L4_Boot_SimpleExec_t * exec)
+				    NS(L4_Boot_SimpleExec_t) * exec)
 {
     // Pointer to ELF file header
     ehdr_t * eh = (ehdr_t *) addr;
@@ -332,14 +350,14 @@ bool elf_load (L4_Word_t file_start,
 	*type = eh->ident[4];
 
 #if defined(L4_32BIT) || defined(ALSO_ELF32)
-    if (eh->is_32bit ())
+    if (ehdr_is_32bit (eh))
 	return elf_load32 (file_start, file_end,
 			   memory_start, memory_end, entry,
 			   check);
 #endif
 
 #if defined(L4_64BIT) || defined(ALSO_ELF64)
-    if (eh->is_64bit ())
+    if (ehdr_is_64bit (eh))
 	return elf_load64 (file_start, file_end,
 			   memory_start, memory_end, entry,
 			   check);
@@ -362,8 +380,8 @@ bool elf_load (L4_Word_t file_start,
  *
  * @returns true if able to find sections, false otherwise
  */
-bool elf_find_sections (L4_Word_t addr,
-			BI_NS::L4_Boot_SimpleExec_t * exec)
+bool elf_find_sections_native (L4_Word_t addr,
+			NS(L4_Boot_SimpleExec_t) * exec)
 {
     // Pointer to ELF file header
     ehdr_t * eh = (ehdr_t *) addr;
@@ -379,12 +397,12 @@ bool elf_find_sections (L4_Word_t addr,
     }
 
 #if defined(L4_32BIT) || defined(ALSO_ELF32)
-    if (eh->is_32bit ())
+    if (ehdr_is_32bit (eh))
 	return elf_find_sections32 (addr, exec);
 #endif
 
 #if defined(L4_64BIT) || defined(ALSO_ELF64)
-    if (eh->is_64bit ())
+    if (ehdr_is_64bit (eh))
 	return elf_find_sections64 (addr, exec);
 #endif
 
@@ -399,12 +417,12 @@ bool elf_find_sections (L4_Word_t addr,
 #endif
 
 #if defined(BI_NS2)
-bool elf_find_sections (L4_Word_t addr,
-			BI_NS2::L4_Boot_SimpleExec_t * exec)
+bool elf_find_sections_other (L4_Word_t addr,
+			NS2(L4_Boot_SimpleExec_t) * exec)
 {
-    BI_NS::L4_Boot_SimpleExec_t e;
+    NS(L4_Boot_SimpleExec_t) e;
 
-    if (elf_find_sections (addr, &e))
+    if (elf_find_sections_native (addr, &e))
     {
 	exec->offset_next = sizeof (*exec);
 
