@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2003, University of New South Wales
  *
- * File path:	piggybacker/ofppc64/donote.cc
+ * File path:	piggybacker/ofppc64/donote.c
  * Description:	Add a note program header to the loader image
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,6 +36,8 @@
 #include <string.h>
 
 
+/* was `char *'; a string literal is const in C++ and this is built by the
+   host compiler, so it stays a plain char* now that the file is C. */
 char *target = "PowerPC";
 
 typedef unsigned int	uint;

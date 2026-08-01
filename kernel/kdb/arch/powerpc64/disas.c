@@ -47,8 +47,8 @@
 #undef UNUSED
 
 #include "../../contrib/disas/ppc.h"
-#include "../../contrib/disas/ppc-opc.cc"
-#include "../../contrib/disas/ppc-dis.cc"
+#include "../../contrib/disas/ppc-opc.c"
+#include "../../contrib/disas/ppc-dis.c"
 
 /* Undefine conflicting macros. */
 #undef MB

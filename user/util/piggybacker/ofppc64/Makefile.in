@@ -50,8 +50,9 @@ LDS_powerpc64=	$(top_srcdir)/util/piggybacker/ofppc64/ofppc64.lds
 CFLAGS_powerpc64+=	-msoft-float -mminimal-toc
 CPPFLAGS_powerpc64+=	-msoft-float -mminimal-toc
 
-donote: donote.cc
-	g++ -o donote $(top_srcdir)/util/piggybacker/ofppc64/donote.cc
+# A host tool, so the host compiler -- not $(CC), which is the cross one.
+donote: donote.c
+	gcc -o donote $(top_srcdir)/util/piggybacker/ofppc64/donote.c
 
 pre-all: donote
 	@if test ! -d ../common; then mkdir ../common; fi

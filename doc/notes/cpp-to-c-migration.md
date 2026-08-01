@@ -9709,3 +9709,46 @@ and in a build where EFI were selectable the question would not arise.
     user .cc:   1   (piggybacker/ofppc64/donote.cc, a host tool built with g++)
 
 x86-x64-p4, ofppc, ofg5 and ppc44x kernels all still build.
+
+## §177 -- the last three, and a miscount
+
+`donote.cc` is C, and so are the two files I had not been counting.
+
+`util/piggybacker/ofppc64/donote.cc` is a host tool -- it stamps the IEEE-1275
+note into the built loader -- and was the only thing left after §176. It was
+already C in everything but name; the build rule now calls `gcc` rather than
+`g++`, with a comment saying why it is not `$(CC)` (that is the cross
+compiler). Verified by rebuilding the ofg5 loader and comparing the note it
+writes: byte-identical to the C++ tool's output,
+
+    ff ff ff ff 00 c0 00 00 ff ff ff ff ff ff ff ff ff ff ff ff 00 00 40 00
+
+### The miscount
+
+Every count I have reported in §172-§176 came from `find kernel user -name
+'*.cc'`, which misses anything outside those two directories. There were two:
+`contrib/disas/ppc-opc.cc` and `ppc-dis.cc`, the binutils PowerPC
+disassembler, at the *top* of the tree rather than under `user/contrib`.
+
+They are not compiled as translation units at all --
+`kdb/arch/powerpc/instr.c` and `kdb/arch/powerpc64/disas.c` `#include` them
+textually, with a comment explaining that the disassembler "lives outside the
+kernel tree in the contrib branch, so we have to 'include' it". Both includers
+are already C, so 4669 lines of "C++" have in fact been compiling as C for as
+long as the conversion has been running. The change is the rename and the four
+`#include` lines.
+
+Verified where it actually matters: ppc44x sets CONFIG_KDB_DISAS, and its
+`instr.o` is 148 KB and carries `powerpc_opcodes` and
+`print_insn_big_powerpc`. ofppc leaves that option off, so its instr.o does
+not contain them -- which is why building ofppc alone would not have proved
+anything.
+
+### Where it stands
+
+    *.cc in the whole tree: 0
+
+That is `find . -name '*.cc'` from the top, not a subset. Some stale
+`print32.cc`/`amd6432.cc`/`get_hex32.cc` copies were sitting in build
+directories -- artefacts of kickstart's 32-bit sub-build from before the
+conversion, since regenerated as `.c` -- and have been removed.
