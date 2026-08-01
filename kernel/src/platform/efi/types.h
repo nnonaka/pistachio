@@ -38,24 +38,23 @@ typedef struct {}	efi_interface_t;
 typedef u8_t		efi_bool_t;
 
 
-class efi_table_header_t
+struct efi_table_header_t
 {
-public:
     u64_t	signature;
     u32_t	revisions;
     u32_t	header_size;
     u32_t	crc32;
     u32_t	__reserved;
 };
+typedef struct efi_table_header_t efi_table_header_t;
 
 
 
 /**
  * efi_guid_t: unique identifier value for EFI objects and tables
  */
-class efi_guid_t
+struct efi_guid_t
 {
-public:
     union{
 	u8_t		raw8[16];
 	u32_t		raw32[4];
@@ -68,9 +67,12 @@ public:
 	} x;
     };
 
-    inline bool operator == (efi_guid_t r)
-	{ return (raw64[0] == r.raw64[0]) && (raw64[1] == r.raw64[1]); }
 };
+typedef struct efi_guid_t efi_guid_t;
+
+/* was operator== on efi_guid_t. */
+INLINE bool efi_guid_equal (efi_guid_t l, efi_guid_t r)
+{ return (l.raw64[0] == r.raw64[0]) && (l.raw64[1] == r.raw64[1]); }
 
 
 /*

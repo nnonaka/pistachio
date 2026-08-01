@@ -29,4 +29,4 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += kdb/platform/simics/io.cc
+SOURCES += kdb/platform/simics/io.c

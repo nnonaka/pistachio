@@ -37,9 +37,8 @@
 #define HCDP_DEV_CONSOLE	0
 #define HCDP_DEV_DEBUG		1
 
-class hcdp_dev_t
+struct hcdp_dev_t
 {
-public:
     u8_t	type;
     u8_t	bits;
     u8_t	parity;
@@ -59,21 +58,22 @@ private:
     u8_t	reserved;
 } __attribute__((packed));
 
-class hcdp_table_t
+struct hcdp_table_t
 {
-    acpi_thead_t	header;
-public:
+    acpi_thead_t	header;		/* was private */
     u32_t		num_entries;
     hcdp_dev_t		hcdp_dev[1];
-
-    hcdp_dev_t *find(u8_t type) {
-	for (u32_t i = 0; i < num_entries; i++) {
-	    if (hcdp_dev[i].type == type)
-		return &hcdp_dev[i];
-	}
-	return NULL;
-    }
 } __attribute__((packed));
+typedef struct hcdp_table_t hcdp_table_t;
+
+INLINE hcdp_dev_t *hcdp_table_find (hcdp_table_t *self, u8_t type) {
+    u32_t i;
+    for (i = 0; i < self->num_entries; i++) {
+	if (self->hcdp_dev[i].type == type)
+	    return &self->hcdp_dev[i];
+    }
+    return NULL;
+}
 
 
 #endif /* !__PLATFORM__EFI__HCDP_H__ */

@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2002, 2006,  Karlsruhe University
+ * Copyright (C) 2002, 2003,  Karlsruhe University
  *                
- * File path:     platform/efi/acpi.cc
- * Description:   ACPI support code for EFI
+ * File path:     kdb/platform/efi/reset.cc
+ * Description:   Reset system using an EFI service call
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,29 +26,28 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: acpi.cc,v 1.5 2006/05/24 09:43:56 stoess Exp $
+ * $Id: reset.cc,v 1.7 2003/09/24 19:05:18 skoglund Exp $
  *                
  ********************************************************************/
-#include <debug.h>
-#include <acpi.h>
+#include <kdb/cmd.h>
+#include <kdb/kdb.h>
 #include INC_PLAT(system_table.h)
+#include INC_PLAT(runtime_services.h)
 
-/* ACPI 2.0 Specification, 5.2.4.2
-   Finding the RSDP on EFI Enabled Systems */
 
-acpi_rsdp_t* acpi_rsdp_t::locate(addr_t addr)
+/**
+ * cmd_reset: reset system
+ */
+DECLARE_CMD (cmd_reset, root, '6', "reset", "reset system");
+
+CMD(cmd_reset, cg)
 {
-    acpi_rsdp_t *p;
+#if !defined(CONFIG_CPU_IA64_SKI)
+    efi_runtime_services_reset_system
+	(efi_runtime_services, efi_reset_warm, efi_success, 0, NULL);
+#endif
 
-    /* look for ACPI 2.0 RSDT pointer */
-    p = (acpi_rsdp_t*) efi_config_table.find_table(ACPI_20_TABLE_GUID);
-    if (p != NULL)
-	return p;
+    /* NOTREACHED */
+    return CMD_NOQUIT;
+}
 
-    /* look for ACPI 1.0 RSDT pointer */
-    p = (acpi_rsdp_t*) efi_config_table.find_table(ACPI_TABLE_GUID);
-    if (p != NULL)
-	return p;
-
-    return NULL;
-};

@@ -33,9 +33,9 @@
 #include <init.h>
 #include <debug.h>
 
-extern "C" void init_arch() SECTION(SEC_INIT);
+EXTERN_C void init_arch (void) SECTION(SEC_INIT);
 
-void init_arch()
+void init_arch (void)
 {
     spin_forever(1);
 }

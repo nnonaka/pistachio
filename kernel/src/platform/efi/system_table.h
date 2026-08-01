@@ -34,42 +34,44 @@
 
 #include INC_PLAT(types.h)
 
-class efi_runtime_services_t;
-class efi_boot_services_t;
+struct efi_runtime_services_t; typedef struct efi_runtime_services_t efi_runtime_services_t;
+struct efi_boot_services_t; typedef struct efi_boot_services_t efi_boot_services_t;
 
 
 /**
  * Entry in the EFI configuration table.
  */
-class efi_config_table_t
+struct efi_config_table_t
 {
-public:
     efi_guid_t		vendor_guid;
     void		*vendor_table;
 };
+typedef struct efi_config_table_t efi_config_table_t;
 
 /**
  * EFI configuration table pointer.
  */
-class efi_config_table_ptr_t
+struct efi_config_table_ptr_t
 {
-public:
     word_t			number_of_table_entries;
     efi_config_table_t		*config_table;
-
-    void * find_table (efi_guid_t guid);
 };
+typedef struct efi_config_table_ptr_t efi_config_table_ptr_t;
+
+/* the body is INLINE below. */
 
 /**
  * Search for indicated system table.
  * @param guid		unique id of table
  * @return point to table, or NULL if table is not found.
  */
-INLINE void * efi_config_table_ptr_t::find_table (efi_guid_t guid)
+INLINE void * efi_config_table_ptr_find_table (efi_config_table_ptr_t *self, efi_guid_t guid)
 {
-    for (word_t i = 0; i < number_of_table_entries; i++)
-	if (config_table[i].vendor_guid == guid)
-	    return config_table[i].vendor_table;
+    word_t i;
+
+    for (i = 0; i < self->number_of_table_entries; i++)
+	if (efi_guid_equal (self->config_table[i].vendor_guid, guid))
+	    return self->config_table[i].vendor_table;
 
     return NULL;
 } 
@@ -78,9 +80,8 @@ INLINE void * efi_config_table_ptr_t::find_table (efi_guid_t guid)
 /**
  * System table provided by EFI firmware.
  */
-class efi_system_table_t
-{   
-public:
+struct efi_system_table_t
+{
     efi_table_header_t		hdr;
 
     char16			*firmware_vendor;
@@ -98,6 +99,7 @@ public:
 
     efi_config_table_ptr_t	config_table;
 };
+typedef struct efi_system_table_t efi_system_table_t;
 
 
 /*

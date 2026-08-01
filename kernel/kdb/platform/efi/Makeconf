@@ -29,5 +29,5 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES+=	kdb/platform/efi/memmap.cc \
-		kdb/platform/efi/reset.cc
+SOURCES+=	kdb/platform/efi/memmap.c \
+		kdb/platform/efi/reset.c

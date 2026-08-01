@@ -1,9 +1,9 @@
 /*********************************************************************
  *                
- * Copyright (C) 2002, 2003,  Karlsruhe University
+ * Copyright (C) 2002, 2006,  Karlsruhe University
  *                
- * File path:     kdb/platform/efi/reset.cc
- * Description:   Reset system using an EFI service call
+ * File path:     platform/efi/acpi.cc
+ * Description:   ACPI support code for EFI
  *                
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,30 +26,31 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *                
- * $Id: reset.cc,v 1.7 2003/09/24 19:05:18 skoglund Exp $
+ * $Id: acpi.cc,v 1.5 2006/05/24 09:43:56 stoess Exp $
  *                
  ********************************************************************/
-#include <kdb/cmd.h>
-#include <kdb/kdb.h>
+#include <debug.h>
+#include <acpi.h>
 #include INC_PLAT(system_table.h)
-#include INC_PLAT(runtime_services.h)
 
+/* ACPI 2.0 Specification, 5.2.4.2
+   Finding the RSDP on EFI Enabled Systems */
 
-/**
- * cmd_reset: reset system
- */
-DECLARE_CMD (cmd_reset, root, '6', "reset", "reset system");
-
-CMD(cmd_reset, cg)
+/* platform/pc99/acpi.h names the same entry point acpi_rsdp_locate; this is
+   the EFI platform's copy of it. */
+acpi_rsdp_t* acpi_rsdp_locate (addr_t addr)
 {
-#if !defined(CONFIG_CPU_IA64_SKI)
-    efi_runtime_services->reset_system
-	(efi_runtime_services_t::warm,
-	 efi_runtime_services_t::success,
-	 0, NULL);
-#endif
+    acpi_rsdp_t *p;
 
-    /* NOTREACHED */
-    return CMD_NOQUIT;
+    /* look for ACPI 2.0 RSDT pointer */
+    p = (acpi_rsdp_t*) efi_config_table_ptr_find_table (&efi_config_table, ACPI_20_TABLE_GUID);
+    if (p != NULL)
+	return p;
+
+    /* look for ACPI 1.0 RSDT pointer */
+    p = (acpi_rsdp_t*) efi_config_table_ptr_find_table (&efi_config_table, ACPI_TABLE_GUID);
+    if (p != NULL)
+	return p;
+
+    return NULL;
 }
-

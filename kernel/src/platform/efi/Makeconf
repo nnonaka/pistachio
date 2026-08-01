@@ -30,5 +30,5 @@
 ##                
 ######################################################################
 ifeq ("$(CONFIG_ACPI)","y")
-SOURCES += src/platform/efi/acpi.cc
+SOURCES += src/platform/efi/acpi.c
 endif

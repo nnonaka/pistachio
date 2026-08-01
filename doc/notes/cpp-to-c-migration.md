@@ -9663,3 +9663,49 @@ their config.status was already generated.
 
 The one remaining ofppc build failure is `kickstart.uimage`: `mkimage`, the
 U-Boot image tool, is not installed here. Nothing to do with the code.
+
+## §176 -- the last five kernel files
+
+`src/arch/x86/x64/init.cc`, `src/platform/efi/acpi.cc`,
+`kdb/platform/efi/{memmap,reset}.cc` and `kdb/platform/simics/io.cc` are C,
+together with the six EFI headers they need. Nothing selects any of them --
+`x64/init.cc` is named by no Makeconf, and neither `efi` nor `simics` has a CML
+platform symbol -- so they were compiled by hand with the x86-x64 kernel's own
+flags and `__PLATFORM__` set per file. Compile only; there is no link.
+
+    compiled=5  failed=0
+
+### What the headers held
+
+Fifteen classes across six headers, and three things that needed a decision:
+
+`efi_guid_t::operator ==` becomes `efi_guid_equal`; its one caller is
+`find_table`'s comparison loop.
+
+`efi_runtime_services_t` nested two enums, `reset_type_e` and `status_e`. At
+file scope their members would collide with common words -- `success`, `warm`,
+`cold`, `not_found` -- so they carry the `efi_` prefix the rest of the platform
+uses: `efi_reset_warm`, `efi_success`, and so on. `kdb/platform/efi/reset.cc`
+is the only caller and named them fully qualified anyway.
+
+The `INLINE` bodies in these headers are `static inline`, so the prototypes I
+first wrote above them were a non-static declaration ahead of a static
+definition -- a conflict in C, and the same trap `glue/v4-powerpc64/pgent.h`
+hit in §165. They are gone; each header says where the body is.
+
+### One artefact worth recording, because it is not a defect
+
+`kdb/platform/efi/memmap.c` at first failed with `cmd_efi_memmap undeclared`.
+`DECLARE_CMD` names the command function before `CMD` defines it, and the
+declaration comes from `kdb_class_helper.h` -- which the build *generates* by
+scanning the sources the configuration selects. A file no configuration
+selects therefore never gets its declaration emitted. Supplying the one line
+the generator would have produced compiles it. Nothing in the file is wrong,
+and in a build where EFI were selectable the question would not arise.
+
+### Where it stands
+
+    kernel .cc: 0
+    user .cc:   1   (piggybacker/ofppc64/donote.cc, a host tool built with g++)
+
+x86-x64-p4, ofppc, ofg5 and ppc44x kernels all still build.

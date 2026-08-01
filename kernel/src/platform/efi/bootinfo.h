@@ -34,9 +34,8 @@
 
 #define EFI_BOOTINFO_VERSION	(1)
 
-class efi_bootinfo_t
+struct efi_bootinfo_t
 {
-public:
     union {
 	char	string[8];		// "L4Ka ldr"
 	u64_t	number;
@@ -61,6 +60,7 @@ public:
 	    return true;
 	}
 };
+typedef struct efi_bootinfo_t efi_bootinfo_t;
 
 
 #endif /* !__PLATFORM__EFI__BOOTINFO_H__ */

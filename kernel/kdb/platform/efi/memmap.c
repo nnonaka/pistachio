@@ -64,21 +64,21 @@ CMD(cmd_efi_memmap, cg)
 
     printf ("EFI memory map:\n");
 
-    efi_memmap.reset ();
-    while ((desc = efi_memmap.next ()) != NULL)
+    efi_memory_map_reset (&efi_memmap);
+    while ((desc = efi_memory_map_next (&efi_memmap)) != NULL)
     {
 	// Name
-	int n = 30 - printf ("  %s", maptypes[desc->type ()]);
+	int n = 30 - printf ("  %s", maptypes[efi_memory_desc_type (desc)]);
 	while (n-- > 0) printf (" ");
 
 	// Phyiscal location
 	printf ("  0x%p - 0x%p  ",
-		desc->physical_start (),
-		(word_t) desc->physical_start () +
-		(desc->number_of_pages () * 4096));
+		efi_memory_desc_physical_start (desc),
+		(word_t) efi_memory_desc_physical_start (desc) +
+		(efi_memory_desc_number_of_pages (desc) * 4096));
 
 	// Size
-	word_t size = desc->number_of_pages () * 4096;
+	word_t size = efi_memory_desc_number_of_pages (desc) * 4096;
 	if (size >= 1024*1024*1024)
 	    printf ("%5dGB  ", size / (1024*1024*1024));
 	else if (size >= 1024*1024)
@@ -87,7 +87,7 @@ CMD(cmd_efi_memmap, cg)
 	    printf ("%5dKB  ", size / 1024);
 
 	// Attributes
-	u64_t a = desc->attribute ();
+	u64_t a = efi_memory_desc_attribute (desc);
 	if (a & EFI_MEMORY_UC) printf (" UC");
 	if (a & EFI_MEMORY_WC) printf (" WC");
 	if (a & EFI_MEMORY_WT) printf (" WT");

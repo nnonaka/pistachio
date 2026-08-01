@@ -35,9 +35,8 @@
 #include INC_PLAT(types.h)
 #include INC_PLAT(memory_map.h)
 
-class efi_time_t
+struct efi_time_t
 {
-public:
     u16_t	year;
     u8_t	month;
     u8_t	day;
@@ -50,6 +49,7 @@ public:
     u8_t	daylight;
     u8_t	__pad2;
 };
+typedef struct efi_time_t efi_time_t;
 
 /* Daylight definitions. */
 #define EFI_TIME_ADJUST_DAYLIGHT	0x01
@@ -58,13 +58,13 @@ public:
 /* Timezone definitions. */
 #define EFI_UNSPECIFIED_TIMEZONE	0x07ff
 
-class efi_timecap_t
+struct efi_timecap_t
 {
-public:
     u32_t	resoultion;
     u32_t	accuracy;
     efi_bool_t	sets_to_zero;
 };
+typedef struct efi_timecap_t efi_timecap_t;
 
 
 /* Variable attributes. */
@@ -85,9 +85,8 @@ typedef word_t (*efi_func_t)(word_t, word_t, word_t, word_t, word_t);
 /**
  * efi_runtime_services_t: table for EFI runtime services
  */
-class efi_runtime_services_t
+struct efi_runtime_services_t
 {
-public:
     efi_table_header_t	hdr;
 
     /*
@@ -106,40 +105,35 @@ public:
     efi_func_t get_next_high_monotinic_count_f;
     efi_func_t reset_system_f;
 
-    enum reset_type_e {
-	cold,
-	warm
-    };
-
-    enum status_e {
-	success =		0,
-	invalid_parameter =	__EFIERR(2),
-	unsupported =		__EFIERR(3),
-	device_error =		__EFIERR(7),
-	not_found =		__EFIERR(14)
-    };
-
-    /*
-     * Function wrappers.
-     */
-
-    status_e set_virtual_address_map (word_t memory_map_size,
-				      word_t descriptor_size,
-				      word_t descriptor_version,
-				      efi_memory_desc_t * virt_map);
-
-    void reset_system (efi_runtime_services_t::reset_type_e reset_type,
-		       efi_runtime_services_t::status_e reset_status,
-		       word_t data_size,
-		       char16 * reset_data);
 };
+typedef struct efi_runtime_services_t efi_runtime_services_t;
+
+/* were nested enums of efi_runtime_services_t. */
+enum efi_reset_type_e {
+    efi_reset_cold,
+    efi_reset_warm
+};
+
+enum efi_status_e {
+    efi_success =		0,
+    efi_invalid_parameter =	__EFIERR(2),
+    efi_unsupported =		__EFIERR(3),
+    efi_device_error =		__EFIERR(7),
+    efi_not_found =		__EFIERR(14)
+};
+
+/*
+ * Function wrappers.
+ */
+
+/* Both bodies are INLINE at the end of this header. */
 
 
 /*
  * Architecure dependent stub for performing physical EFI call.
  */
 
-extern "C" efi_runtime_services_t::status_e
+EXTERN_C enum efi_status_e
 call_efi_physical (word_t function, word_t a0, word_t a1,
 		   word_t a2, word_t a3, word_t a4);
 
@@ -153,7 +147,7 @@ call_efi_physical (word_t function, word_t a0, word_t a1,
 
 #if __ARCH__ == ia64
 
-extern "C" efi_runtime_services_t::status_e
+EXTERN_C enum efi_status_e
 call_efi (word_t function, word_t a0, word_t a1,
 	  word_t a2, word_t a3, word_t a4);
 
@@ -170,25 +164,27 @@ call_efi (word_t function, word_t a0, word_t a1,
  * Wrappers for EFI runtime service calls.
  */
 
-INLINE efi_runtime_services_t::status_e
-efi_runtime_services_t::set_virtual_address_map (word_t memory_map_size,
+INLINE enum efi_status_e
+efi_runtime_services_set_virtual_address_map (efi_runtime_services_t *self,
+						 word_t memory_map_size,
 						 word_t descriptor_size,
 						 word_t descriptor_version,
 						 efi_memory_desc_t * virt_map)
 {
-    return call_efi_physical ((word_t) set_virtual_address_map_f,
+    return call_efi_physical ((word_t) self->set_virtual_address_map_f,
 			      memory_map_size, descriptor_size,
 			      descriptor_version, (word_t) virt_map, 0);
 }
 
 
 INLINE void
-efi_runtime_services_t::reset_system (efi_runtime_services_t::reset_type_e rt,
-				      efi_runtime_services_t::status_e rs,
+efi_runtime_services_reset_system (efi_runtime_services_t *self,
+				      enum efi_reset_type_e rt,
+				      enum efi_status_e rs,
 				      word_t data_size,
 				      char16 * reset_data)
 {
-    (void) CALL_EFI (reset_system_f, (word_t) rt, (word_t) rs, data_size,
+    (void) CALL_EFI (self->reset_system_f, (word_t) rt, (word_t) rs, data_size,
 		     (word_t) reset_data, 0);
 }
 

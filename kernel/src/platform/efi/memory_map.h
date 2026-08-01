@@ -84,37 +84,29 @@ typedef enum {
 
 #define EFI_MEMORY_DESC_VERSION	1
 
-class efi_memory_desc_t
+struct efi_memory_desc_t
 {
+    /* were private */
     u32_t	_type;
     addr_t	_physical_start;
     addr_t	_virtual_start;
     u64_t	_number_of_pages;
     u64_t	_attribute;
-
-public:
-    efi_memory_type_t type (void);
-    addr_t physical_start (void);
-    addr_t virtual_start (void);
-    u64_t number_of_pages (void);
-    u64_t attribute (void);
-
-    void set_virtual_start (addr_t addr);
-
-    void set(efi_memory_type_t type, 
-	     addr_t physical_start, addr_t virtual_start,
-	     u64_t number_of_pages, u64_t attribute);
-	    
 };
+typedef struct efi_memory_desc_t efi_memory_desc_t;
+
+/* The bodies are INLINE (static inline) further down this header, so there are
+   no separate prototypes -- a non-static declaration ahead of a static
+   definition is a conflict in C. */
 
 /**
  * Query the type of the given memory region.
  * @return type of memory region
  */
 INLINE efi_memory_type_t
-efi_memory_desc_t::type (void)
+efi_memory_desc_type (efi_memory_desc_t *self)
 {
-    return (efi_memory_type_t) _type;
+    return (efi_memory_type_t) self->_type;
 }
 
 /**
@@ -122,9 +114,9 @@ efi_memory_desc_t::type (void)
  * @return physical start address of memory region
  */
 INLINE addr_t
-efi_memory_desc_t::physical_start (void)
+efi_memory_desc_physical_start (efi_memory_desc_t *self)
 {
-    return _physical_start;
+    return self->_physical_start;
 }
 
 /**
@@ -134,9 +126,9 @@ efi_memory_desc_t::physical_start (void)
  * @return virtual start address of memory region
  */
 INLINE addr_t
-efi_memory_desc_t::virtual_start (void)
+efi_memory_desc_virtual_start (efi_memory_desc_t *self)
 {
-    return _virtual_start;
+    return self->_virtual_start;
 }
 
 /**
@@ -144,9 +136,9 @@ efi_memory_desc_t::virtual_start (void)
  * @return size of memory region (in 4KB pages)
  */
 INLINE u64_t
-efi_memory_desc_t::number_of_pages (void)
+efi_memory_desc_number_of_pages (efi_memory_desc_t *self)
 {
-    return _number_of_pages;
+    return self->_number_of_pages;
 }
 
 /**
@@ -154,9 +146,9 @@ efi_memory_desc_t::number_of_pages (void)
  * @return 64-bit word of attribute flags
  */
 INLINE u64_t
-efi_memory_desc_t::attribute (void)
+efi_memory_desc_attribute (efi_memory_desc_t *self)
 {
-    return _attribute;
+    return self->_attribute;
 }
 
 /**
@@ -166,9 +158,9 @@ efi_memory_desc_t::attribute (void)
  * @param addr		virtual location of memory region
  */
 INLINE void
-efi_memory_desc_t::set_virtual_start (addr_t addr)
+efi_memory_desc_set_virtual_start (efi_memory_desc_t *self, addr_t addr)
 {
-    _virtual_start = addr;
+    self->_virtual_start = addr;
 }
 
 /**
@@ -181,15 +173,15 @@ efi_memory_desc_t::set_virtual_start (addr_t addr)
  * @param attribute		attribute flags
  */
 INLINE void 
-efi_memory_desc_t::set(efi_memory_type_t type, 
+efi_memory_desc_set (efi_memory_desc_t *self, efi_memory_type_t type, 
 		       addr_t physical_start, addr_t virtual_start,
 		       u64_t number_of_pages, u64_t attribute)
 {
-    _type = type;
-    _physical_start = physical_start;
-    _virtual_start = virtual_start;
-    _number_of_pages = number_of_pages;
-    _attribute = attribute;
+    self->_type = type;
+    self->_physical_start = physical_start;
+    self->_virtual_start = virtual_start;
+    self->_number_of_pages = number_of_pages;
+    self->_attribute = attribute;
 }
 
 
@@ -197,18 +189,17 @@ efi_memory_desc_t::set(efi_memory_type_t type,
 /**
  * Memory map for Extensible Firmware Interface.
  */
-class efi_memory_map_t
+struct efi_memory_map_t
 {
+    /* were private */
     word_t _base;
     word_t _size;
     word_t _desc_size;
     word_t _curptr;
-
-public:
-    void init (addr_t base, word_t map_size, word_t desc_size);
-    void reset (void);
-    efi_memory_desc_t * next (void);
 };
+typedef struct efi_memory_map_t efi_memory_map_t;
+
+/* likewise INLINE below. */
 
 
 /**
@@ -218,12 +209,12 @@ public:
  * @param desc_size	size of memory descriptor (in bytes)
  */
 INLINE void
-efi_memory_map_t::init (addr_t base, word_t map_size, word_t desc_size)
+efi_memory_map_init (efi_memory_map_t *self, addr_t base, word_t map_size, word_t desc_size)
 {
-    _base = (word_t) base;
-    _size = map_size;
-    _desc_size = desc_size;
-    _curptr = _base;
+    self->_base = (word_t) base;
+    self->_size = map_size;
+    self->_desc_size = desc_size;
+    self->_curptr = self->_base;
 }
 
 /**
@@ -231,9 +222,9 @@ efi_memory_map_t::init (addr_t base, word_t map_size, word_t desc_size)
  * return first memory map descriptor.
  */
 INLINE void
-efi_memory_map_t::reset (void)
+efi_memory_map_reset (efi_memory_map_t *self)
 {
-    _curptr = _base;
+    self->_curptr = self->_base;
 }
 
 /**
@@ -242,14 +233,14 @@ efi_memory_map_t::reset (void)
  * set of descriptors has been iterater over
  */
 INLINE efi_memory_desc_t *
-efi_memory_map_t::next (void)
+efi_memory_map_next (efi_memory_map_t *self)
 {
-    efi_memory_desc_t * ret = (efi_memory_desc_t *) _curptr;
+    efi_memory_desc_t * ret = (efi_memory_desc_t *) self->_curptr;
 
-    if ((word_t) _curptr - (word_t) _base >= _size)
+    if ((word_t) self->_curptr - (word_t) self->_base >= self->_size)
 	return NULL;
 
-    _curptr += _desc_size;
+    self->_curptr += self->_desc_size;
     return ret;
 }
 
