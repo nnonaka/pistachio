@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/ofppc/io.cc
+ * File path:	piggybacker/common/string.c
  * Description:	
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,31 +26,87 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: io.cc,v 1.2 2003/10/24 05:03:32 cvansch Exp $
+ * $Id: string.c,v 1.5 2004/04/27 10:39:55 joshua Exp $
  *
  ***************************************************************************/
 
-#include <piggybacker/io.h>
-#include <piggybacker/ieee1275.h>
 #include <piggybacker/string.h>
 
-void puts( const char *s )
+void hex( L4_Word_t num, char str[] )
 {
-    prom_puts( s );
+    L4_Word_t i;
+    static char hex_chars[] = "0123456789abcdef";
+
+    for( i = 0; i < sizeof(L4_Word_t)*2; i++ )
+	str[sizeof(L4_Word_t)*2-1-i] = hex_chars[ (num >> (i*4)) & 0xf ];
+    str[sizeof(L4_Word_t)*2] = '\0';
 }
 
-void print( const char *s )
+unsigned strlen( const char *src )
 {
-    prom_write( prom_stdout, s, strlen(s) );
+    unsigned cnt = 0;
+
+    while( src[cnt] )
+	cnt++;
+    return cnt;
 }
 
-void print_hex( const char *s, L4_Word_t val )
+void strcpy( char *dst, const char *src )
 {
-    char buf[20];
+    unsigned cnt = 0;
 
-    hex( val, buf );
-    print( s );
-    print( ": " );
-    print( buf );
+    do {
+	dst[cnt] = src[cnt];
+    } while( src[cnt++] );
+}
+
+int strcmp( const char *str1, const char *str2 )
+{
+    while( *str1 && *str2 ) {
+	if( *str1 < *str2 )
+	    return -1;
+	if( *str1 > *str2 )
+	    return 1;
+	str1++;
+	str2++;
+    }
+    if( *str2 )
+	return -1;
+    if( *str1 )
+	return 1;
+    return 0;
+}
+
+int strcmp_of( const char *str_of, const char *search )
+{
+    while( *str_of && *search )
+    {
+	if ((*str_of == '@') && (*search == '/'))
+	{
+	    while ( *str_of && (*str_of != '/'))
+		str_of++;
+
+	    if ( !*str_of )
+		return -1;
+	}
+	if( *str_of < *search )
+	    return -1;
+	if( *str_of > *search )
+	    return 1;
+	str_of++;
+	search++;
+    }
+
+    if( *search )
+	return -1;
+
+    if( *str_of == '@' )
+	while ( *str_of && (*str_of != '/') )
+	    str_of++;
+
+    if( *str_of )
+	return 1;
+
+    return 0;
 }
 

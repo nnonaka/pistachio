@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/common/kip.cc
+ * File path:	piggybacker/common/kip.c
  * Description:	
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: kip.cc,v 1.10 2004/01/16 11:29:06 joshua Exp $
+ * $Id: kip.c,v 1.10 2004/01/16 11:29:06 joshua Exp $
  *
  ***************************************************************************/
 
@@ -45,7 +45,7 @@ typedef union {
 magic_t l4_magic = {string: {'L', '4', '\346', 'K'}};
 magic_t kip_magic = {string: {'.', 'k', 'i', 'p'}};
 
-bool kip_manager_t::virt_to_phys( L4_Word_t virt, L4_Word_t elf_start, L4_Word_t *phys )
+bool kip_manager_virt_to_phys (kip_manager_t *self, L4_Word_t virt, L4_Word_t elf_start, L4_Word_t *phys)
 {
     elf_ehdr_t *ehdr = (elf_ehdr_t *)elf_start;
     elf_phdr_t *phdr_list, *phdr;
@@ -66,7 +66,7 @@ bool kip_manager_t::virt_to_phys( L4_Word_t virt, L4_Word_t elf_start, L4_Word_t
     return false;
 }
 
-bool kip_manager_t::find_kip( L4_Word_t kernel_start )
+bool kip_manager_find_kip (kip_manager_t *self, L4_Word_t kernel_start)
 {
     elf_ehdr_t *ehdr = (elf_ehdr_t *)kernel_start;
     elf_shdr_t *shdr_list, *shdr, *str_hdr;
@@ -99,7 +99,7 @@ bool kip_manager_t::find_kip( L4_Word_t kernel_start )
 	    continue;
 
 	// The physical location of the kip in the kernel's elf image.
-	this->kip_src = (struct L4_KernelConfigurationPage *)kip_start;
+	self->kip_src = (struct L4_KernelConfigurationPage *)kip_start;
 
 	// The virtual address of the kip, as visible to the kernel.
 	kip_virt = (L4_Word_t)kip_start - shdr->sh_offset - kernel_start 
@@ -107,13 +107,13 @@ bool kip_manager_t::find_kip( L4_Word_t kernel_start )
 
 	// Convert the kernel's virtual address to a physical address.  This
 	// is where we must install the kip.
-	if( !this->virt_to_phys(kip_virt, kernel_start, 
-		    (L4_Word_t *)&this->kip_dst) )
+	if( !kip_manager_virt_to_phys (self, kip_virt, kernel_start, 
+		    (L4_Word_t *)&self->kip_dst) )
 	    return false;
 
 	puts( "[==== Found the kernel interface page ====]" );
 	print_hex( "- kip virt", kip_virt );
-	print_hex( ", kip phys", (L4_Word_t)this->kip_dst );
+	print_hex( ", kip phys", (L4_Word_t)self->kip_dst );
 	print_hex( ", kip size", shdr->sh_size );
 	puts( "" );
 
@@ -123,7 +123,7 @@ bool kip_manager_t::find_kip( L4_Word_t kernel_start )
     return false;
 }
 
-void kip_manager_t::install_module( L4_Word_t mod_start, L4_Word_t mod_end, 
+void kip_manager_install_module (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end, 
 	kip_server_t *server )
 {
     elf_ehdr_t *ehdr = (elf_ehdr_t *)mod_start;
@@ -169,7 +169,7 @@ void kip_manager_t::install_module( L4_Word_t mod_start, L4_Word_t mod_end,
 	puts( "" );
 
 	/* Copy the data associated with the program header to its 
-	 * target physical address.  I wonder what happens if this
+	 * target physical address.  I wonder what happens if self
 	 * overlaps with the boot loader, or the exception vectors,
 	 * or the platform's memory, or some other module?
 	 */
@@ -196,37 +196,37 @@ void kip_manager_t::install_module( L4_Word_t mod_start, L4_Word_t mod_end,
 }
 
 
-void kip_manager_t::install_sigma0( L4_Word_t mod_start, L4_Word_t mod_end )
+void kip_manager_install_sigma0 (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end)
 {
     puts( "[==== Installing sigma0 ====]" );
-    this->install_module( mod_start, mod_end, &this->servers[sigma0] );
+    kip_manager_install_module (self,  mod_start, mod_end, &self->servers[sigma0] );
 }
 
-void kip_manager_t::install_root_task( L4_Word_t mod_start, L4_Word_t mod_end )
+void kip_manager_install_root_task (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end)
 {
     puts( "[==== Installing the root task ====]" );
-    this->install_module( mod_start, mod_end, &this->servers[root_task] );
+    kip_manager_install_module (self,  mod_start, mod_end, &self->servers[root_task] );
 }
 
-void kip_manager_t::install_kernel( L4_Word_t mod_start, L4_Word_t mod_end )
+void kip_manager_install_kernel (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end)
 {
     puts( "[==== Installing the kernel ====]" );
-    this->install_module( mod_start, mod_end, &this->servers[kernel] );
+    kip_manager_install_module (self,  mod_start, mod_end, &self->servers[kernel] );
 }
 
-void kip_manager_t::update_kip()
+void kip_manager_update_kip (kip_manager_t *self)
 {
-    this->kip_dst->sigma0.ip = this->servers[sigma0].ip;
-    this->kip_dst->sigma0.low = this->servers[sigma0].start;
-    this->kip_dst->sigma0.high = this->servers[sigma0].end;
+    self->kip_dst->sigma0.ip = self->servers[sigma0].ip;
+    self->kip_dst->sigma0.low = self->servers[sigma0].start;
+    self->kip_dst->sigma0.high = self->servers[sigma0].end;
 
-    this->kip_dst->root_server.ip = this->servers[root_task].ip;
-    this->kip_dst->root_server.low = this->servers[root_task].start;
-    this->kip_dst->root_server.high = this->servers[root_task].end;
+    self->kip_dst->root_server.ip = self->servers[root_task].ip;
+    self->kip_dst->root_server.low = self->servers[root_task].start;
+    self->kip_dst->root_server.high = self->servers[root_task].end;
 
-    this->kip_dst->BootInfo = this->boot_info;
+    self->kip_dst->BootInfo = self->boot_info;
 
-    this->kip_dst->MemoryInfo.n = this->mem_desc_cnt;
+    self->kip_dst->MemoryInfo.n = self->mem_desc_cnt;
 }
 
 inline L4_Word_t addr_align_up (L4_Word_t addr, L4_Word_t align)
@@ -234,16 +234,16 @@ inline L4_Word_t addr_align_up (L4_Word_t addr, L4_Word_t align)
     return (addr + (align-1)) & (~(align-1));
 }
 
-void kip_manager_t::setup_main_memory( L4_Word_t start, L4_Word_t end )
+void kip_manager_setup_main_memory (kip_manager_t *self, L4_Word_t start, L4_Word_t end)
 {
-    this->kip_dst->MainMem.low = start;
-    this->kip_dst->MainMem.high = end;
+    self->kip_dst->MainMem.low = start;
+    self->kip_dst->MainMem.high = end;
 }
 
-void kip_manager_t::dedicate_memory( L4_Word_t start, L4_Word_t end, L4_Word_t type, L4_Word_t sub_type )
+void kip_manager_dedicate_memory (kip_manager_t *self, L4_Word_t start, L4_Word_t end, L4_Word_t type, L4_Word_t sub_type)
 {
     L4_MemoryDesc_t *desc = 
-	L4_MemoryDesc( (void *)this->kip_dst, this->mem_desc_cnt );
+	L4_MemoryDesc( (void *)self->kip_dst, self->mem_desc_cnt );
     if( desc == (L4_MemoryDesc_t *)0 )
     {
 	puts( "Error: insufficient memory descriptors in the kernel interface "
@@ -258,24 +258,24 @@ void kip_manager_t::dedicate_memory( L4_Word_t start, L4_Word_t end, L4_Word_t t
     desc->x.low = start >> 10;
     desc->x.high = (addr_align_up(end, 4096) - 1) >> 10;
 
-    this->mem_desc_cnt++;
+    self->mem_desc_cnt++;
 }
 
-L4_Word_t kip_manager_t::first_avail_page()
+L4_Word_t kip_manager_first_avail_page (kip_manager_t *self)
 {
-    L4_Word_t end = this->servers[0].end;
-    for( unsigned i = 1; i < kip_manager_t::tot; i++ )
-	if( this->servers[i].end > end )
-	    end = this->servers[i].end;
+    L4_Word_t end = self->servers[0].end;
+    for( unsigned i = 1; i < tot; i++ )
+	if( self->servers[i].end > end )
+	    end = self->servers[i].end;
     return wrap_up( end, PAGE_SIZE );
 }
 
-void kip_manager_t::init()
+void kip_manager_init (kip_manager_t *self)
 {
-    this->boot_info = 0;
-    this->mem_desc_cnt = 0;
+    self->boot_info = 0;
+    self->mem_desc_cnt = 0;
 
-    for( unsigned i = 0; i < kip_manager_t::tot; i++ )
-	this->servers[i].clear();
+    for( unsigned i = 0; i < tot; i++ )
+	kip_server_clear (&self->servers[i]);
 }
 

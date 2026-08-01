@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/ofppc/io.cc
+ * File path:	piggybacker/ofppc/io.c
  * Description:	
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: io.cc,v 1.3 2003/09/24 19:06:38 skoglund Exp $
+ * $Id: io.c,v 1.3 2003/09/24 19:06:38 skoglund Exp $
  *
  ***************************************************************************/
 

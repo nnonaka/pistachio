@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/common/1275tree.cc
+ * File path:	piggybacker/common/1275tree.c
  * Description:	Builds a position independent copy of the Open Firmware
  * 		device tree.
  *
@@ -27,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: 1275tree.cc,v 1.7 2005/01/19 14:00:09 cvansch Exp $
+ * $Id: 1275tree.c,v 1.7 2005/01/19 14:00:09 cvansch Exp $
  *
  ***************************************************************************/
 

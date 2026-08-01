@@ -36,50 +36,59 @@
 #include <l4/kcp.h>
 #include <l4/kip.h>
 
-class kip_server_t
+/* Two classes; the enum moves to file scope and the members become
+   kip_manager_* / kip_server_* entry points.  Notes §173. */
+struct kip_server_t
 {
-public:
     L4_Word_t ip;
     L4_Word_t start;
     L4_Word_t end;
+};
+typedef struct kip_server_t kip_server_t;
 
-    void clear() { this->ip = this->start = this->end = 0; }
+L4_INLINE void kip_server_clear (kip_server_t *self)
+{ self->ip = self->start = self->end = 0; }
+
+enum server_e {
+    sigma0 = 0,
+    root_task,
+    kernel,
+    tot,
 };
 
-class kip_manager_t
+struct kip_manager_t
 {
-protected:
+    /* were protected */
     L4_KernelConfigurationPage_t *kip_src;
     L4_KernelConfigurationPage_t *kip_dst;
 
-    void install_module( L4_Word_t mod_start, L4_Word_t mod_end, kip_server_t *server );
-
-    enum server_e {
-	sigma0 = 0,
-	root_task,
-	kernel,
-	tot,
-    };
     kip_server_t servers[tot];
 
     L4_Word_t boot_info;
     L4_Word_t mem_desc_cnt;
-
-public:
-    bool find_kip( L4_Word_t kernel_start );
-    void install_sigma0( L4_Word_t mod_start, L4_Word_t mod_end );
-    void install_root_task( L4_Word_t mod_start, L4_Word_t mod_end );
-    void install_kernel( L4_Word_t mod_start, L4_Word_t mod_end );
-    L4_Word_t first_avail_page();
-
-    bool virt_to_phys( L4_Word_t virt, L4_Word_t elf_start, L4_Word_t *phys );
-
-    void update_kip();
-    void set_boot_info( L4_Word_t val ) { this->boot_info = val; }
-    void setup_main_memory( L4_Word_t start, L4_Word_t end );
-    void dedicate_memory( L4_Word_t start, L4_Word_t end, L4_Word_t type, L4_Word_t sub_type );
-
-    void init();
 };
+typedef struct kip_manager_t kip_manager_t;
+
+/* was protected */
+void kip_manager_install_module (kip_manager_t *self, L4_Word_t mod_start,
+				 L4_Word_t mod_end, kip_server_t *server);
+
+bool kip_manager_find_kip (kip_manager_t *self, L4_Word_t kernel_start);
+void kip_manager_install_sigma0 (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end);
+void kip_manager_install_root_task (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end);
+void kip_manager_install_kernel (kip_manager_t *self, L4_Word_t mod_start, L4_Word_t mod_end);
+L4_Word_t kip_manager_first_avail_page (kip_manager_t *self);
+
+bool kip_manager_virt_to_phys (kip_manager_t *self, L4_Word_t virt,
+			       L4_Word_t elf_start, L4_Word_t *phys);
+
+void kip_manager_update_kip (kip_manager_t *self);
+L4_INLINE void kip_manager_set_boot_info (kip_manager_t *self, L4_Word_t val)
+{ self->boot_info = val; }
+void kip_manager_setup_main_memory (kip_manager_t *self, L4_Word_t start, L4_Word_t end);
+void kip_manager_dedicate_memory (kip_manager_t *self, L4_Word_t start, L4_Word_t end,
+				  L4_Word_t type, L4_Word_t sub_type);
+
+void kip_manager_init (kip_manager_t *self);
 
 #endif	/* __PIGGYBACKER__INCLUDE__KIP_H__ */

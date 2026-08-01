@@ -39,8 +39,8 @@ include $(top_srcdir)/util/piggybacker/piggyback.mk
 PROGRAM=	ofppc-loader
 PROGRAM_DEPS=	$(SIGMA0) $(ROOT_TASK) $(KERNEL)
 
-SRCS=	main.cc crt0.S io.cc ../common/ieee1275.cc ../common/kip.cc \
-	../common/string.cc ../common/1275tree.cc
+SRCS=	main.c crt0.S io.c ../common/ieee1275.c ../common/kip.c \
+	../common/string.c ../common/1275tree.c
 
 CFLAGS+=	-fno-builtin -I$(top_srcdir)/util/piggybacker/include
 CXXFLAGS+=	-fno-rtti

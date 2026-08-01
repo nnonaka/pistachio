@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/common/ieee1275.cc
+ * File path:	piggybacker/common/ieee1275.c
  * Description:	Provides access to the Open Firmware client access callback.
  * 		Ripped out of the kernel.
  *
@@ -27,7 +27,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: ieee1275.cc,v 1.5 2005/01/19 14:01:00 cvansch Exp $
+ * $Id: ieee1275.c,v 1.5 2005/01/19 14:01:00 cvansch Exp $
  *
  ***************************************************************************/
 

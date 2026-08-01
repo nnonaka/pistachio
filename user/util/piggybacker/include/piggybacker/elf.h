@@ -35,9 +35,8 @@
 
 #include <l4/types.h>
 
-class elf_ehdr_t
+struct elf_ehdr_t
 {
-public:
     unsigned char e_ident[16];
     L4_Word16_t	  e_type;
     L4_Word16_t	  e_machine;
@@ -53,10 +52,10 @@ public:
     L4_Word16_t	  e_shnum;
     L4_Word16_t	  e_shstrndx;
 };
+typedef struct elf_ehdr_t elf_ehdr_t;
 
-class elf_phdr_t
+struct elf_phdr_t
 {
-public:
     L4_Word32_t	p_type;
 #if defined(L4_64BIT)
     L4_Word32_t	p_flags;
@@ -71,10 +70,10 @@ public:
 #endif
     L4_Word_t	p_align;
 };
+typedef struct elf_phdr_t elf_phdr_t;
 
-class elf_shdr_t
+struct elf_shdr_t
 {
-public:
     L4_Word32_t	sh_name;
     L4_Word32_t	sh_type;
     L4_Word_t	sh_flags;
@@ -86,6 +85,7 @@ public:
     L4_Word_t	sh_addralign;
     L4_Word_t	sh_entsize;
 };
+typedef struct elf_shdr_t elf_shdr_t;
 
 enum phdr_type_e
 {

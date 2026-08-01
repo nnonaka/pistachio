@@ -41,12 +41,12 @@
 #warning POWERPC version
 L4_INLINE void cache_partial_code_sync( L4_Word_t address )
 {
-    asm volatile( "dcbst 0,%0 ; sync ; icbi 0,%0" : : "r" (address) );
+    __asm__ __volatile__( "dcbst 0,%0 ; sync ; icbi 0,%0" : : "r" (address) );
 }
 
 L4_INLINE void cache_complete_code_sync( void )
 {
-    asm volatile( "isync" );
+    __asm__ __volatile__( "isync" );
 }
 
 L4_INLINE void memcpy_cache_flush( L4_Word_t *dst, const L4_Word_t *src, L4_Word_t size )

@@ -54,8 +54,7 @@
 #define BAT_PP_READ_ONLY        0x1
 #define BAT_PP_READ_WRITE       0x2
 
-class ppc_bat_t {
-public:
+struct ppc_bat_t {
     union {
 	struct {
 	    L4_Word32_t bepi : 15;
@@ -78,11 +77,12 @@ public:
 	} raw;
     };
 };
+typedef struct ppc_bat_t ppc_bat_t;
 
 #define DEF_SET_BAT(name, reg)						\
 L4_INLINE void name (L4_Word32_t val)					\
 {									\
-            asm volatile("mtspr " reg ", %0" : : "r" (val) );		\
+            __asm__ __volatile__("mtspr " reg ", %0" : : "r" (val) );		\
 }
 
 DEF_SET_BAT(ppc_set_ibat0u, "528")
@@ -106,12 +106,12 @@ DEF_SET_BAT(ppc_set_dbat3l, "543")
 
 L4_INLINE void cache_partial_code_sync( L4_Word_t address )
 {
-    asm volatile( "dcbst 0,%0 ; sync ; icbi 0,%0" : : "r" (address) );
+    __asm__ __volatile__( "dcbst 0,%0 ; sync ; icbi 0,%0" : : "r" (address) );
 }
 
 L4_INLINE void cache_complete_code_sync( void )
 {
-    asm volatile( "isync" );
+    __asm__ __volatile__( "isync" );
 }
 
 L4_INLINE void memcpy_cache_flush( L4_Word_t *dst, const L4_Word_t *src, L4_Word_t size )

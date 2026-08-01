@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2002-2003, Karlsruhe University
  *
- * File path:	piggybacker/ofppc/main.cc
+ * File path:	piggybacker/ofppc/main.c
  * Description:	The Open Firmware PowerPC loader for Pistachio.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: main.cc,v 1.15 2004/01/16 13:39:53 joshua Exp $
+ * $Id: main.c,v 1.15 2004/01/16 13:39:53 joshua Exp $
  *
  ***************************************************************************/
 
@@ -55,7 +55,7 @@ typedef struct
 
 kip_manager_t kip_manager;
 
-extern "C" void 
+void 
 enter_kernel( L4_Word_t r3, L4_Word_t r4, L4_Word_t r5, L4_Word_t ip );
 
 void boot_fatal( const char *msg )
@@ -85,7 +85,7 @@ bool detect_of1275_memory( device_t *mem_node, L4_Word_t tot_mem )
 	if( (me < last) || (me > ranges[i].base) )
 	{
 	    // Protect OpenFirmware memory, unless it is our bootloader.
-	    kip_manager.dedicate_memory( last, ranges[i].base, 
+	    kip_manager_dedicate_memory (&kip_manager,  last, ranges[i].base, 
 		    L4_BootLoaderSpecificMemoryType, 0xe );
 	}
 
@@ -95,7 +95,7 @@ bool detect_of1275_memory( device_t *mem_node, L4_Word_t tot_mem )
     // Determine whether we have a reserved region after the last available
     // region.
     if( (me < last) && (last < tot_mem) )
-	kip_manager.dedicate_memory( last, tot_mem,
+	kip_manager_dedicate_memory (&kip_manager,  last, tot_mem,
 		L4_BootLoaderSpecificMemoryType, 0xe );
 
     return true;
@@ -147,8 +147,8 @@ void detect_platform_memory( char *devtree )
     puts( "" );
 
     // Update the kip to reflect the amount of installed physical memory.
-    kip_manager.setup_main_memory( 0, tot );
-    kip_manager.dedicate_memory( 0, tot, L4_ConventionalMemoryType, 0 );
+    kip_manager_setup_main_memory (&kip_manager,  0, tot );
+    kip_manager_dedicate_memory (&kip_manager,  0, tot, L4_ConventionalMemoryType, 0 );
 
     // Update the kip to reflect Open Firmware's claims on memory.
     if( !detect_of1275_memory(mem_node, tot) )
@@ -184,13 +184,13 @@ void map_ram()
     bat.x.vs = 1;
     bat.x.bl = BAT_BL_256M;
 
-    asm volatile ("isync");
+    __asm__ __volatile__ ("isync");
     ppc_set_dbat3l( bat.raw.lower );
     ppc_set_dbat3u( bat.raw.upper );
-    asm volatile ("isync");
+    __asm__ __volatile__ ("isync");
 }
 
-extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
+void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
     /* The entry point for the loader's C code.
      */
 {
@@ -199,15 +199,15 @@ extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
     puts( "[==== Pistachio PowerPC Open Firmware Boot Loader ====]" );
 
     map_ram();
-    kip_manager.init();
+    kip_manager_init (&kip_manager);
 
     // Install the modules.
-    kip_manager.install_sigma0( get_sigma0_start(), get_sigma0_end() );
-    kip_manager.install_root_task( get_root_task_start(), get_root_task_end() );
-    kip_manager.install_kernel( get_kernel_start(), get_kernel_end() );
+    kip_manager_install_sigma0 (&kip_manager,  get_sigma0_start(), get_sigma0_end() );
+    kip_manager_install_root_task (&kip_manager,  get_root_task_start(), get_root_task_end() );
+    kip_manager_install_kernel (&kip_manager,  get_kernel_start(), get_kernel_end() );
 
     // Generate the device tree.
-    L4_Word_t devtree_start = kip_manager.first_avail_page();
+    L4_Word_t devtree_start = kip_manager_first_avail_page (&kip_manager);
     L4_Word_t devtree_size = build_device_tree( (char *)devtree_start );
     L4_Word_t devtree_end = wrap_up( devtree_start + devtree_size, PAGE_SIZE );
 
@@ -217,12 +217,12 @@ extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
     puts( "" );
 
     // Locate the kip and update.
-    if( !kip_manager.find_kip(get_kernel_start()) ) 
+    if( !kip_manager_find_kip (&kip_manager, get_kernel_start()) ) 
 	boot_fatal( "Error: unable to locate the kernel interface page!" );
 
     detect_platform_memory( (char *)devtree_start );
 
-    kip_manager.dedicate_memory( devtree_start, devtree_end, 
+    kip_manager_dedicate_memory (&kip_manager,  devtree_start, devtree_end, 
 	    L4_BootLoaderSpecificMemoryType, 0xf );
     /* update_kip has only ever taken no argument, so passing of1275_entry --
        as upstream does -- never compiled.  Dropping it is not enough: the
@@ -231,8 +231,8 @@ extern "C" void loader_main( L4_Word_t r3, L4_Word_t r4, L4_Word_t of1275_entry)
        hands it to of1275_ci_init.  update_kip copies kip_manager's boot_info
        field, which is initialised to zero and has a setter nothing called.
        So the argument belonged one line earlier. */
-    kip_manager.set_boot_info( of1275_entry );
-    kip_manager.update_kip();	// Do this last!
+    kip_manager_set_boot_info (&kip_manager,  of1275_entry );
+    kip_manager_update_kip (&kip_manager);	// Do this last!
 
     start_kernel(r3, r4, of1275_entry);
 }

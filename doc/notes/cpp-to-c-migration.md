@@ -9476,3 +9476,67 @@ directory looked healthy. Everything there still *compiles*.
 
 Verified: amd64, ia32 and powerpc64 build the whole userland; powerpc compiles
 all of it.
+
+## §173 -- the userland, part two: kickstart and piggybacker
+
+24 more files. `util/kickstart` and `util/piggybacker` are C, and the only
+`.cc` left in the tree is `contrib/elf-loader` plus one host tool.
+
+### Two namespaces over one header
+
+`util/kickstart/bootinfo.h` is the one construct in this tree that C has no
+direct answer for:
+
+    namespace BI32 { typedef L4_Word32_t L4_Word_t;
+                     #include <l4/bootinfo.h>
+                     #undef __L4__BOOTINFO_H__  ... }
+    namespace BI64 { typedef L4_Word64_t L4_Word_t;
+                     #include <l4/bootinfo.h> ... }
+
+One header, included twice, producing two complete sets of bootinfo types with
+different word widths. The C form keeps the double inclusion and separates the
+two with the preprocessor: every type and inline function the header declares
+is `#define`d to a `BI32_`/`BI64_` prefixed name before the include and
+`#undef`ed after. `bootinfo.c` and `elf.c` -- each compiled once per width --
+paste the prefix through an `NS()` macro where they used to name the namespace.
+
+The six `#define`d constants are deliberately *not* renamed. A `#define`
+cannot rename itself, and their bodies (`((L4_Word_t) 0x14b0021d)`) would refer
+to an `L4_Word_t` that is no longer in scope by the time they expand. They are
+width-independent at every use here -- each is assigned to a struct field that
+does the conversion. The rename list has to be kept in step with
+`l4/bootinfo.h` by hand; there is no way around that.
+
+### extern inline
+
+Four sites -- `kickstart/lib.h`, `kickstart/ia32.c`, `kickstart/amd64.c`,
+`lib/io/ia32.h` -- used `extern inline`. In C++ that is an inline definition
+needing no out-of-line copy; in C99 it *is* the external definition, so every
+translation unit emitted one and the link found them all. `static inline` is
+the C spelling.
+
+### The rest
+
+`min`/`max` were function templates over T; macros now. `loader_format_t`,
+`mbi_t`, `kip_manager_t` (two different ones -- kickstart and piggybacker each
+have their own), the ELF header trio, `ppc_bat_t` and `powerpc.c`'s Blue Gene
+mailbox console all become structs with free entry points. The two
+extra-object rules in kickstart's Makefile stopped compiling their sources with
+`-x c++`; `donote.cc` stays C++, being a host tool built with plain `g++`.
+
+`fdt.h`/`fdt.c` exist twice, in `lib/io` and in `util/kickstart`, differing
+only in include guard -- the converted `lib/io` copy was reused.
+
+### Where it stands
+
+    user .cc:  95 -> 28
+
+The 28 are `contrib/elf-loader` (27) and `util/piggybacker/ofppc64/donote.cc`.
+elf-loader has sources only for mips64, alpha, arm and sparc64; `configure`
+accepts ia32, amd64, powerpc and powerpc64, so no supported configuration
+compiles any of it and a conversion could not be verified.
+
+Verified: amd64, ia32 and powerpc64 build the whole userland; `tools/boottest`
+passes, so the converted kickstart loads the converted sigma0 and l4test and
+the suite starts. powerpc compiles everything and stops at the pre-existing
+soft-float link described in §172.
