@@ -9600,3 +9600,66 @@ The one is `util/piggybacker/ofppc64/donote.cc`, a host tool built with plain
 
 Verified this pass: amd64, ia32 and powerpc64 build the whole userland;
 `tools/boottest` passes.
+
+## §175 -- the powerpc soft-float link
+
+§172 recorded that the powerpc userland could not link and that this predated
+the conversion. It is fixed.
+
+### What it actually was
+
+Not missing symbols. `libgcc.a` has all six routines the `%f` path calls --
+`__muldf3`, `__gedf2`, `__subdf3`, `__ltdf2`, `__fixunsdfsi`, `__floatunsidf`.
+The obstacle is that every one of them carries
+
+    Tag_GNU_Power_ABI_FP: hard float
+
+while our objects were built `-msoft-float`, and ld refuses to merge the two.
+That refusal is correct, not pedantic: the two ABIs disagree about whether a
+double arrives in a GPR pair or an FPR, so linking them would have passed the
+arguments in the wrong registers.
+
+There is no soft-float multilib to link against instead --
+`powerpc-linux-gnu-gcc -print-multi-lib` offers only `.` and `64;@m64`, and
+`-msoft-float -print-multi-directory` gives `.`, the hard-float one.
+
+### The fix
+
+Drop `-msoft-float` from the powerpc userland, exactly as §171 did for
+powerpc64 and for the same underlying reason: it asks for an ABI this
+toolchain does not ship. With hard float gcc emits `fmul`/`fsub` inline for
+print's `%f` path and never calls those helpers at all, and the objects' tag
+matches libgcc's.
+
+Three things make this safe, and all three were checked rather than assumed:
+
+  * Nothing in the userland prints `%f`. A grep for float conversions outside
+    `lib/io/print.c` itself finds no callers, so the FP code is unreachable.
+  * The two programs that link libio -- sigma0 and l4test -- run under the
+    kernel, which switches the FPU lazily for user threads:
+    `glue/v4-powerpc/resources.c`, driven by `fp_unavail_handler` in
+    except_handlers.c. User code may touch the FPU.
+  * The piggybacker, which runs *before* the kernel exists and so has no such
+    handler, does not link libio at all -- it has its own io.c.
+
+The flag came out of `configure.in` and of the four Makefile.in files that
+added it per-directory (l4test, sigma0, grabmem, pingpong) plus the ofppc
+piggybacker's.
+
+### A second thing, found on the way
+
+`configure.in` had `AC_CONFIG_SRCDIR([serv/sigma0/sigma0.cc])` -- the probe
+autoconf uses to decide whether it is looking at a source tree. That file is
+`sigma0.c` now, so a *fresh* configure of any architecture would have failed
+with "cannot find sources". Existing build directories did not show it because
+their config.status was already generated.
+
+### Where it stands
+
+    ofppc: sigma0, l4test, pingpong, kickstart and the piggybacker loader all
+           link, and tools/boottest-ofppc PASSes -- for the first time with
+           binaries built entirely from the current tree rather than objects
+           left over from an older toolchain.
+
+The one remaining ofppc build failure is `kickstart.uimage`: `mkimage`, the
+U-Boot image tool, is not installed here. Nothing to do with the code.

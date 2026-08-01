@@ -46,7 +46,7 @@ SRCS=		crt0-$(ARCH).S pingpong.c $($(ARCH)_SRCS)
 LIBS+=		-ll4 -lio
 LDFLAGS+=	-Ttext=$(ROOTTASK_LINKBASE)
 
-CFLAGS_powerpc+=	-fno-builtin -msoft-float
+CFLAGS_powerpc+=	-fno-builtin
 CXXFLAGS_powerpc+=	-fno-rtti
 
 # CCFLAGS is not a variable this build system defines, so the substitution

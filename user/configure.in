@@ -33,7 +33,9 @@ dnl ###################################################################
 dnl Process this file with autoconf to produce a configure script.
 
 AC_INIT(Pistachio, [0.4])
-AC_CONFIG_SRCDIR([serv/sigma0/sigma0.cc])
+dnl sigma0.cc is sigma0.c since the C conversion; this is only the
+dnl "am I looking at the source tree?" probe.
+AC_CONFIG_SRCDIR([serv/sigma0/sigma0.c])
 
 if test "x$host_alias" != x; then
   # We do not necessarily need crt0 and friends when cross-compiling.
@@ -314,7 +316,20 @@ case $ARCH in
 	AC_SUBST([PLAT])
 	;;
   powerpc)
-	CFLAGS="$CFLAGS -msoft-float  -mno-regnames -meabi -msdata=none -mno-toc"
+	dnl No -msoft-float, for the same reason as powerpc64 below: gcc's
+	dnl powerpc cross toolchain ships a single hard-float libgcc.a and no
+	dnl soft-float multilib (-print-multi-lib gives only `.' and `64').
+	dnl Its __muldf3 and friends exist but carry Tag_GNU_Power_ABI_FP:
+	dnl hard float, so ld refuses to merge them with soft-float objects --
+	dnl correctly, since the two disagree about whether doubles arrive in
+	dnl GPR pairs or FPRs.  lib/io/print's %f support is the only thing in
+	dnl the userland that touches a double, nothing calls it, and the two
+	dnl programs that link libio (sigma0 and l4test) run under a kernel
+	dnl that switches the FPU lazily -- glue/v4-powerpc/resources.c, driven
+	dnl by fp_unavail_handler.  The piggybacker, which runs before the
+	dnl kernel exists, has its own io.c and does not link libio.
+	dnl See doc/notes/cpp-to-c-migration.md §175.
+	CFLAGS="$CFLAGS -mno-regnames -meabi -msdata=none -mno-toc"
         ;;
   powerpc64*)
 	dnl No -msoft-float here, unlike the 32-bit port.  gcc's powerpc64

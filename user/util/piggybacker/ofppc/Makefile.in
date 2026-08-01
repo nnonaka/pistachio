@@ -46,8 +46,6 @@ CFLAGS+=	-fno-builtin -I$(top_srcdir)/util/piggybacker/include
 CXXFLAGS+=	-fno-rtti
 LDFLAGS+=	-Ttext=$(KICKSTART_LINKBASE)
 
-CFLAGS_powerpc+=	-msoft-float
-CPPFLAGS_powerpc+=	-msoft-float
 
 pre-all:
 	@if test ! -d ../common; then mkdir ../common; fi

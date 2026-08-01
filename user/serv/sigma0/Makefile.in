@@ -53,7 +53,7 @@ SRCS=		crt0-$(ARCH).S \
 LIBS+=		-ll4 -lio
 LDFLAGS+=	-Ttext=$(SIGMA0_LINKBASE)
 
-CFLAGS_powerpc+=	-msoft-float -fno-builtin
+CFLAGS_powerpc+=	-fno-builtin
 CXXFLAGS_powerpc+=	-fno-rtti
 
 
