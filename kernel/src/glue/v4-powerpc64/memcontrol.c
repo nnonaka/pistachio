@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *                
- * File path:     glue/v4-powerpc64/memcontrol.cc
+ * File path:     glue/v4-powerpc64/memcontrol.c
  * Description:   Temporary memory_control implementation
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -59,23 +59,23 @@ enum attribute_e {
  *
  * @returns 
  */
-word_t attrib_fpage (tcb_t *current, fpage_t fpage, attribute_e attrib)
+static word_t attrib_fpage (tcb_t *current, fpage_t fpage, word_t attrib)
 {
-    pgent_t::pgsize_e size, pgsize;
+    pgsize_e size, pgsize;
     pgent_t * pg;
     addr_t vaddr;
     word_t num;
 
-    pgent_t *r_pg[pgent_t::size_max];
-    word_t r_num[pgent_t::size_max];
-    space_t *space = current->get_space();
+    pgent_t *r_pg[size_max];
+    word_t r_num[size_max];
+    space_t *space = tcb_get_space (current);
 
-    num = fpage.get_size_log2 ();
+    num = fpage_get_size_log2 (&fpage);
     vaddr = address (fpage, num);
 
     if (num < hw_pgshifts[0])
     {
-	current->set_error_code(EINVALID_PARAM);  /* Invalid fpage */
+	tcb_set_error_code (current, EINVALID_PARAM);  /* Invalid fpage */
 	return 1;
     }
 
@@ -84,83 +84,83 @@ word_t attrib_fpage (tcb_t *current, fpage_t fpage, attribute_e attrib)
      * space.  Enforce attrib to only cover the supported space.
      */
 
-    if (num > hw_pgshifts[pgent_t::size_max+1])
-	num = hw_pgshifts[pgent_t::size_max+1];
+    if (num > hw_pgshifts[size_max+1])
+	num = hw_pgshifts[size_max+1];
 
     /*
      * Find pagesize to use, and number of pages to map.
      */
 
-    for (pgsize = pgent_t::size_max; hw_pgshifts[pgsize] > num; pgsize--) {}
+    for (pgsize = size_max; hw_pgshifts[pgsize] > num; pgsize--) {}
 
     num = 1UL << (num - hw_pgshifts[pgsize]);
-    size = pgent_t::size_max;
-    pg = space->pgent (page_table_index (size, vaddr));
+    size = size_max;
+    pg = space_pgent (space, page_table_index (size, vaddr));
 
     while (num)
     {
-	pgent_t::wimg_e new_att = pgent_t::l4default;
+	word_t new_att = l4default;
 
-	if (! space->is_user_area (vaddr))
+	if (! space_is_user_area (vaddr))
 	    /* Do not mess with kernel area. */
 	    break;
 
 	if (size > pgsize)
 	{
 	    /* We are operating on too large page sizes. */
-	    if (! pg->is_valid (space, size))
+	    if (! pgent_is_valid (pg, space, size))
 		break;
-	    else if (pg->is_subtree (space, size))
+	    else if (pgent_is_subtree (pg, space, size))
 	    {
 		size--;
-		pg = pg->subtree (space, size+1)->next
-		    (space, size, page_table_index (size, vaddr));
+		pg = pgent_next (pgent_subtree (pg, space, size+1),
+				 space, size, page_table_index (size, vaddr));
 		continue;
 	    }
 	    else
 	    {
 		/* page is too large */
-		current->set_error_code(EINVALID_PARAM);  /* Invalid fpage */
+		tcb_set_error_code (current, EINVALID_PARAM);  /* Invalid fpage */
 		return 1;
 	    }
 	}
 
-	if (! pg->is_valid (space, size))
+	if (! pgent_is_valid (pg, space, size))
 	    goto Next_entry;
 
-	if (pg->is_subtree (space, size))
+	if (pgent_is_subtree (pg, space, size))
 	{
 	    /* We have to modify each single page in the subtree. */
 	    size--;
 	    r_pg[size] = pg;
 	    r_num[size] = num - 1;
 
-	    pg = pg->subtree (space, size+1);
+	    pg = pgent_subtree (pg, space, size+1);
 	    num = page_table_size (size);
 	    continue;
 	}
 
-	if (space->is_mappable (vaddr))
+	if (space_is_mappable (space, vaddr))
 	{
-	    space->flush_tlbent (space, vaddr, page_shift (size));
+	    space_flush_tlbent (space, space, vaddr, page_shift (size));
 
 	    switch (attrib)
 	    {
-	    case a_l4default: new_att = pgent_t::l4default; break;
-	    case a_uncached: new_att = pgent_t::cache_inhibit; break;
-	    case a_coherent: new_att = pgent_t::coherent; break;
+	    case a_l4default: new_att = l4default; break;
+	    case a_uncached: new_att = cache_inhibit; break;
+	    case a_coherent: new_att = coherent; break;
 	    default:
 		/* invalid attribute */
-		current->set_error_code(EINVALID_PARAM);  /* Invalid attribute */
+		tcb_set_error_code (current, EINVALID_PARAM);  /* Invalid attribute */
 		return 1;
 	    }
-	    pg->set_attributes( space, size, new_att );
-	    pg->flush( space, size, false, vaddr );
+	    pgent_set_attributes( pg, space, size, new_att );
+	    pgent_flush( pg, space, size, false, vaddr );
 	}
 
     Next_entry:
 
-	pg = pg->next (space, size, 1);
+	pg = pgent_next (pg, space, size, 1);
 	vaddr = addr_offset (vaddr, page_size (size));
 	num--;
     }
@@ -172,7 +172,7 @@ SYS_MEMORY_CONTROL (word_t control, word_t attribute0, word_t attribute1,
 		    word_t attribute2, word_t attribute3)
 {
     tcb_t * current = get_current_tcb();
-    space_t *space = current->get_space();
+    space_t *space = tcb_get_space (current);
     word_t fp_idx, att;
 
     TRACEPOINT (SYSCALL_MEMORY_CONTROL, 
@@ -182,15 +182,15 @@ SYS_MEMORY_CONTROL (word_t control, word_t attribute0, word_t attribute1,
     			attribute3));
 
     // invalid request - thread not privileged
-    if (!is_privileged_space(get_current_space()))
+    if (!is_privileged_space_c (get_current_space()))
     {
-	current->set_error_code(ENO_PRIVILEGE);  /* No priviledge */
+	tcb_set_error_code (current, ENO_PRIVILEGE);  /* No priviledge */
 	return_memory_control(0);
     }
 
     if (control >= IPC_NUM_MR)
     {
-	current->set_error_code(EINVALID_PARAM);  /* Invalid parameter */
+	tcb_set_error_code (current, EINVALID_PARAM);  /* Invalid parameter */
 	return_memory_control(0);
     }
 
@@ -199,12 +199,12 @@ SYS_MEMORY_CONTROL (word_t control, word_t attribute0, word_t attribute1,
 	fpage_t fpage;
 	addr_t addr;
 	pgent_t * pg;
-	pgent_t::pgsize_e pgsize;
+	pgsize_e pgsize;
 
-	fpage.raw = current->get_mr(fp_idx);
+	fpage.raw = tcb_get_mr (current, fp_idx);
 
 	/* nil pages act as a no-op */
-	if (fpage.is_nil_fpage() )
+	if (fpage_is_nil_fpage (&fpage) )
 	    continue;
 
 	switch(fpage.raw & 0x3)
@@ -215,20 +215,20 @@ SYS_MEMORY_CONTROL (word_t control, word_t attribute0, word_t attribute1,
 	    default: att = attribute3; break;
 	}
 
-	addr = address (fpage, fpage.get_size_log2 ());
+	addr = address (fpage, fpage_get_size_log2 (&fpage));
 	// Check if mapping exist in page table
-	if (!space->lookup_mapping (addr, &pg, &pgsize))
+	if (!space_lookup_mapping_c (space, addr, &pg, &pgsize))
 	{
-	    if (!is_sigma0_space(current->get_space()))
+	    if (!space_is_sigma0 (tcb_get_space (current)))
 	    {
-		current->set_error_code(ENO_PRIVILEGE);  /* No priviledge */
+		tcb_set_error_code (current, ENO_PRIVILEGE);  /* No priviledge */
 		return_memory_control(0);
 	    }
 
-	    space->map_sigma0(addr);
+	    space_map_sigma0 (space, addr);
 	}
 
-	if (attrib_fpage(current, fpage, (attribute_e)att))
+	if (attrib_fpage(current, fpage, att))
 	    return_memory_control(0);
     }
 

@@ -2,7 +2,7 @@
  *                
  * Copyright (C) 2003-2004,  National ICT Australia (NICTA)
  *                
- * File path:     glue/v4-powerpc64/resources.cc
+ * File path:     glue/v4-powerpc64/resources.c
  * Description:   thread resource management
  *                
  * Redistribution and use in source and binary forms, with or without
@@ -42,52 +42,53 @@ processor_resources_t processor_resources UNIT("cpulocal");
 
 DECLARE_TRACEPOINT (DISABLED_FPU);
 
-void thread_resources_t::save (tcb_t * tcb)
+void tcb_resources_save (thread_resources_t *self, tcb_t * tcb)
 {
 }
 
-void thread_resources_t::load (tcb_t * tcb)
+void tcb_resources_load (thread_resources_t *self, tcb_t * tcb)
 {
 }
 
-void thread_resources_t::purge (tcb_t * tcb)
+void tcb_resources_purge (thread_resources_t *self, tcb_t * tcb)
 {
 }
 
-void thread_resources_t::free (tcb_t * tcb)
+void tcb_resources_free (thread_resources_t *self, tcb_t * tcb)
 {
 }
 
-void thread_resources_t::init (tcb_t * tcb)
+void tcb_resources_init (thread_resources_t *self, tcb_t * tcb)
 {
-    get_resources()->clear_fp_lazy_tcb();
-    this->fpu_fpscr = 0;
+    processor_resources_clear_fp_lazy_tcb (get_resources());
+    self->fpu_fpscr = 0;
 
     tcb->resource_bits = 0;
 }
 
-INLINE void thread_resources_t::deactivate_fpu( tcb_t *tcb )
+/* Were private members; nothing outside this file used them. */
+INLINE void tcb_resources_deactivate_fpu( thread_resources_t *self, tcb_t *tcb )
 {
-    get_resources()->clear_fp_lazy_tcb();
-    powerpc64_irq_context_t * context =
-        (powerpc64_irq_context_t *) tcb->get_stack_top () - 1;
+    powerpc64_irq_context_t * context = tcb_irq_context (tcb);
+
+    processor_resources_clear_fp_lazy_tcb (get_resources());
 
     context->srr1 &= ~MSR_FP;	    /* Disable floating point in user */
 }
 
-INLINE void thread_resources_t::activate_fpu( tcb_t *tcb )
+INLINE void tcb_resources_activate_fpu( thread_resources_t *self, tcb_t *tcb )
 {
-    get_resources()->set_fp_lazy_tcb( tcb );
-    powerpc64_irq_context_t * context =
-        (powerpc64_irq_context_t *) tcb->get_stack_top () - 1;
+    powerpc64_irq_context_t * context = tcb_irq_context (tcb);
+
+    processor_resources_set_fp_lazy_tcb (get_resources(), tcb);
 
     context->srr1 |= MSR_FP;	    /* Enable floating point in user */
 }
 
-void thread_resources_t::spill_fpu( tcb_t *tcb )
+static void tcb_resources_spill_fpu( thread_resources_t *self, tcb_t *tcb )
 {
     /* Spill the registers. */
-    u64_t *start = this->fpu_gprs;
+    u64_t *start = self->fpu_gprs;
     asm volatile (
 	    "stfd  %%f0,    0(%0) ;"
 	    "stfd  %%f1,    8(%0) ;"
@@ -132,15 +133,15 @@ void thread_resources_t::spill_fpu( tcb_t *tcb )
 	    "stfd %%f0, 0(%0) ;"
 	    : /* ouputs */
 	    : /* inputs */
-	      "b" (&this->fpu_fpscr)
+	      "b" (&self->fpu_fpscr)
 	);
 
-    this->deactivate_fpu( tcb );
+    tcb_resources_deactivate_fpu( self, tcb );
 }
 
-INLINE void thread_resources_t::restore_fpu( tcb_t *tcb )
+static void tcb_resources_restore_fpu( thread_resources_t *self, tcb_t *tcb )
 {
-    this->activate_fpu( tcb );
+    tcb_resources_activate_fpu( self, tcb );
 
     /* Restore the fpscr.  */
     asm volatile (
@@ -148,11 +149,11 @@ INLINE void thread_resources_t::restore_fpu( tcb_t *tcb )
 	    "mtfsf 0xff, %%f0 ;"
 	    : /* ouputs */
 	    : /* inputs */
-	      "b" (&this->fpu_fpscr)
+	      "b" (&self->fpu_fpscr)
 	);
 
     /* Restore the registers. */
-    u64_t *start = this->fpu_gprs;
+    u64_t *start = self->fpu_gprs;
     asm volatile (
 	    "lfd  %%f0,    0(%0) ;"
 	    "lfd  %%f1,    8(%0) ;"
@@ -193,13 +194,13 @@ INLINE void thread_resources_t::restore_fpu( tcb_t *tcb )
 
 }
 
-void thread_resources_t::powerpc64_fpu_unavail_exception( tcb_t *tcb )
+void tcb_resources_powerpc64_fpu_unavail_exception( thread_resources_t *self, tcb_t *tcb )
 {
-    tcb_t * fp_tcb = get_resources()->get_fp_lazy_tcb();
+    tcb_t * fp_tcb = processor_resources_get_fp_lazy_tcb (get_resources());
 
-    TRACEPOINT (DISABLED_FPU,
-		printf ("FPU disabled exception:  cur=%p  owner=%p\n",
-			tcb, fp_tcb));
+    /* See the note in space.c: the printf() was the macro's `str' argument. */
+    TRACEPOINT (DISABLED_FPU, "FPU disabled exception:  cur=%p  owner=%p\n",
+		tcb, fp_tcb);
 
     /* In our lazy floating point model, we should never see a floating point
      * exception if the current tcb already owns the floating point register
@@ -210,19 +211,19 @@ void thread_resources_t::powerpc64_fpu_unavail_exception( tcb_t *tcb )
     ppc64_enable_fpu();
 
     if( fp_tcb )
-	fp_tcb->resources.spill_fpu( fp_tcb );
+	tcb_resources_spill_fpu( &fp_tcb->resources, fp_tcb );
 
-    this->restore_fpu( tcb );
+    tcb_resources_restore_fpu( self, tcb );
 }
 
-void thread_resources_t::powerpc64_fpu_spill( tcb_t *tcb )
+void tcb_resources_powerpc64_fpu_spill( thread_resources_t *self, tcb_t *tcb )
 {
-    tcb_t * fp_tcb = get_resources()->get_fp_lazy_tcb();
+    tcb_t * fp_tcb = processor_resources_get_fp_lazy_tcb (get_resources());
 
     ASSERT( tcb );
 
     if (tcb == fp_tcb) {
 	ppc64_enable_fpu();
-	fp_tcb->resources.spill_fpu( fp_tcb );
+	tcb_resources_spill_fpu( &fp_tcb->resources, fp_tcb );
     }
 }

@@ -44,16 +44,16 @@
 static word_t pte_replace_next;
 
 
-ppc64_pte_t* ppc64_htab_t::find_insertion( word_t virt, word_t vsid, 
-	word_t *slot, word_t *is_second_hash, bool large )
+ppc64_pte_t* ppc64_htab_find_insertion( ppc64_htab_t *self, word_t virt,
+	word_t vsid, word_t *slot, word_t *is_second_hash, bool large )
 {
     ppc64_pte_t *group[2];
     word_t hash;
     int cnt, evict_hash, evict_slot;
 
     /* Locate the primary PTEGs. */
-    hash = this->primary_hash( virt, vsid, large );
-    group[0] = this->get_pteg( hash );
+    hash = ppc64_htab_primary_hash( self, virt, vsid, large );
+    group[0] = ppc64_htab_get_pteg( self, hash );
 
     /* Search for an invalid pte, and while searching, keep track of 
      * unreferenced pages.
@@ -72,8 +72,8 @@ ppc64_pte_t* ppc64_htab_t::find_insertion( word_t virt, word_t vsid,
     }
 
     /* Locate the secondary PTEGs. */
-    hash = this->secondary_hash( hash );
-    group[1] = this->get_pteg( hash );
+    hash = ppc64_htab_secondary_hash( self, hash );
+    group[1] = ppc64_htab_get_pteg( self, hash );
 
     for( cnt = 0; cnt < HTAB_PTEG_SIZE; cnt++ )
     {
@@ -109,13 +109,15 @@ ppc64_pte_t* ppc64_htab_t::find_insertion( word_t virt, word_t vsid,
     } while (1);
 }
 
-SECTION(".init") void ppc64_htab_t::init( word_t phys_base, 
+SECTION(".init") void ppc64_htab_init( ppc64_htab_t *self, word_t phys_base,
 	word_t virt_start, word_t size )
 {
-    word_t i;
-    this->base = (ppc64_pte_t *)(virt_start | phys_base);
-    this->size = size;
-    this->phys_base = phys_base;
+    word_t i, j;
+    of1275_client_interface_t *of;
+
+    self->base = (ppc64_pte_t *)(virt_start | phys_base);
+    self->size = size;
+    self->phys_base = phys_base;
     for (i = 0; i < 64; i ++)
 	if ((1ul<<i) == size)
 	    break;
@@ -124,16 +126,16 @@ SECTION(".init") void ppc64_htab_t::init( word_t phys_base,
     if (phys_base & ((1ul<<i)-1))
 	prom_exit("Invalid hash page table alignment");
 
-    this->htab_size = (i-18);
-    this->hash_mask = (1ul << (this->htab_size + HTAB_PTEGs_BITS)) - 1;
+    self->htab_size = (i-18);
+    self->hash_mask = (1ul << (self->htab_size + HTAB_PTEGs_BITS)) - 1;
 
     prom_puts("Zero hash table memory...");
-    of1275_client_interface_t *of = PTRRELOC(get_of1275());
-    of->claim((addr_t)phys_base, size, 0);
+    of = PTRRELOC(get_of1275());
+    of1275_claim(of, (addr_t)phys_base, size, 0);
 
     // zero_block( (word_t *)virt_start, size );
-    for (word_t i=phys_base; i < (phys_base + size); i+=8)
-	*(word_t*)i = 0;
+    for (j=phys_base; j < (phys_base + size); j+=8)
+	*(word_t*)j = 0;
 
     prom_puts(" done.\n\r");
     pte_replace_next = 0;
@@ -143,11 +145,11 @@ extern word_t realmode_call;
 extern word_t virtmode_call;
 extern word_t backmode_call;
 
-SECTION(".init") void ppc64_htab_t::activate()
+SECTION(".init") void ppc64_htab_activate( ppc64_htab_t *self )
 {
     ppc64_sdr1_t sdr1;
 
-    sdr1.create(this->phys_base, this->htab_size);
+    ppc64_sdr1_create( &sdr1, self->phys_base, self->htab_size );
 
     /* Install the HASH page table and jump into virtual mode */
     prom_print_hex( "Init MMU, sdr1", sdr1.raw );
@@ -169,7 +171,7 @@ SECTION(".init") void ppc64_htab_t::activate()
     ppc64_invalidate_tlb();
 
     /* Init Segmentation and Insert the entry for the kernel (first 256MB) */
-    segment_t::init_cpu( get_kernel_space(), (addr_t)KERNEL_OFFSET );
+    segment_init_cpu( get_kernel_space(), (addr_t)KERNEL_OFFSET );
 
     /* Setup the Hash Table Pointer */
     ppc64_set_sdr1(sdr1.raw);

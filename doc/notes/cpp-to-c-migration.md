@@ -9163,3 +9163,48 @@ out at the one call site.
 
     §165:  every `.c` compiles
     now:   17 `.cc` files left, all of them powerpc64's own
+
+## §167 -- powerpc64: the page hash and the address space
+
+`memcontrol.cc`, `resources.cc`, both `pghash.cc`s and `space.cc` are now C.
+Mechanical, except for two things that were never going to compile.
+
+### TRACEPOINT, frozen at an older signature
+
+`glue/v4-powerpc64/space.cc` contains
+
+    TRACEPOINT( hash_miss_cnt,
+        printf ( "hash miss @ %p (current=%p, space=%p)\n", ... ));
+    ...
+    TRACEPOINT( hash_insert_cnt );
+
+`kdb/tracepoints.h` has taken `(tp, str, args...)` for a long time -- master's
+copy is identical to ours here. So the first call passes a whole `printf()`
+expression where the format string goes (harmless only because
+`TBUF_REC_TRACEPOINT` compiles away when the tracebuffer is off, and the
+`printf(str, ##args)` branch needs CONFIG_DEBUG), and the second passes no
+format string at all, which is a hard arity error in any configuration. This
+is the shape TRACEPOINT had before it grew a format string. Both are rewritten
+to the current contract; `resources.cc`'s `DISABLED_FPU` had the same first
+problem.
+
+### A typo in a branch that is never taken
+
+`early_kernel_map()`, CONFIG_POWERPC64_LARGE_PAGES branch:
+
+    pg.set_entry( kernel_space, pgent_t::size_16m, 0,
+                  7, pgent_t;:l4default, true );
+
+`pgent_t;:l4default` -- a semicolon for the first colon. The 4K branch below it
+is what every shipped configuration takes, so this has sat there unnoticed.
+Converted as `l4default`, which is unambiguous.
+
+### Defaulted arguments, again
+
+`space_t::lookup_mapping`'s `cpuid_t cpu = 0` gets the `_c` suffix the 32-bit
+port already uses; `pghash_t::insert_mapping`'s `bool bolted = false` splits
+into `pghash_insert_mapping` and `pghash_insert_mapping_bolted` (§164 did the
+same for the header).
+
+    §166:  17 `.cc` files
+    now:   11

@@ -29,5 +29,5 @@
 ## $Id$
 ##                
 ######################################################################
-SOURCES += $(addprefix src/arch/powerpc64/, string.c pghash.cc \
+SOURCES += $(addprefix src/arch/powerpc64/, string.c pghash.c \
 	    except.S switch.S vsid_asid.c )

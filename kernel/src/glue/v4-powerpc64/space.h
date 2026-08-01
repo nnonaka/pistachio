@@ -146,6 +146,11 @@ bool	 space_handle_protection_fault (space_t *self, addr_t vaddr, bool dsi);
 bool	 space_handle_segment_miss (space_t *self, addr_t vaddr);
 bool	 space_lookup_mapping (space_t *self, addr_t vaddr, pgent_t **r_pg,
 			       pgsize_e *r_size, cpuid_t cpu);
+/* cpu defaulted to 0; the _c form is what the callers that took the default
+   use, as in glue/v4-powerpc/space.h. */
+bool	 space_lookup_mapping_c (space_t *self, addr_t vaddr, pgent_t **r_pg,
+				 pgsize_e *r_size);
+bool	 space_is_sigma0 (space_t *self);
 bool	 space_readmem (space_t *self, addr_t vaddr, word_t *contents);
 void	 space_release_kernel_mapping (space_t *self, addr_t vaddr,
 				       addr_t paddr, word_t log2size);
