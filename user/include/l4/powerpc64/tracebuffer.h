@@ -1,9 +1,9 @@
-/****************************************************************************
+/*********************************************************************
  *
- * Copyright (C) 2002-2003, Karlsruhe University
+ * Copyright (C) 2002,  Karlsruhe University
  *
- * File path:	l4/powerpc/specials.h
- * Description:	PowerPC specific functions and defines.
+ * File path:     l4/powerpc64/tracebuffer.h
+ * Description:   Functions for accessing the tracebuffer
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -26,38 +26,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: specials.h,v 1.2 2003/09/24 19:06:26 skoglund Exp $
- *
- ***************************************************************************/
-#ifndef __L4__POWERPC64__SPECIALS_H__
-#define __L4__POWERPC64__SPECIALS_H__
+ ********************************************************************/
+#pragma once 
 
-L4_INLINE int __L4_Msb( L4_Word_t w ) __attribute__ ((const));
-
-L4_INLINE int __L4_Msb( L4_Word_t w )
+L4_INLINE void L4_Tbuf_StoreRecordArch(L4_TraceRecord_t *rec, L4_TraceConfig_t config)
 {
-    int zeros;
-
-    asm volatile ("cntlzd %0, %1" : "=r" (zeros) : "r" (w) );
-
-    return 63-zeros;
 }
-
-/* l4/message.h calls this; the powerpc64 copy of this header never had it,
-   and the guard below was the 32-bit port's.  Body as in
-   l4/powerpc/specials.h.  Notes §171. */
-L4_INLINE int __L4_Lsb( L4_Word_t w )
-{
-    return __L4_Msb(w & -w);
-}
-
-#if defined(__cplusplus)
-L4_INLINE L4_Fpage_t L4_Fpage (L4_Fpage_t f)
-{
-        L4_Fpage_t out;
-	    out.raw = f.raw;
-	        return out;
-}
-#endif
-
-#endif	/* __L4__POWERPC64__SPECIALS_H__ */

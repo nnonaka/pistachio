@@ -69,7 +69,10 @@ __start:
 	la	%r11, BSS_END@l(%r11)
 	subi	%r11, %r11, 4
 	li	%r12, 0
-1:	cmp	0, %r10, %r11
+	/* was `cmp 0, %r10, %r11'.  On powerpc64 cmp takes a leading L field;
+	   the three-operand form is the 32-bit spelling and current binutils
+	   rejects it.  cmpw is that encoding exactly.  Notes §171. */
+1:	cmpw	0, %r10, %r11
 	beq	2f
 	stwu	%r12, 4(%r10)
 	b	1b
@@ -86,6 +89,21 @@ __start:
  *  Kernel hand-off point.
  *  void enter_kernel( r3, r4, r5, start_ip )
  */
+	.section ".text"
+	.align	2
+
+/* Upstream declared only the code label `.enter_kernel'.  This is ELFv1:
+   main.cc calls `enter_kernel', which is the *function descriptor* -- a
+   .opd triple of (code address, TOC pointer, environment) -- and nothing
+   here ever defined one, so the call had no target.  gcc emits the same
+   three quads for every C function in this file.  Notes §171. */
+	.section ".opd","aw"
+	.align	3
+	.globl	enter_kernel
+	.type	enter_kernel,@function
+enter_kernel:
+	.quad	.enter_kernel, .TOC.@tocbase, 0
+
 	.section ".text"
 	.align	2
 	.globl	.enter_kernel

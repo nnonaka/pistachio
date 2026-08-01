@@ -1,9 +1,9 @@
-/****************************************************************************
+/*********************************************************************
  *
- * Copyright (C) 2002-2003, Karlsruhe University
+ * Copyright (C) 2003,  National ICT Australia (NICTA)
  *
- * File path:	l4/powerpc/specials.h
- * Description:	PowerPC specific functions and defines.
+ * File path:     l4/powerpc64/arch.h
+ * Description:   powerpc64-specific API additions
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -26,38 +26,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: specials.h,v 1.2 2003/09/24 19:06:26 skoglund Exp $
+ * $Id$
  *
- ***************************************************************************/
-#ifndef __L4__POWERPC64__SPECIALS_H__
-#define __L4__POWERPC64__SPECIALS_H__
+ ********************************************************************/
+#ifndef __L4__POWERPC64__ARCH_H__
+#define __L4__POWERPC64__ARCH_H__
 
-L4_INLINE int __L4_Msb( L4_Word_t w ) __attribute__ ((const));
+/* New file, and deliberately empty.  l4/arch.h includes one of these per
+   architecture unconditionally, and powerpc64 never had one -- which is why
+   apps/l4test/ipc.cc has never built for this port.  Nothing belongs in it:
+   the 32-bit port's copy is the ctrlxfer message API, which the powerpc64
+   kernel does not implement (CONFIG_X_CTRLXFER_MSG is x86-only), and amd64's
+   is IO flexpages, which this architecture does not have either.
+   See doc/notes/cpp-to-c-migration.md §171. */
 
-L4_INLINE int __L4_Msb( L4_Word_t w )
-{
-    int zeros;
-
-    asm volatile ("cntlzd %0, %1" : "=r" (zeros) : "r" (w) );
-
-    return 63-zeros;
-}
-
-/* l4/message.h calls this; the powerpc64 copy of this header never had it,
-   and the guard below was the 32-bit port's.  Body as in
-   l4/powerpc/specials.h.  Notes §171. */
-L4_INLINE int __L4_Lsb( L4_Word_t w )
-{
-    return __L4_Msb(w & -w);
-}
-
-#if defined(__cplusplus)
-L4_INLINE L4_Fpage_t L4_Fpage (L4_Fpage_t f)
-{
-        L4_Fpage_t out;
-	    out.raw = f.raw;
-	        return out;
-}
-#endif
-
-#endif	/* __L4__POWERPC64__SPECIALS_H__ */
+#endif /* !__L4__POWERPC64__ARCH_H__ */

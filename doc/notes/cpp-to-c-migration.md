@@ -9334,3 +9334,52 @@ The five are the unreachable set from §162: `arch/x86/x64/init.cc` (dead),
 be built is done.
 
 Verified: ofg5, ofpower3, ofpower4, ofppc, ppc44x and x86-x64-p4 all build.
+
+## §171 -- powerpc64: the userland
+
+The kernel links; booting it needs a userland, and powerpc64's had never been
+built either. Nine things were missing or wrong. None of them is a conversion
+artefact -- this is the same picture as §169/§170, one level up.
+
+**Two headers do not exist.** `l4/powerpc64/tracebuffer.h` (the 32-bit copy is
+an empty `L4_Tbuf_StoreRecordArch`) and `l4/powerpc64/arch.h`. Both are
+included unconditionally -- `l4/tracebuffer.h` and `l4/arch.h` each include
+one per architecture. The arch.h is deliberately empty: powerpc's copy is the
+ctrlxfer API, which this kernel does not implement, and amd64's is IO
+flexpages, which this architecture does not have.
+
+**`__L4_Lsb` is missing** from `l4/powerpc64/specials.h`, which `l4/message.h`
+calls. The file also carried the 32-bit port's include guard.
+
+**`L4_SystemClock` declares `register L4_Clock_t r3 asm("r3")`** and then names
+`r3.raw` as an asm output. Naming a member of an explicit-register aggregate
+is an error in current gcc. The 32-bit port declares a plain `L4_Word_t` and
+assembles the result afterwards.
+
+**`__L4_Init` is not `extern "C"`** in `lib/l4/powerpc64.cc`, but every crt0
+calls it from assembly. `lib/l4/powerpc.cc` has the `extern "C"`.
+
+**`cmp 0, %r10, %r11`** in all five powerpc64 crt0 files -- the same 32-bit
+three-operand spelling as the kernel's head.S (§169).
+
+**`#include "string.h"`** in `apps/l4test/powerpc64/1275tree.cc` resolves to
+nothing: l4test's `string.h` is one directory up, and the sibling files there
+reach it as `"../l4test.h"` and `"../menu.h"`.
+
+**`strcpy(&(char)buf[noteoff + 12], target)`** in the loader's `donote.cc` --
+the address of a cast rvalue, which no C++ compiler accepts. `buf` is
+`unsigned char[512]`, so the cast belongs on the pointer.
+
+**`enter_kernel` has no function descriptor.** The loader's crt0 defines only
+the code label `.enter_kernel`; `main.cc` calls `enter_kernel`, which in ELFv1
+is the `.opd` triple. Nothing defined one, so the call had no target.
+
+**`-msoft-float` cannot be used.** gcc's powerpc64 cross toolchain ships no
+soft-float multilib, so libgcc.a has none of the double helpers the flag makes
+the compiler call -- `lib/io/print.cc`'s `%f` support alone leaves `__gedf2`,
+`__subdf3` and `__muldf3` undefined at link. `configure.in` drops it for
+powerpc64 only. The kernel switches the FPU lazily for user threads, so hard
+float is safe.
+
+With those, the ofg5 userland builds: sigma0, l4test, and the ofppc64
+piggybacker loader.

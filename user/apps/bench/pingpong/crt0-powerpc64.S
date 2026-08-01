@@ -52,7 +52,10 @@ _start:
 	subi	%r11, %r11, 4
 
 	li	%r12, 0
-1:	cmp	0, %r10, %r11
+	/* was `cmp 0, %r10, %r11'.  On powerpc64 cmp takes a leading L field;
+	   the three-operand form is the 32-bit spelling and current binutils
+	   rejects it.  cmpw is that encoding exactly.  Notes §171. */
+1:	cmpw	0, %r10, %r11
 	beq	2f
 	stwu	%r12, 4(%r10)
 	b	1b

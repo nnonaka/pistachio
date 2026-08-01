@@ -37,7 +37,10 @@
 //#include <piggybacker/1275tree.h>
 //#include <piggybacker/io.h>
 #include "1275tree.h"
-#include "string.h"
+/* was "string.h", which resolves to neither this directory nor any -I path;
+   l4test's own string.cc/string.h are one level up, and the sibling files
+   here reach them the same way (see powerpc64/tests.cc).  Notes §171. */
+#include "../string.h"
 
 #define NAME_BUFSIZ	256
 

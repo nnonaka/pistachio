@@ -167,7 +167,10 @@ int main( int argc, char **argv )
     write_be32(noteoff + 4, sizeof(of_note_t));
     write_be32(noteoff + 8, 0x1275);
 
-    strcpy(&(char)buf[noteoff + 12], target);
+    /* was `strcpy(&(char)buf[noteoff + 12], target)' -- the address of a cast
+       rvalue, which no C++ compiler accepts.  buf is unsigned char[512], so
+       the cast belongs on the pointer.  Notes §171. */
+    strcpy((char *)&buf[noteoff + 12], target);
     noteoff += 12 + strlen(target) + 1;
 
     for (i = 0; i < sizeof(of_note_t); i+= 4)

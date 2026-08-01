@@ -50,11 +50,13 @@ __L4_MemoryControl_t __L4_MemoryControl = NULL;
 
 __L4_RtasCall_t __L4_RtasCall = NULL;
 
-void __L4_Init( void )
+/* The crt0 files call this from assembly, so it must not be mangled;
+   lib/l4/powerpc.cc has the extern "C" and this copy never did.  Notes §171. */
+extern "C" void __L4_Init( void )
 {
     L4_KernelInterfacePage_t *kip;
     
-    kip = L4_KernelInterface( NULL, NULL, NULL );
+    kip = (L4_KernelInterfacePage_t *) L4_KernelInterface( NULL, NULL, NULL );
 
 #define KIP_RELOC(a) ((L4_Word_t)kip + a)
 

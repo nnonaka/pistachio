@@ -161,13 +161,19 @@ extern __L4_SystemClock_t __L4_SystemClock;
 
 L4_INLINE L4_Clock_t L4_SystemClock( void )
 {
-    register L4_Clock_t r3 asm("r3");
+    /* was `register L4_Clock_t r3 asm("r3")' with `"=r" (r3.raw)'.  Naming a
+       member of an explicit-register aggregate is an error in current gcc
+       ("address of explicit register variable requested"); the 32-bit port
+       declares a plain L4_Word_t and builds the result afterwards, which is
+       what this does.  Notes §171. */
+    register L4_Word_t r3 asm("r3");
+    L4_Clock_t clock;
 
     __asm__ __volatile__ (
 	"mtctr  %[sys];"
 	"bctrl;"
 	: /* outputs */
-	 "=r" (r3.raw)
+	 "=r" (r3)
 	: /* inputs */
 	 [sys] "r" (__L4_SystemClock)
 	: /* clobbers */
@@ -175,7 +181,8 @@ L4_INLINE L4_Clock_t L4_SystemClock( void )
 	 __L4_PPC64_CLOBBER_REGS, "memory", __L4_PPC64_CLOBBER_CR_REGS
     );
 
-    return ( r3 );
+    clock.raw = r3;
+    return ( clock );
 }
 
 typedef L4_Word_t (*__L4_ThreadSwitch_t)( L4_Word_t );

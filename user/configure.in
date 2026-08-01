@@ -317,7 +317,15 @@ case $ARCH in
 	CFLAGS="$CFLAGS -msoft-float  -mno-regnames -meabi -msdata=none -mno-toc"
         ;;
   powerpc64*)
-	CFLAGS="$CFLAGS -msoft-float -mminimal-toc"
+	dnl No -msoft-float here, unlike the 32-bit port.  gcc's powerpc64
+	dnl cross toolchain ships no soft-float multilib, so libgcc.a has none
+	dnl of the double helpers -msoft-float makes the compiler call:
+	dnl lib/io/print.cc's %f support alone leaves __gedf2 and __subdf3
+	dnl undefined at link.  Hard float is what the toolchain supports, and
+	dnl the kernel switches the FPU lazily for user threads
+	dnl (glue/v4-powerpc64/resources.c), so user code may use it.
+	dnl See doc/notes/cpp-to-c-migration.md §171.
+	CFLAGS="$CFLAGS -mminimal-toc"
 	;;
 esac
 
