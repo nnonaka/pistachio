@@ -93,9 +93,12 @@ L4_INLINE bool is_kernel_thread (L4_ThreadId_t t)
 /* From sigma0_mem.cc */
 void init_mempool (void);
 void dump_mempools (void);
-bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
-		    L4_MapItem_t & map, bool only_conventional = false);
-bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t & map);
+/* allocate_page was overloaded on arity -- by address and by size alone -- and
+   the by-address form defaulted only_conventional to false.  Distinct names in
+   C, and the L4_MapItem_t reference out-parameter becomes a pointer. */
+bool allocate_page_at (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
+		       L4_MapItem_t * map, bool only_conventional);
+bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t * map);
 
 #if defined(L4_ARCH_IA32) || defined(L4_ARCH_AMD64)
 #include <l4/arch.h>
@@ -106,7 +109,7 @@ bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t & map);
 
 /* From sigma0_io.cc */
 void init_iopool (void);
-bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t & map);
+bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t * map);
 #endif
 
 #endif /* !__SIGMA0_H__ */

@@ -60,7 +60,7 @@ L4_ThreadId_t rootserver_id;
 
 
 
-extern "C" __attribute__ ((weak)) void *
+__attribute__ ((weak)) void *
 memcpy (void * dst, const void * src, unsigned int len)
 {
     unsigned char *d = (unsigned char *) dst;
@@ -97,7 +97,7 @@ static region_t initial_regs[32];
 /**
  * Main sigma0 loop.
  */
-extern "C" void sigma0_main (void)
+void sigma0_main (void)
 {
     L4_Word_t api_version, api_flags, kernelid;
     L4_MsgTag_t tag;
@@ -118,7 +118,7 @@ extern "C" void sigma0_main (void)
     rootserver_id = L4_GlobalId (L4_ThreadIdUserBase (kip) + 2, 1);
 
     // Add some initial region_t structures to pool
-    region_list.add ((L4_Word_t) initial_regs, sizeof (initial_regs));
+    region_list_add (&region_list, (L4_Word_t) initial_regs, sizeof (initial_regs));
 
     init_mempool ();
 #if defined(L4_ARCH_IA32) || defined(L4_ARCH_AMD64)
@@ -151,11 +151,11 @@ extern "C" void sigma0_main (void)
 	    continue;
 	}
 	
-	L4_Store (tag, &msg);
+	L4_MsgStore (tag, &msg);
 
 	dprintf (1, "s0: got msg from %p, (0x%lx, %p, %p)\n", 
 		 (void *) tid.raw, (long) L4_Label (tag),
-		 (void *) L4_Get (&msg, 0), (void *) L4_Get (&msg, 1));
+		 (void *) L4_MsgWord (&msg, 0), (void *) L4_MsgWord (&msg, 1));
 
 	/*
 	 * Dispatch IPC according to protocol.
@@ -165,29 +165,29 @@ extern "C" void sigma0_main (void)
 	{
 	case L4_PAGEFAULT:
 	{
-	    if (! allocate_page (tid, L4_Get (&msg, 0), min_pgsize, map, true))
+	    if (! allocate_page_at (tid, L4_MsgWord (&msg, 0), min_pgsize, &map, true))
 		dprintf (0, "s0: unhandled pagefault from %p @ %p, ip: %p\n",
-			 (void *) tid.raw, (void *) L4_Get (&msg, 0),
-			 (void *) L4_Get (&msg, 1));
+			 (void *) tid.raw, (void *) L4_MsgWord (&msg, 0),
+			 (void *) L4_MsgWord (&msg, 1));
 	    break;
 	}
 #if defined(L4_ARCH_IA32) || defined(L4_ARCH_AMD64)
 	case L4_IO_PAGEFAULT:
 	{
-	    L4_Fpage_t iofp = { raw : L4_Get(&msg, 0) };
-	    if (! allocate_iopage (tid, iofp, map))
+	    L4_Fpage_t iofp = { raw : L4_MsgWord (&msg, 0) };
+	    if (! allocate_iopage (tid, iofp, &map))
 		dprintf (0, "s0: unhandled IO-pagefault from %p @ "
 			 "%lx[%lx], ip: %p\n",
 			 (void *) tid.raw, L4_IoFpagePort(iofp),
 			 L4_IoFpageSize(iofp),
-			 (void *) L4_Get (&msg, 1));
+			 (void *) L4_MsgWord (&msg, 1));
 	    break;
 	}
 #endif
 
 	case L4_SIGMA0_RPC:
 	{
-	    fpage.raw = L4_Get (&msg, 0);
+	    fpage.raw = L4_MsgWord (&msg, 0);
 #if defined(L4_ARCH_IA32) || defined(L4_ARCH_AMD64)
 	    if (L4_IsIoFpage (fpage))
 	    {
@@ -198,7 +198,7 @@ extern "C" void sigma0_main (void)
 		else
 		{
 		    // Allocate from specific location.
-		    if (! allocate_iopage (tid, fpage, map))
+		    if (! allocate_iopage (tid, fpage, &map))
 			dprintf (0, "s0: unable to allocate IO fpage at port "
 				 "%x of size %p to %p\n",
 				 (int) L4_IoFpagePort(fpage),
@@ -210,12 +210,12 @@ extern "C" void sigma0_main (void)
 #endif
 	    L4_Paddr_t addr;
 	    if (fpage.X.extended == 1) {
-	    	addr = L4_Get(&msg,2);
+	    	addr = L4_MsgWord (&msg, 2);
 	    	addr <<= 32;
 	    	addr |= L4_Address (fpage);
 	    } else
 	    	addr = L4_Address (fpage);
-	    L4_Word_t attributes = L4_Get (&msg, 1);
+	    L4_Word_t attributes = L4_MsgWord (&msg, 1);
 
 	    if (is_kernel_thread (tid))
 	    {
@@ -234,7 +234,7 @@ extern "C" void sigma0_main (void)
 		if ((fpage.raw >> 10) == (word_size_mask >> 10))
 		{
 		    // Allocate from arbitrary location.
-		    if (! allocate_page (tid, L4_SizeLog2 (fpage), map))
+		    if (! allocate_page (tid, L4_SizeLog2 (fpage), &map))
 			dprintf (0, "s0: unable to allocate page of size %p"
 				 " to %p\n", (void *) L4_Size (fpage),
 				 (void *) tid.raw);
@@ -242,8 +242,8 @@ extern "C" void sigma0_main (void)
 		else
 		{
 		    // Allocate from specific location.
-		    if (! allocate_page (tid, addr, L4_SizeLog2 (fpage),
-			    	    	 map))
+		    if (! allocate_page_at (tid, addr, L4_SizeLog2 (fpage),
+					    &map, false))
 			dprintf (0, "s0: unable to allocate page %p of "
 				 "size %p to %p\n", (void *) addr,
 				 (void *) L4_Size (fpage),
@@ -256,12 +256,12 @@ extern "C" void sigma0_main (void)
 		    // possibly needs to be revised.
 
 		    // Set memory attributes before mapping.
-		    if (! L4_Set_PageAttribute (L4_SndFpage (map), attributes))
+		    if (! L4_Set_PageAttribute (L4_MapItemSndFpage (map), attributes))
 		    {
 			dprintf (1, "s0: memory control failed (%ld) setting "
 				 "page %p with attributes %p",
 				 L4_ErrorCode(), 
-				 (void *) L4_Address (L4_SndFpage (map)),
+				 (void *) L4_Address (L4_MapItemSndFpage (map)),
 				 (void *) attributes);
 
 			// We do not deallocate the memory.
@@ -275,21 +275,21 @@ extern "C" void sigma0_main (void)
 	case L4_SIGMA0_EXT:
 	{
 	    // Only allow kernel threads to use extended sigma0 protocol.
-	    if (! is_kernel_thread (tid) && tid != rootserver_id)
+	    if (! is_kernel_thread (tid) && ! L4_IsThreadEqual (tid, rootserver_id))
 	    {
 		tag = L4_Wait (&tid);
 		continue;
 	    }
 
 	    bool reply = false;
-	    switch (L4_Get (&msg, 0))
+	    switch (L4_MsgWord (&msg, 0))
 	    {
 	    case L4_S0EXT_VERBOSE:
-		verbose = L4_Get (&msg, 1);
+		verbose = L4_MsgWord (&msg, 1);
 		break;
 	    case L4_s0EXT_DUMPMEM:
 		dump_pools ();
-		if (L4_Get (&msg, 1) != 0)
+		if (L4_MsgWord (&msg, 1) != 0)
 		    reply = true;
 		break;
 	    }
@@ -307,15 +307,15 @@ extern "C" void sigma0_main (void)
 	default:
 	    dprintf (0, "s0: unknown sigma0 request from %p, (%p, %p, %p)\n",
 		     (void *) tid.raw, (void *) tag.raw,
-		     (void *) L4_Get (&msg, 0), (void *) L4_Get(&msg, 1));
+		     (void *) L4_MsgWord (&msg, 0), (void *) L4_MsgWord (&msg, 1));
 	    map = L4_MapItem (L4_Nilpage, 0);
 
 	    tag = L4_Wait (&tid);
 	    continue;
 	}
 
-	L4_Put (&msg, 0, 0, (L4_Word_t *) 0, 2, &map);
-	L4_Load (&msg);
+	L4_MsgPut (&msg, 0, 0, (L4_Word_t *) 0, 2, &map);
+	L4_MsgLoad (&msg);
 	tag = L4_ReplyWait (tid, &tid);
 
 	// If reply phase fails, receive phase is redone at top of loop.
@@ -329,6 +329,6 @@ extern "C" void sigma0_main (void)
 void dump_pools (void)
 {
     printf ("s0: Free region structures: %d\n:s0\n",
-	    (int) region_list.contents ());
+	    (int) region_list_contents (&region_list));
     dump_mempools ();
 }

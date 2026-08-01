@@ -55,7 +55,7 @@ region_pool_t io_alloc_pool;
 void init_iopool (void)
 {
     // Insert IO-port memory.
-    io_pool.insert (L4_IO_PORT_START, L4_IO_PORT_END, L4_anythread);
+    region_pool_insert_range (&io_pool, L4_IO_PORT_START, L4_IO_PORT_END, L4_anythread);
 
 }
 
@@ -68,7 +68,7 @@ void init_iopool (void)
  *
  * @return true upon success, false otherwise
  */
-bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t & map)
+bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t * map)
 {
     region_t * r;
 
@@ -85,31 +85,30 @@ bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t & map)
 	return false;
     }
 
-    io_pool.reset ();
+    region_pool_reset (&io_pool);
     
-    while ((r = io_pool.next ()) != NULL)
+    while ((r = region_pool_next (&io_pool)) != NULL)
     {
 	if (r->low > addr_high || r->high < addr)
 	    continue;
- 	L4_Fpage_t result = r->allocate (addr, log2size, tid, L4_IoFpageLog2);
+ 	L4_Fpage_t result = region_allocate_at (r, addr, log2size, tid, L4_IoFpageLog2);
 	if (! L4_IsNilFpage (result))
 	{
 	    dprintf(1, "s0: map IO fpage %x port %x [size %x]\n", 
 		    (int) result.raw, (int) addr, (int) log2size);
-	    map = L4_MapItem (result, L4_IoFpagePort(result));
-	    io_alloc_pool.insert 
-		(new region_t (addr, addr_high, tid));
+	    *map = L4_MapItem (result, L4_IoFpagePort(result));
+	    region_pool_insert (&io_alloc_pool, region_new (addr, addr_high, tid));
 	    return true;
 	}
     }
 
     // Check if memory has already been allocated.
-    io_alloc_pool.reset ();
-    while ((r = io_alloc_pool.next ()) != NULL)
+    region_pool_reset (&io_alloc_pool);
+    while ((r = region_pool_next (&io_alloc_pool)) != NULL)
     {
-	if (r->can_allocate (addr, log2size, tid))
+	if (region_can_allocate (r, addr, log2size, tid))
 	{
-	    map = L4_MapItem (iofp, L4_IoFpagePort(iofp));
+	    *map = L4_MapItem (iofp, L4_IoFpagePort(iofp));
 	    return true;
 	}
     }
@@ -134,22 +133,21 @@ bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t & map)
 	    // Try the different pools
 	    for (L4_Word_t i = 0; failed && all_io_pools[i] != NULL; i++)
 	    {
-		all_io_pools[i]->reset ();
-		while ((r = all_io_pools[i]->next ()) != NULL)
+		region_pool_reset (all_io_pools[i]);
+		while ((r = region_pool_next (all_io_pools[i])) != NULL)
 		{
 		    if (r->low > a_end || r->high < a)
 			continue;
 
 		    // Test if allocation is possible
-		    if (r->can_allocate (a, 0, tid))
+		    if (region_can_allocate (r, a, 0, tid))
 		    {
 			failed = false;
 			if (phase == 1 && all_io_pools[i] != &io_alloc_pool)
 			{
 			    // Allocation phase
-			    r->allocate (a, 0, tid, L4_IoFpageLog2);
-			    io_alloc_pool.insert 
-				(new region_t (a, a_end - 1, tid));
+			    region_allocate_at (r, a, 0, tid, L4_IoFpageLog2);
+			    region_pool_insert (&io_alloc_pool, region_new (a, a_end - 1, tid));
 			}
 		    }
 		}
@@ -161,7 +159,7 @@ bool allocate_iopage (L4_ThreadId_t tid, L4_Fpage_t iofp, L4_MapItem_t & map)
 	}
     }
 
-    map = L4_MapItem (iofp, L4_IoFpagePort(iofp));
+    *map = L4_MapItem (iofp, L4_IoFpagePort(iofp));
     return true;
 
     

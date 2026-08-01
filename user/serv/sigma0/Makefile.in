@@ -40,15 +40,15 @@ PROGRAM=	sigma0
 PROGRAM_DEPS=	$(top_builddir)/lib/l4/libl4.a \
 		$(top_builddir)/lib/io/libio.a
 
-SRCS_ia32= 	sigma0_io.cc
-SRCS_amd64= 	sigma0_io.cc
+SRCS_ia32= 	sigma0_io.c
+SRCS_amd64= 	sigma0_io.c
 
 
 SRCS=		crt0-$(ARCH).S \
 		$(SRCS_$(ARCH)) \
-		sigma0.cc \
-		sigma0_mem.cc \
-		region.cc
+		sigma0.c \
+		sigma0_mem.c \
+		region.c
 
 LIBS+=		-ll4 -lio
 LDFLAGS+=	-Ttext=$(SIGMA0_LINKBASE)

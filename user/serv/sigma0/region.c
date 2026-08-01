@@ -9,9 +9,9 @@
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ *    notice, self list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
+ *    notice, self list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
@@ -50,16 +50,18 @@ region_list_t region_list;
 **
 */
 
-region_t::region_t (L4_Paddr_t l, L4_Paddr_t h, L4_ThreadId_t o)
+/* `region_new (l, h, o)' was region_t::operator new -- which allocates from
+   region_list -- followed by the constructor's three assignments.  One
+   function in C. */
+region_t * region_new (L4_Paddr_t l, L4_Paddr_t h, L4_ThreadId_t o)
 {
-    low = l;
-    high = h;
-    owner = o;
-}
+    region_t * self = region_list_alloc (&region_list);
 
-void * region_t::operator new (L4_Size_t size)
-{
-    return (void *) region_list.alloc ();
+    self->low = l;
+    self->high = h;
+    self->owner = o;
+
+    return self;
 }
 
 
@@ -70,9 +72,9 @@ void * region_t::operator new (L4_Size_t size)
  *
  * @param r	location of region_t to use instead of current memory
  */
-void region_t::swap (region_t * r)
+void region_swap (region_t *self, region_t * r)
 {
-    *r = *this;
+    *r = *self;
     r->prev->next = r->next->prev = r;
 }
 
@@ -82,11 +84,11 @@ void region_t::swap (region_t * r)
  * it is allocated to before its memory is freed.  Region must not be
  * accessed after it has been removed.
  */
-void region_t::remove (void)
+void region_remove (region_t *self)
 {
-    prev->next = next;
-    next->prev = prev;
-    region_list.free (this);
+    self->prev->next = self->next;
+    self->next->prev = self->prev;
+    region_list_free (&region_list, self);
 }
 
 
@@ -95,10 +97,10 @@ void region_t::remove (void)
  * @param r	memory region to check against
  * @return true it memory regions are adjacent, false otherwise
  */
-bool region_t::is_adjacent (const region_t & r)
+bool region_is_adjacent (region_t *self, const region_t * r)
 {
-    return (low == r.high + 1 && low != 0) ||
-	(high + 1 == r.low && r.low != 0);
+    return (self->low == r->high + 1 && self->low != 0) ||
+	(self->high + 1 == r->low && r->low != 0);
 }
 
 
@@ -109,15 +111,15 @@ bool region_t::is_adjacent (const region_t & r)
  *
  * @return true if concatenation was successful, false otherwise
  */
-bool region_t::concatenate (region_t * r)
+bool region_concatenate (region_t *self, region_t * r)
 {
-    if (owner != r->owner)
+    if (! L4_IsThreadEqual (self->owner, r->owner))
 	return false;
 
-    if (low == r->high + 1 && low != 0)
-	low = r->low;
-    else if (high + 1 == r->low && r->low != 0)
-	high = r->high;
+    if (self->low == r->high + 1 && self->low != 0)
+	self->low = r->low;
+    else if (self->high + 1 == r->low && r->low != 0)
+	self->high = r->high;
     else
 	return false;
 
@@ -136,8 +138,8 @@ bool region_t::concatenate (region_t * r)
  *
  * @return fpage for allocated region if successful, nilpage otherwise
  */
-L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
-			       L4_Fpage_t (*make_fpage) (L4_Word_t, int))
+L4_Fpage_t region_allocate (region_t *self, L4_Word_t log2size, L4_ThreadId_t tid,
+			    L4_Fpage_t (*make_fpage) (L4_Word_t, int))
 {
     L4_Word_t size = 1UL << log2size;
     L4_Fpage_t ret;
@@ -149,41 +151,41 @@ L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
     // Low and high address of region within mwmregion when they are
     // aligned according to log2size.  Note that these values might
     // overflow and must as such be handled with care.
-    L4_Paddr_t low_a = (low + size - 1) & ~(size-1);
-    L4_Paddr_t high_a = ((high + 1) & ~(size-1)) - 1;
+    L4_Paddr_t low_a = (self->low + size - 1) & ~(size-1);
+    L4_Paddr_t high_a = ((self->high + 1) & ~(size-1)) - 1;
 
     if (low_a > high_a			// Low rounded up to above high
-	|| low > low_a			// Low wrapped around
-	|| high < size-1		// High wrapped around
+	|| self->low > low_a			// Low wrapped around
+	|| self->high < size-1		// High wrapped around
 	|| (high_a - low_a) < size-1	// Not enough space in region
-	|| (owner != tid && owner != L4_anythread))
+	|| (! L4_IsThreadEqual (self->owner, tid) && ! L4_IsThreadEqual (self->owner, L4_anythread)))
     {
 	// Allocation failed
 	ret = L4_Nilpage;
     }
-    else if (low_a == low)
+    else if (low_a == self->low)
     {
 	// Allocate from start of region
 
 
-	if (low != (L4_Word_t)low) { //extended mapping
-		shortaddr = (L4_Word_t)low;
+	if (self->low != (L4_Word_t)self->low) { //extended mapping
+		shortaddr = (L4_Word_t)self->low;
 		kip_area.X.s = log2size;
 		kip_area.X.b = shortaddr >> 10;
-		redirector.raw = low >> 32;
+		redirector.raw = self->low >> 32;
 		utcb_area.raw = shortaddr;
 
 		L4_SpaceControl(sigma0_id,1 << 29, kip_area, utcb_area, redirector,
 				&control);
 	}
 
-    ret = make_fpage ((L4_Word_t)low, log2size) + L4_FullyAccessible;
-	if (low + size == high + 1)
-	    remove ();
+    ret = L4_FpageAddRights (make_fpage ((L4_Word_t)self->low, log2size), L4_FullyAccessible);
+	if (self->low + size == self->high + 1)
+	    region_remove (self);
 	else
-	    low += size;
+	    self->low += size;
     }
-    else if (high_a == high)
+    else if (high_a == self->high)
     {
 	// Allocate from end of region
 
@@ -191,15 +193,15 @@ L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
 		shortaddr = (L4_Word_t)(high_a - size + 1);
 		kip_area.X.s = log2size;
 		kip_area.X.b = shortaddr >> 10;
-		redirector.raw = low >> 32;
+		redirector.raw = self->low >> 32;
 		utcb_area.raw = shortaddr;
 
 		L4_SpaceControl(sigma0_id,1 << 29, kip_area, utcb_area, redirector,
 				&control);
 	}
 
-    ret = make_fpage ((L4_Word_t)(high_a) - size + 1, log2size) + L4_FullyAccessible;
-	high -= size;
+    ret = L4_FpageAddRights (make_fpage ((L4_Word_t)(high_a) - size + 1, log2size), L4_FullyAccessible);
+	self->high -= size;
     }
     else
     {
@@ -209,7 +211,7 @@ L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
 		shortaddr = (L4_Word_t)low_a;
 		kip_area.X.s = log2size;
 		kip_area.X.b = shortaddr >> 10;
-		redirector.raw = low >> 32;
+		redirector.raw = self->low >> 32;
 		utcb_area.raw = shortaddr;
 
 		L4_SpaceControl(sigma0_id,1 << 29, kip_area, utcb_area, redirector,
@@ -217,12 +219,12 @@ L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
 	}
 
 
-	ret = make_fpage ((L4_Word_t)low_a, log2size) + L4_FullyAccessible;
-	region_t * r = new region_t (low_a + size, high, owner);
-	r->next = next;
-	r->prev = this;
-	r->next->prev = next = r;
-	high = low_a - 1;
+	ret = L4_FpageAddRights (make_fpage ((L4_Word_t)low_a, log2size), L4_FullyAccessible);
+	region_t * r = region_new (low_a + size, self->high, self->owner);
+	r->next = self->next;
+	r->prev = self;
+	r->next->prev = self->next = r;
+	self->high = low_a - 1;
     }
 
     return ret;
@@ -241,7 +243,7 @@ L4_Fpage_t region_t::allocate (L4_Word_t log2size, L4_ThreadId_t tid,
  *
  * @return fpage for allocated region if successful, nilpage otherwise
  */
-L4_Fpage_t region_t::allocate (L4_Paddr_t addr, L4_Word_t log2size,
+L4_Fpage_t region_allocate_at (region_t *self, L4_Paddr_t addr, L4_Word_t log2size,
 			       L4_ThreadId_t tid,
 			       L4_Fpage_t (*make_fpage) (L4_Word_t, int))
 {
@@ -251,43 +253,43 @@ L4_Fpage_t region_t::allocate (L4_Paddr_t addr, L4_Word_t log2size,
     // Low and high address of region within mwmregion when they are
     // aligned according to log2size.  Note that these values might
     // overflow and must as such be handled with care.
-    L4_Paddr_t low_a = (low + size - 1) & ~(size-1);
-    L4_Paddr_t high_a = ((high + 1) & ~(size-1)) - 1;
+    L4_Paddr_t low_a = (self->low + size - 1) & ~(size-1);
+    L4_Paddr_t high_a = ((self->high + 1) & ~(size-1)) - 1;
 
     if (addr < low_a			// Address range below low
 	|| (addr + size - 1) > high_a	// Address range above high
 	|| (high_a - low_a) < size-1	// Not enough space in region
-	|| low > low_a			// Low wrapped around
-	|| high < size-1		// High wrapper around
-	|| (owner != tid && owner != L4_anythread))
+	|| self->low > low_a			// Low wrapped around
+	|| self->high < size-1		// High wrapper around
+	|| (! L4_IsThreadEqual (self->owner, tid) && ! L4_IsThreadEqual (self->owner, L4_anythread)))
     {
 	// Allocation failed
 	ret = L4_Nilpage;
     }
-    else if (low_a == low && addr == low)
+    else if (low_a == self->low && addr == self->low)
     {
 	// Allocate from start of region
-	ret = make_fpage ((L4_Word_t)low, log2size) + L4_FullyAccessible;
-	if (low + size == high + 1)
-	    remove ();
+	ret = L4_FpageAddRights (make_fpage ((L4_Word_t)self->low, log2size), L4_FullyAccessible);
+	if (self->low + size == self->high + 1)
+	    region_remove (self);
 	else
-	    low += size;
+	    self->low += size;
     }
-    else if (high_a == high && (addr + size - 1) == high)
+    else if (high_a == self->high && (addr + size - 1) == self->high)
     {
 	// Allocate from end of region
-	ret = make_fpage ((L4_Word_t)(high_a - size + 1), log2size) + L4_FullyAccessible;
-	high -= size;
+	ret = L4_FpageAddRights (make_fpage ((L4_Word_t)(high_a - size + 1), log2size), L4_FullyAccessible);
+	self->high -= size;
     }
     else
     {
 	// Allocate from middle of region
-	ret = make_fpage ((L4_Word_t)addr, log2size) + L4_FullyAccessible;
-	region_t * r = new region_t (addr + size, high, owner);
-	r->next = next;
-	r->prev = this;
-	r->next->prev = next = r;
-	high = addr - 1;
+	ret = L4_FpageAddRights (make_fpage ((L4_Word_t)addr, log2size), L4_FullyAccessible);
+	region_t * r = region_new (addr + size, self->high, self->owner);
+	r->next = self->next;
+	r->prev = self;
+	r->next->prev = self->next = r;
+	self->high = addr - 1;
     }
 
     return ret;
@@ -303,7 +305,7 @@ L4_Fpage_t region_t::allocate (L4_Paddr_t addr, L4_Word_t log2size,
  *
  * @return true if allocation is possible, false otherwise
  */
-bool region_t::can_allocate (L4_Paddr_t addr, L4_Word_t log2size,
+bool region_can_allocate (region_t *self, L4_Paddr_t addr, L4_Word_t log2size,
 				L4_ThreadId_t tid)
 {
     L4_Word_t size = 1UL << log2size;
@@ -311,15 +313,15 @@ bool region_t::can_allocate (L4_Paddr_t addr, L4_Word_t log2size,
     // Low and high address of region within mwmregion when they are
     // aligned according to log2size.  Note that these values might
     // overflow and must as such be handled with care.
-    L4_Paddr_t low_a = (low + size - 1) & ~(size-1);
-    L4_Paddr_t high_a = ((high + 1) & ~(size-1)) - 1;
+    L4_Paddr_t low_a = (self->low + size - 1) & ~(size-1);
+    L4_Paddr_t high_a = ((self->high + 1) & ~(size-1)) - 1;
 
     if (addr < low_a			// Address range below low
 	|| (addr + size - 1) > high_a	// Address range above high
 	|| (high_a - low_a) < size-1	// Not enough space in region
-	|| low > low_a			// Low wrapped around
-	|| high < size-1		// High wrapper around
-	|| (owner != tid && owner != L4_anythread))
+	|| self->low > low_a			// Low wrapped around
+	|| self->high < size-1		// High wrapper around
+	|| (! L4_IsThreadEqual (self->owner, tid) && ! L4_IsThreadEqual (self->owner, L4_anythread)))
 	return false;
     else
 	return true;
@@ -340,7 +342,7 @@ bool region_t::can_allocate (L4_Paddr_t addr, L4_Word_t log2size,
  * @param addr	location of memory to add
  * @param size	amount of memory to add
  */
-void region_list_t::add (L4_Paddr_t addr, L4_Word_t size)
+void region_list_add (region_list_t *self, L4_Paddr_t addr, L4_Word_t size)
 {
     if (addr == 0)
     {
@@ -352,20 +354,20 @@ void region_list_t::add (L4_Paddr_t addr, L4_Word_t size)
     region_listent_t * m = (region_listent_t *) addr;
 
     for (; (L4_Word_t) (m+1) < addr + size; m++)
-	m->set_next (m+1);
+	region_listent_set_next (m, m+1);
 
-    m->set_next (list);
-    list = (region_listent_t *) addr;
+    region_listent_set_next (m, self->list);
+    self->list = (region_listent_t *) addr;
 }
 
 
 /**
  * @return number of region_t structures in pool
  */
-L4_Word_t region_list_t::contents (void)
+L4_Word_t region_list_contents (region_list_t *self)
 {
     L4_Word_t n = 0;
-    for (region_listent_t * m = list; m != NULL; m = m->next ())
+    for (region_listent_t * m = self->list; m != NULL; m = region_listent_next (m))
 	n++;
     return n;
 }
@@ -375,40 +377,40 @@ L4_Word_t region_list_t::contents (void)
  * Allocate a region_t structure.
  * @return newly allocated structure
  */
-region_t * region_list_t::alloc (void)
+region_t * region_list_alloc (region_list_t *self)
 {
-    if (! list)
+    if (! self->list)
     {
 	// We might need some memory for allocating memory.
 	region_t tmp;
-	add ((L4_Word_t) &tmp, sizeof (tmp));
+	region_list_add (self, (L4_Word_t) &tmp, sizeof (tmp));
 
 	// Allocate some memory to sigma0.
 	L4_MapItem_t dummy;
-	if (! allocate_page (sigma0_id, min_pgsize, dummy))
+	if (! allocate_page (sigma0_id, min_pgsize, &dummy))
 	{
 	    printf ("s0: Unable to allocate memory.\n");
 	    for (;;)
 		L4_KDB_Enter ("s0: out of memory");
 	}
 
-	bool was_alloced = (list == NULL);
+	bool was_alloced = (self->list == NULL);
 	if (! was_alloced)
-	    list = (region_listent_t *) NULL;
+	    self->list = (region_listent_t *) NULL;
 
 	// Add newly allocated memory to pool.
-	add (L4_Address (L4_SndFpage (dummy)), (1UL << min_pgsize));
+	region_list_add (self, L4_Address (L4_MapItemSndFpage (dummy)), (1UL << min_pgsize));
 
 	if (was_alloced)
 	    // Swap temorary structure with a newly allocated one.
-	    tmp.swap (alloc ());
+	    region_swap (&tmp, region_list_alloc (self));
     }
 
     // Remove first item from free list.
-    region_listent_t * r = list;
-    list = r->next ();
+    region_listent_t * r = self->list;
+    self->list = region_listent_next (r);
 
-    return r->region ();
+    return region_listent_region (r);
 }
 
 
@@ -416,11 +418,11 @@ region_t * region_list_t::alloc (void)
  * Free a region_t structure.
  * @param r	region structure to free
  */
-void region_list_t::free (region_t * r)
+void region_list_free (region_list_t *self, region_t * r)
 {
     region_listent_t * e = (region_listent_t *) r;
-    e->set_next (list);
-    list = e;
+    region_listent_set_next (e, self->list);
+    self->list = e;
 }
 
 
@@ -435,14 +437,14 @@ void region_list_t::free (region_t * r)
  * Initialize the memory pool structure.  Must be done prior to any
  * insertions into the pool.
  */
-void region_pool_t::init (void)
+void region_pool_init (region_pool_t *self)
 {
-    first.next = first.prev = &last;
-    last.next = last.prev = &first;
-    first.low = first.high = 0;
-    last.low = last.high = ~0UL;
-    first.owner = last.owner = L4_nilthread;
-    ptr = &last;
+    self->first.next = self->first.prev = &self->last;
+    self->last.next = self->last.prev = &self->first;
+    self->first.low = self->first.high = 0;
+    self->last.low = self->last.high = ~0UL;
+    self->first.owner = self->last.owner = L4_nilthread;
+    self->ptr = &self->last;
 }
 
 
@@ -452,10 +454,10 @@ void region_pool_t::init (void)
  *
  * @param r	region to insert into pool
  */
-void region_pool_t::insert (region_t * r)
+void region_pool_insert (region_pool_t *self, region_t * r)
 {
-    region_t * p = &first;
-    region_t * n = first.next;
+    region_t * p = &self->first;
+    region_t * n = self->first.next;
 
     // Find correct insert location
     while (r->low > n->high)
@@ -464,17 +466,17 @@ void region_pool_t::insert (region_t * r)
 	n = n->next;
     }
 
-    if (p->concatenate (r))
+    if (region_concatenate (p, r))
     {
 	// Region concatenated previous one
-	region_list.free (r);
-	if (p->concatenate (n))
-	    remove (n);
+	region_list_free (&region_list, r);
+	if (region_concatenate (p, n))
+	    region_pool_remove (self, n);
     }
-    else if (n->concatenate (r))
+    else if (region_concatenate (n, r))
     {
 	// Region concatenated to next one
-	region_list.free (r);
+	region_list_free (&region_list, r);
     }
     else
     {
@@ -491,9 +493,9 @@ void region_pool_t::insert (region_t * r)
  * indeed contained in the pool.  Region must not be accessed after it
  * has been removed from pool.
  */
-void region_pool_t::remove (region_t * r)
+void region_pool_remove (region_pool_t *self, region_t * r)
 {
-    r->remove ();
+    region_remove (r);
 }
 
 
@@ -505,10 +507,10 @@ void region_pool_t::remove (region_t * r)
  * @param high		upper limit of memory region
  * @param owner		owner of memory region
  */
-void region_pool_t::insert (L4_Paddr_t low, L4_Paddr_t high,
+void region_pool_insert_range (region_pool_t *self, L4_Paddr_t low, L4_Paddr_t high,
 			       L4_ThreadId_t owner)
 {
-    insert (new region_t (low, high, owner));
+    region_pool_insert (self, region_new (low, high, owner));
 }
 
 
@@ -518,20 +520,20 @@ void region_pool_t::insert (L4_Paddr_t low, L4_Paddr_t high,
  * @param low		lower limit of memory region to remove
  * @param high		upper limit of memory region to remove
  */
-void region_pool_t::remove (L4_Paddr_t low, L4_Paddr_t high)
+void region_pool_remove_range (region_pool_t *self, L4_Paddr_t low, L4_Paddr_t high)
 {
-    region_t * n = first.next;
+    region_t * n = self->first.next;
 
     while (low > n->high)
 	n = n->next;
 
-    while (n != &last)
+    while (n != &self->last)
     {
 	if (low <= n->low && high >= n->high)
 	{
 	    // Remove whole region node.
 	    n = n->next;
-	    remove (n->prev);
+	    region_pool_remove (self, n->prev);
 	}
 	else if (low <= n->low && high >= n->low)
 	{
@@ -547,7 +549,7 @@ void region_pool_t::remove (L4_Paddr_t low, L4_Paddr_t high)
 	    if (high < old_high)
 	    {
 		// Must split region into two separate regions.
-		insert (high + 1, old_high, n->owner);
+		region_pool_insert_range (self, high + 1, old_high, n->owner);
 		break;
 	    }
 	    n = n->next;
@@ -561,34 +563,34 @@ void region_pool_t::remove (L4_Paddr_t low, L4_Paddr_t high)
 /**
  * Dump contents of memory region pool.
  */
-void region_pool_t::dump (void)
+void region_pool_dump (region_pool_t *self)
 {
     region_t * r;
-    reset ();
-    while ((r = next ()) != NULL)
+    region_pool_reset (self);
+    while ((r = region_pool_next (self)) != NULL)
     {
 	printf ("s0:  %p-%p   %p %s\n",
 		(void *) r->low, (void *) r->high,
 		(void *) r->owner.raw,
-		r->owner == sigma0_id ? "(sigma0)" :
-		r->owner == sigma1_id ? "(sigma1)" :
-		r->owner == rootserver_id ? "(root server)" :
+		L4_IsThreadEqual (r->owner, sigma0_id) ? "(sigma0)" :
+		L4_IsThreadEqual (r->owner, sigma1_id) ? "(sigma1)" :
+		L4_IsThreadEqual (r->owner, rootserver_id) ? "(root server)" :
 		is_kernel_thread (r->owner) ? "(kernel)" :
-		r->owner == L4_anythread ? "(anythread)" :
+		L4_IsThreadEqual (r->owner, L4_anythread) ? "(anythread)" :
 		"");
     }
 }
 
-void region_pool_t::reset (void)
+void region_pool_reset (region_pool_t *self)
 {
-    ptr = first.next;
+    self->ptr = self->first.next;
 }
 
-region_t * region_pool_t::next (void)
+region_t * region_pool_next (region_pool_t *self)
 {
-    if (ptr == &last)
+    if (self->ptr == &self->last)
 	return (region_t *) NULL;
-    region_t * ret = ptr;
-    ptr = ptr->next;
+    region_t * ret = self->ptr;
+    self->ptr = self->ptr->next;
     return ret;
 }

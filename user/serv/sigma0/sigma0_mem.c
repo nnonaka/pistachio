@@ -87,7 +87,7 @@ void register_memory (L4_Word_t low, L4_Word_t high, L4_ThreadId_t t)
     L4_Word_t addr = low;
     while (addr < high)
     {
-	if (! allocate_page (t, addr, min_pgsize, map))
+	if (! allocate_page_at (t, addr, min_pgsize, &map, false))
 	    dprintf (1, "s0: alloc <%p,%p> to %p failed.\n",
 		     (void *) low, (void *) high, (void *) t.raw);
 	addr += (1UL << min_pgsize);
@@ -103,13 +103,13 @@ void register_memory (L4_Word_t low, L4_Word_t high, L4_ThreadId_t t)
 static void init_mempool_from_kip (void)
 {
     // Insert conventional memory.
-    conv_memory_pool.insert (kip->MainMem.low, kip->MainMem.high - 1,
+    region_pool_insert_range (&conv_memory_pool, kip->MainMem.low, kip->MainMem.high - 1,
 			     L4_anythread);
 
     // Insert rest of memory into non-conventional memory pool.
     if (kip->MainMem.low != 0)
-	memory_pool.insert (0, kip->MainMem.low, L4_anythread);
-    memory_pool.insert (kip->MainMem.high, ~0UL, L4_anythread);
+	region_pool_insert_range (&memory_pool, 0, kip->MainMem.low, L4_anythread);
+    region_pool_insert_range (&memory_pool, kip->MainMem.high, ~0UL, L4_anythread);
 
     dprintf (0, "s0: KIP: %-16s = [%p - %p]\n", "MainMem",
 	     (void *) kip->MainMem.low, (void *) kip->MainMem.high);
@@ -160,20 +160,20 @@ static void init_mempool_from_kip (void)
     L4_MemoryDesc_t * md;
 
     // Initialize memory pool with complete physical address space.
-    memory_pool.insert (0, ~0UL, L4_anythread);
+    region_pool_insert_range (&memory_pool, 0, ~0UL, L4_anythread);
 
     // Parse through all memory descriptors in kip.
     for (L4_Word_t n = 0; (md = L4_MemoryDesc (kip, n)); n++)
     {
-	if (L4_IsVirtual (md))
+	if (L4_IsMemoryDescVirtual (md))
 	    continue;
 
 	L4_Word_t low = page_start (L4_MemoryDescLow (md));
 	L4_Word_t high = page_end (L4_MemoryDescHigh (md)) - 1;
 
-	conv_memory_pool.remove (low, high);
-	memory_pool.remove (low, high);
-	alloc_pool.remove (low, high);
+	region_pool_remove_range (&conv_memory_pool, low, high);
+	region_pool_remove_range (&memory_pool, low, high);
+	region_pool_remove_range (&alloc_pool, low, high);
 
 	if ((L4_MemoryDescType (md) &0xf) == L4_BootLoaderSpecificMemoryType ||
 	    (L4_MemoryDescType (md) &0xf) == L4_ArchitectureSpecificMemoryType)
@@ -183,7 +183,7 @@ static void init_mempool_from_kip (void)
 	     * from conventional memory pool and insert into
 	     * non-conventional memory pool.
 	     */
-	    memory_pool.insert (low, high, L4_anythread);
+	    region_pool_insert_range (&memory_pool, low, high, L4_anythread);
 	}
 	else
 	{
@@ -193,22 +193,22 @@ static void init_mempool_from_kip (void)
 		break;
 	    case L4_ConventionalMemoryType:
 	    {
-		conv_memory_pool.insert (low, high, L4_anythread);
+		region_pool_insert_range (&conv_memory_pool, low, high, L4_anythread);
 	    }
 	    break;
 	    case L4_ReservedMemoryType:
 	    {
-		alloc_pool.insert (low, high, kernel_id);
+		region_pool_insert_range (&alloc_pool, low, high, kernel_id);
 	    }
 	    break;
 	    case L4_DedicatedMemoryType:
 	    {
-		memory_pool.insert (low, high, L4_anythread);
+		region_pool_insert_range (&memory_pool, low, high, L4_anythread);
 	    }
 	    break;
 	    case L4_SharedMemoryType:
 	    {
-		alloc_pool.insert (low, high, L4_anythread);
+		region_pool_insert_range (&alloc_pool, low, high, L4_anythread);
 	    }
 	    break;
 	    default:
@@ -258,9 +258,9 @@ void init_mempool (void)
 	;
 
     // Initialize memory pools
-    conv_memory_pool.init ();
-    memory_pool.init ();
-    alloc_pool.init ();
+    region_pool_init (&conv_memory_pool);
+    region_pool_init (&memory_pool);
+    region_pool_init (&alloc_pool);
 
     init_mempool_from_kip ();
 }
@@ -272,11 +272,11 @@ void init_mempool (void)
 void dump_mempools (void)
 {
     printf ("s0:\ns0: Free pool (conventional memory):\n");
-    conv_memory_pool.dump ();
+    region_pool_dump (&conv_memory_pool);
     printf ("s0:\ns0: Free pool (non-conventional memory):\n");
-    memory_pool.dump ();
+    region_pool_dump (&memory_pool);
     printf ("s0:\ns0: Alloc pool:\n");
-    alloc_pool.dump ();
+    region_pool_dump (&alloc_pool);
 }
 
 
@@ -292,13 +292,13 @@ void dump_mempools (void)
  *
  * @return true upon success, false otherwise
  */
-bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
-		    L4_MapItem_t & map, bool only_conventional)
+bool allocate_page_at (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
+		       L4_MapItem_t * map, bool only_conventional)
 {
     region_t * r;
     L4_Fpage_t fp;
 
-    map = L4_MapItem (L4_Nilpage, 0);
+    *map = L4_MapItem (L4_Nilpage, 0);
 
     dprintf (2, "s0: allocate_page (tid: 0x%lx, addr: %lx, log2size: %ld)\n",
 	     (long) tid.raw, (long) addr, (long) log2size);
@@ -336,30 +336,30 @@ bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
     // Try allocating from one of the memory pools.
     for (L4_Word_t i = 0; pools[i] != NULL; i++)
     {
-	pools[i]->reset ();
-	while ((r = pools[i]->next ()) != NULL)
+	region_pool_reset (pools[i]);
+	while ((r = region_pool_next (pools[i])) != NULL)
 	{
 	    if (r->low > addr_high || r->high < addr)
 		continue;
 
-	    fp = r->allocate (addr, log2size, tid, L4_FpageLog2);
+	    fp = region_allocate_at (r, addr, log2size, tid, L4_FpageLog2);
 	    if (! L4_IsNilFpage (fp))
 	    {
-		map = L4_MapItem (fp, addr);
-		alloc_pool.insert (new region_t (addr, addr_high, tid));
+		*map = L4_MapItem (fp, addr);
+		region_pool_insert (&alloc_pool, region_new (addr, addr_high, tid));
 		return true;
 	    }
 	}
     }
 
     // Check if memory has already been allocated.
-    alloc_pool.reset ();
-    while ((r = alloc_pool.next ()) != NULL)
+    region_pool_reset (&alloc_pool);
+    while ((r = region_pool_next (&alloc_pool)) != NULL)
     {
-	if (r->can_allocate (addr, log2size, tid))
+	if (region_can_allocate (r, addr, log2size, tid))
 	{
-	    map = L4_MapItem
-		(L4_FpageLog2 (addr, log2size) + L4_FullyAccessible, addr);
+	    *map = L4_MapItem
+		(L4_FpageAddRights (L4_FpageLog2 (addr, log2size), L4_FullyAccessible), addr);
 	    return true;
 	}
     }
@@ -388,22 +388,21 @@ bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
 	    // Try the different pools
 	    for (L4_Word_t i = 0; failed && allpools[i] != NULL; i++)
 	    {
-		allpools[i]->reset ();
-		while ((r = allpools[i]->next ()) != NULL)
+		region_pool_reset (allpools[i]);
+		while ((r = region_pool_next (allpools[i])) != NULL)
 		{
 		    if (r->low > a_end || r->high < a)
 			continue;
 
 		    // Test if allocation is possible
-		    if (r->can_allocate (a, min_pgsize, tid))
+		    if (region_can_allocate (r, a, min_pgsize, tid))
 		    {
 			failed = false;
 			if (phase == 1 && allpools[i] != &alloc_pool)
 			{
 			    // Allocation phase
-			    r->allocate (a, min_pgsize, tid, L4_FpageLog2);
-			    alloc_pool.insert 
-				(new region_t (a, a_end - 1, tid));
+			    region_allocate_at (r, a, min_pgsize, tid, L4_FpageLog2);
+			    region_pool_insert (&alloc_pool, region_new (a, a_end - 1, tid));
 			}
 		    }
 		}
@@ -414,7 +413,7 @@ bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
 	}
     }
 
-    map = L4_MapItem (L4_FpageLog2 ((L4_Word_t)addr, log2size) + L4_FullyAccessible,
+    *map = L4_MapItem (L4_FpageAddRights (L4_FpageLog2 ((L4_Word_t)addr, log2size), L4_FullyAccessible),
 		      (L4_Word_t)addr);
 
     return true;
@@ -431,12 +430,12 @@ bool allocate_page (L4_ThreadId_t tid, L4_Paddr_t addr, L4_Word_t log2size,
  *
  * @return true upon success, false otherwise
  */
-bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t & map)
+bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t * map)
 {
     region_t * r;
     L4_Fpage_t fp;
 
-    map = L4_MapItem (L4_Nilpage, 0);
+    *map = L4_MapItem (L4_Nilpage, 0);
 
     dprintf (2, "s0: allocate_page (tid: 0x%lx, log2size: %ld)\n",
 	     (long) tid.raw, (long) log2size);
@@ -445,15 +444,14 @@ bool allocate_page (L4_ThreadId_t tid, L4_Word_t log2size, L4_MapItem_t & map)
 	return false;
 
     // Try allocating memory from pool of real memory.
-    conv_memory_pool.reset ();
-    while ((r = conv_memory_pool.next ()) != NULL)
+    region_pool_reset (&conv_memory_pool);
+    while ((r = region_pool_next (&conv_memory_pool)) != NULL)
     {
-	fp = r->allocate (log2size, tid, L4_FpageLog2);
+	fp = region_allocate (r, log2size, tid, L4_FpageLog2);
 	if (! L4_IsNilFpage (fp))
 	{
-	    map = L4_MapItem (fp, L4_Address (fp));
-	    alloc_pool.insert
-		(new region_t (L4_Address (fp), L4_Address (fp) +
+	    *map = L4_MapItem (fp, L4_Address (fp));
+	    region_pool_insert (&alloc_pool, region_new (L4_Address (fp), L4_Address (fp) +
 			       (1UL << log2size) - 1, tid));
 	    return true;
 	}
